@@ -77,5 +77,6 @@ struct worker_ops {
 };
 
 extern worker_ops controller_ops;
+extern worker_ops central_ops;
 
 #endif // WORKER_H

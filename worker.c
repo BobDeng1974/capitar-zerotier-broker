@@ -30,6 +30,7 @@
 #include <nng/protocol/reqrep0/rep.h>
 #include <nng/protocol/survey0/respond.h>
 #include <nng/supplemental/http/http.h>
+#include <nng/supplemental/tls/tls.h>
 #include <nng/supplemental/util/options.h>
 #include <nng/supplemental/util/platform.h>
 #include <nng/transport/zerotier/zerotier.h>
@@ -62,6 +63,8 @@ typedef enum {
 
 typedef struct proxy   proxy;
 typedef struct netperm netperm;
+
+nng_tls_config *tls = NULL;
 
 struct worker {
 	nng_ctx          ctx; // REP context
@@ -725,6 +728,18 @@ setup_controllers(void)
 			exit(1);
 		}
 		nng_url_free(url);
+
+		if (strncmp(cp->addr, "https", 5) == 0) {
+			if (tls == NULL) {
+				fprintf(stderr, "Missing TLS configuration\n");
+				exit(1);
+			}
+			if ((rv = nng_http_client_set_tls(cp->client, tls)) !=
+			    0) {
+				fprintf(stderr, "TLS: %s\n", nng_strerror(rv));
+				exit(1);
+			}
+		}
 	}
 }
 
@@ -836,21 +851,33 @@ load_config(const char *path)
 	}
 
 	for (int i = 0; i < ncontrollers; i++) {
-		const char *node;
-		uint64_t    id;
 		controller *cp = &controllers[i];
-		char *      ep;
-		int         rv;
+		char *      ct;
 
 		if ((!get_arr_obj(arr, i, &obj)) ||
 		    (!get_obj_string(obj, "address", &cp->addr)) ||
-		    (!get_obj_string(obj, "secret", &cp->secret)) ||
-		    (!get_obj_uint64(obj, "nodeid", &cp->nodeid))) {
-			fprintf(stderr, "controller %d malformed\n", i);
+		    (!get_obj_string(obj, "secret", &cp->secret))) {
+			fprintf(stderr, "controller %d incomplete\n", i);
 			exit(1);
 		}
-		// XXX: Eventually we will add different ops here for Central.
-		cp->ops = &controller_ops;
+		if (!get_obj_string(obj, "type", &ct)) {
+			// Fall back to default "controller"
+			ct = "controller";
+		}
+
+		if (strcmp(ct, "controller") == 0) {
+			cp->ops = &controller_ops;
+			if (!get_obj_uint64(obj, "nodeid", &cp->nodeid)) {
+				fprintf(stderr,
+				    "controller %d missing nodeid\n", i);
+				exit(1);
+			}
+		} else if (strcmp(ct, "central") == 0) {
+			cp->ops = &central_ops;
+		} else {
+			fprintf(stderr, "unknown controller type %s\n", ct);
+			exit(1);
+		}
 	}
 
 	if (get_obj_obj(cfg, "networks", &arr)) {
@@ -893,6 +920,43 @@ load_config(const char *path)
 			npp       = &np;
 		}
 	}
+
+	// TLS can be missing.
+	if (get_obj_obj(cfg, "tls", &obj)) {
+		int               rv;
+		char *            key;
+		char *            str;
+		bool              insecure;
+		nng_tls_auth_mode amode;
+
+		if ((rv = nng_tls_config_alloc(&tls, NNG_TLS_MODE_CLIENT)) !=
+		    0) {
+			fprintf(stderr, "%s\n", nng_strerror(rv));
+			exit(1);
+		}
+		str = NULL;
+		get_obj_string(obj, "keypass", &str);
+		if ((get_obj_string(obj, "keyfile", &key)) &&
+		    ((rv = nng_tls_config_cert_key_file(tls, key, str)) !=
+		        0)) {
+			fprintf(stderr, "TLS keyfile: %s\n", nng_strerror(rv));
+			exit(1);
+		}
+		if (get_obj_string(obj, "cacert", &str) &&
+		    ((rv = nng_tls_config_ca_file(tls, str)) != 0)) {
+			fprintf(stderr, "TLS cacert: %s\n", nng_strerror(rv));
+			exit(1);
+		}
+		amode = NNG_TLS_AUTH_MODE_REQUIRED;
+		if (get_obj_bool(obj, "insecure", &insecure) && insecure) {
+			amode = NNG_TLS_AUTH_MODE_NONE;
+		}
+		if ((rv = nng_tls_config_auth_mode(tls, amode)) != 0) {
+			fprintf(stderr, "%s\n", nng_strerror(rv));
+			exit(1);
+		}
+	}
+
 	// These might be missing. Note that if they are, they don't
 	// overwrite values.
 
