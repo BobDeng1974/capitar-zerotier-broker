@@ -1,0 +1,33 @@
+= SURVEY Protocol
+
+The survey protocol is used to allow the proxy to discover workers.
+
+More correctly, it allows the worker to register a service address with
+the proxy, as well as to identify which networks it is servicing.
+
+The proxy opens a listening SURVEYOR, which the workers will dial to.
+(The address of the proxy's surveyor port is the one thing that must be
+known to workers in advance - in the future this might be published via
+DNS or some other mechanism.)
+
+The proxy sends a blank survey (we don't care about the payload) to each
+worker (one broadcast) at periodic (configurable?) intervals.
+
+The workers respond with a survey response that takes the form (all
+values are in network/big-endian order.
+
+```
+[ version - must be zero ] -- 8 bits
+[ ZT port                ] -- 24 bits zerotier transport port for REP
+[ number of controllers  ] -- 32 bits
+[ controller node id...  ] -- 64-bit controller node id, repeated for each
+...
+```
+
+Note that the combination of the version and the ZT port can be read in
+a single 32-bit operation, and as the version is currently zero the
+resulting value can be used directly.
+
+Also, the ZeroTier network and node ID of the worker will be the same
+for both the SURVEY and the REP sockets, so they are not supplied in the
+response.

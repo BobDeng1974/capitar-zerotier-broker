@@ -1,0 +1,138 @@
+= REST API
+
+This protocol is offered by the proxy, and is how clients connect to
+perform operations.
+
+All operations are prefixed with a "`base URL`", which will be the hostname
+and port (e.g. `http://example.com:9994`) followed by a standard URI prefix,
+which is `/api/1.0/`.
+All REST endpoints under this are assumed to conform to the API documented here.
+
+All content exchanged over this protocol is in the form of JSON objects.
+
+== API Endpoints
+
+The following individual API endpoints and methods are defined.  We have
+elided the `/api/1.0` prefix in the documentation below, but each URI
+must include that prefix.
+
+=== Controller Status
+
+This obtains the status of the named controller (or central).
+
+URI:: `/proxy/$proxyid/status`
+
+Method:: `GET`
+
+URI Parameters::
+	`$proxyid`::: This is the node address of the controller to query,
+	represented as a 10-digit hexadecimal string.
+Body Parameters::
+	None.
+
+Result::
+Object, with status from the server.
+
+	`version`:::
+	API version, "1.0" for now.
+	Version numbers are strings, in "major.minor" form.
+	These use semantic versioning, so the major number will be incremented
+	when there are breaking changes to the API (with minor reset to zero),
+	and the minor number is incremented when there are API changes that are
+	non-breaking to older clients.
+	`controller`:::
+	true if the server is for a controller (bool)
+	`central`:::
+	true if the server is for central API server (bool)
+
+=== Network List
+
+This obtains the list of networks from the controller.
+
+URI:: `/proxy/$proxyid/network`
+
+Method:: `GET`
+
+URI Parameters::
+	`$proxyid`::: This is the node address of the controller to query,
+	represented as a 10-digit hexadecimal string.
+
+Body Parameters::
+	None.
+
+Result::
+	Array of networks serviced by controller, each element is
+	a 16-digit hexadecimal string representing the network ID.
+
+=== Get Network Object
+
+This obtains the details of a given network from the controller.
+
+URI:: `/proxy/$proxyid/network/$nwid`
+
+Method:: `GET`
+
+URI Parameters::
+	`$proxyid`::: This is the node address of the controller to query,
+	represented as a 10-digit hexadecimal string.
+	`$nwid`::: This is the network ID, as a 16-digit decimal string.
+
+Body Parameters::
+	None.
+
+Result::
+
+	`id`::: The network ID (hexstring, 40-bit).
+	`name`::: The network name (string).
+	`private`::: Boolean, true if the network is private.
+	`creationTime`::: Integer (msec since epoch) when network was created.
+	`multicastLimit`::: Integer, limit on number of nodes to receive a multicast.
+	`enableBroadcast`::: Boolean, true if broadcast is enabled.
+	`v4AssignMode`::: Object, with booleans for IPv4 assignment modes.
+	`v6AssignMode`::: Object, with booleans for IPv6 assignment modes.
+	`routes`::: Array of IP routes to network members.
+
+=== Get Network Member
+
+This obtains details of a specific network member.
+
+URI:: `/proxy/$proxyid/network/$nwid/member/$nodeid`
+
+Method:: `GET`
+
+URI Parameters::
+	`$proxyid`::: This is the node address of the controller to query,
+	represented as a 10-digit hexadecimal string.
+	`$nwid`::: This is the network ID, as a 16-digit decimal string.
+	`$nodied`::: This is the node ID of the member, as a 10-digit decimal string.
+
+Body Parameters::
+	None.
+
+Result::
+	`id`::: The node ID, 16-digit hexadecimal (string).
+	`nwid`::: The network ID, 10-digit hexidecimal (string).
+	`authorized`::: true if the member is authorized (bool).
+	`activeBridge`::: true if the member may bridge packets (bool).
+	`revision`::: Member revision counter.
+	`ipAssignments`::: Array of managed IP address assignments (strings).
+
+=== Delete Network Member
+
+This deletes a network member.
+
+URI:: `/proxy/$proxyid/network/$nwid/member/$nodeid`
+
+Method:: `DELETE`
+
+URI Parameters::
+	`$proxyid`::: This is the node address of the controller to query,
+	represented as a 10-digit hexadecimal string.
+	`$nwid`::: This is the network ID, as a 16-digit decimal string.
+	`$nodied`::: This is the node ID of the member, as a 10-digit decimal string.
+
+Body Parameters::
+	None.
+
+Result::
+	Empty object.  (Perhaps instead a 204 No Content response?)

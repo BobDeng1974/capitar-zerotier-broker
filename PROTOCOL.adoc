@@ -1,0 +1,32 @@
+There are four separate protocols used in this project.
+
+1. Protocol exposed by the controller nodes.  This is a REST API
+	 exposed typically to localhost:9993, and is controlled by ZeroTier.
+	 We have configuration objects to help select this API.  Workers use
+	 this protocol to talk to the controller.  This is not discussed further
+	 here.
+
+2. RPC protocol between the proxy and the worker.  See
+   <<RPC.adoc#>> for details.
+
+3. Survey  used so that workers can register with proxy.
+   See <<SURVEY.adoc#>> for details.
+
+4. REST API exposed by the proxy.
+   See <<REST.adoc#>> for details.
+
+Operationally, the only public facing thing is the REST API, which is provided
+by the proxy.
+
+The workers register with the proxy using the survey protocol.  The proxy is
+then able to direct requests (after translating them from REST) to the
+workers over the RPC protocol.
+
+The connection between the workers and the controller is over loopback,
+or possibly a TLS protected network.
+
+The connection between the workers and the proxy is over the NNG ZeroTier
+transport (so both the workers and the proxy must be on the same network.)
+
+Note that a single proxy can have multiple workers, and that a single worker
+can provide service to multiple proxies.

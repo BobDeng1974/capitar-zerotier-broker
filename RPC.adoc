@@ -1,0 +1,165 @@
+= RPC PROTOCOL
+
+This protocol is used by the proxy to talk to individual workers.
+
+== Operational Overview
+
+The RPC protocol implemented using the NNG REQ/REP pattern.
+
+The proxy opens a REQ socket and dials to a the worker's REP socket.
+(Address discovery is handled in the SURVEY protocol, documented
+elsewhere.)
+
+The entire protocol uses the ZeroTier network, and specifically the
+NNG ZeroTier transport, exclusively.
+
+The protocol is a flavor (or perhaps subset) of JSON-RPC v2.0.
+We only support normal single issue requests (no batching, and no
+notifications.)  Furthermore, we only support "id" attributes that
+are 64-bit non-zero values encoded as hexadecimal strings.
+(E.g. "fff").  (We might want to investigate relaxing this later, but
+as we control both sides of the protocol it seems reasonable for now.)
+Requests always contain a "params" object, which is always an object (i.e.
+we do not support positional parameters.)
+
+We also play a little fast and loose with the protocol, where we cannot
+decode the incoming request properly (or it fails to meet our above
+limitations) may come back with a generic error object, and with
+a zero ID attribute.  This only happens if the client sends a bad
+request to the server, so it's entirely avoidable.  (Again we control
+both sides.)
+
+Request IDs are used to provide a level of idempotency for requests
+that need it, such as blind create requests.  This prevents us from
+creating mutiple objects when a create request is replayed due to a lost
+packet, for example.
+
+For responses, the proxy converts the "code" of any error object to the HTTP
+status, and treats "message" as the status line.  If the code is outside
+range of legal HTTP status codes (100 through 599) then we convert it to a
+generic 500.
+
+For a successful response, the proxy assumes HTTP status 200.  (We may want to
+change this to do a 201 or a 204 in some cases.)
+
+== Method Definitions
+
+The following individual methods are defined.
+Note that in each section below, the "`Method`" is the `method` object of the
+request, the "`Parameters`" are the `params` object, and the "`Result`" will
+be the `result` object of a successful operation.
+
+=== Controller Status
+
+This obtains the status of the named controller (or central).
+
+Method:: `status`
+
+Parameters::
+	`controller`:::  Controller ID (hexstring, 40-bit).
+
+Result::
+Object, with status from the server.
+
+	`version`:::
+	API version, "1.0" for now.
+	Version numbers are strings, in "major.minor" form.
+	These use semantic versioning, so the major number will be incremented
+	when there are breaking changes to the API (with minor reset to zero),
+	and the minor number is incremented when there are API changes that are
+	non-breaking to older clients.
+	`controller`:::
+	true if the server is for a controller (bool)
+	`central`:::
+	true if the server is for central API server (bool)
+
+=== Network List
+
+This obtains the list of networks from the controller.
+
+Method:: `get-networks`
+
+Parameters::
+	`controller`:::  Controller ID (hexstring, 40-bit).
+
+Result::
+	Array of networks serviced by controller, each element is
+	a hexstring of the network ID.
+
+=== Get Network Object
+
+This obtains the details of a given network from the controller.
+
+Method:: `get-network`
+
+Parameters::
+	`controller`:::
+		Controller ID (hexstring, 40-bit).
+	`network`:::
+		Network ID (hexstring, 64-bit).
+
+Result::
+	`id`::: The network ID (hexstring, 40-bit).
+	`name`::: The network name (string).
+	`private`::: True if the network is private (bool).
+	`creationTime`::: Integer (msec since epoch) when network was created.
+	`multicastLimit`::: Integer, limit on number of nodes to receive a multicast.
+	`enableBroadcast`::: Boolean, true if broadcast is enabled.
+	`v4AssignMode`::: Object, with booleans for IPv4 assignment modes.
+	`v6AssignMode`::: Object, with booleans for IPv6 assignment modes.
+	`routes`::: Array of IP routes to network members.
+
+=== Get Network Members
+
+This obtains an array of members of the network.
+
+Method:: `get-network-members`
+
+Parameters::
+	`controller`:::
+		Controller ID (hexstring, 40-bit).
+	`network`:::
+		Network ID (hexstring, 64-bit).
+
+Result::
+	Aray of strings, each of which is a 10-digit hexadecimal
+	node id, each of which is a member of the network.
+
+=== Get Network Member
+
+This obtains a single network member.
+
+Method:: `get-network-member`
+
+Parameters::
+	`controller`:::
+		Controller ID (hexstring, 40-bit).
+	`network`:::
+		Network ID (hexstring, 64-bit).
+	`member`:::
+		Member node ID (hexstring, 40-bit).
+
+Result::
+	`id`::: The node ID, 16-digit hexadecimal (string).
+	`nwid`::: The network ID, 10-digit hexidecimal (string).
+	`authorized`::: true if the member is authorized (bool).
+	`activeBridge`::: true if the member may bridge packets (bool).
+	`revision`::: Member revision counter.
+	`ipAssignments`::: Array of managed IP address assignments (strings).
+
+=== Delete Network Member
+
+This deletes a single network member.
+
+Method:: `delete-network-member`
+
+Parameters::
+	`controller`:::
+		Controller ID (hexstring, 40-bit).
+	`network`:::
+		Network ID (hexstring, 64-bit).
+	`member`:::
+		Member node ID (hexstring, 40-bit).
+
+Result::
+	Empty object.

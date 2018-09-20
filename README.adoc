@@ -1,0 +1,138 @@
+= zt-ctr-proxy
+
+ZeroTier Controller Proxy
+
+== Scope
+
+Multiiple ZeroTier Controllers can relay part of their API REST service
+to an external proxy service. Each controller has a local worker daemon
+that can both connect to the controller and the proxy service.
+
+The proxy service exposes the API as an HTTP REST service. In this way
+the controller delegates the use of the API to the HTTP clients of the
+proxy service.
+
+For the API specs see:
+https://github.com/zerotier/ZeroTierOne/tree/master/controller
+
+Only specific parts of the API are exposed, and the full response is
+relayed back to the proxy client.
+
+== Workers and Proxy registration and communication
+
+The controller worker daemon will use https://github.com/nanomsg/nng[NNG]
+to communicate with the Proxy service, using embedded
+https://nanomsg.github.io/nng/man/v1.0.0/nng_zerotier.7.html[ZeroTier]
+as the transport.
+
+The proxy service will be reachable through a public ZeroTier network. This
+network will have rules defined, only allowing NNG ZeroTier transport, and
+only allowing communication to and from the Proxy service, not allowing other
+nodes (the workers) to access each other.
+
+Upon joining the Proxy network, worker will register with the proxy service,
+including details such as controllers they expose and for with networks
+the API is delegated.
+
+== Proxy API
+
+* /controller/<controller ID>
+  - Purpose: Check for controller function and return controller status
+  - Methods: GET
+  - Returns: { object }
+
+* /controller/<controller ID>/network
+  - Purpose get list of networks
+  - Methods: GET
+  - Returns: [ array of networks ]
+
+* /controller/<controller ID>/network/<network ID>
+  - Purpose: Show network config
+  - Methods: GET
+  - Returns: { object }
+
+* /controller/<controller ID>/network/<network ID>/member/<address>
+  - Purpose: Create, authorize, or remove a network member
+  - Methods: GET
+  - Returns: { object }
+
+* /controller/<controller ID>/network/<network ID>/member/<address>/authorize
+  - Purpose: Authorize a network member
+  - Methods: POST
+  - Returns: { object }
+
+* /controller/<controller ID>/network/<network ID>/member/<address>/deauthorize
+  - Purpose: De-authorize a network member
+  - Methods: POST
+  - Returns: { object }
+
+== Service Discovery
+
+The proxy server will offer up a surveyor socket, that workers must dial
+into (the worker provides a respondent).
+
+The proxy will conduct surveys at periodic intervals -- say once per
+minute or so, to collect a list of the networks that have connected to it.
+
+The worker will list the networks known to it, which it can obtain by
+performing a /contoller/network GET request to the local controller.
+The answer to this query is a simple JSON list containing the strings
+of the ZeroTier network IDs that it is managing.
+
+NOTE #1: If this turns out to be vast numbers of proxy workers, there could
+be scalability concerns here, as huge numbers of workers reply to the survey
+We need to understand the scalability considerations here.
+
+The network will need to autoprune requests from workers that either
+detach entirely (we can maintain the list of networks to the connection),
+or which fail to respond.
+
+NOTE #2: We might be able to be a bit more clever here, by leveraging
+port connect events, and sending directed surveys to the specific
+requestor.
+
+== Security
+
+Mostly this is TBD.  The worker will know the local ZT1-Auth value (the
+secret for the controller), but we will need some other kind of authorization
+for the service.  At the very minimum a challenge/response form will be
+needed (like HTTP digest auth, or possibly JWT with a separate auth step
+over HTTPS.)
+
+Other security questions come up:
+
+	* Who can know the list of controllers?
+	* Who can know the list of networks for a given controller?
+	* Presumably the controller credentials are local, right?
+	* Do we have different auth levels for a given controller?
+	* Do we have different auth levels for different *networks*?
+
+
+== REQ/REP protocol
+
+Protocol is JSON (for better or worse).  This isn't optimally efficient, but
+it avoids bringing in msgpack or inventing our own format.  Plus it's easier
+to just dump for debugging.
+
+Requests are sent as:
+
+	{
+		"method":  <POST|GET|DELETE>,  // string in upper case
+		"path":	   /path (e.g. /controller/network/<nwid>)
+		"data":    payload (JSON object)
+	}
+
+Responses are sent as:
+
+	{
+		"status": HTTP status code (200 = ok)
+		"data":  response payload
+	}
+
+Note that some "paths" in the URLs are going to be different from the
+path given by the original controller, as we need to filter, add smarter
+handling (POST to /network ought to be sufficient!) or add authentication
+steps (see Seucrity above.)
+
+Security data (signed object contents, etc.) can be added as additional
+member fields (top level).

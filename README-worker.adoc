@@ -1,0 +1,9 @@
+= worker.c
+
+This is the implementation of the worker.  It is built as ztc-worker.
+
+= worker.cfg
+
+This is a sample configuration, and will need to be changed.
+The sample configuration given is for an open test network, and assumes
+the proxy runs on the local machine.  This will usually not be the case. 
