@@ -20,13 +20,12 @@ must include that prefix.
 
 This obtains the status of the named controller (or central).
 
-URI:: `/proxy/$proxyid/status`
+URI:: `/proxy/$controller/status`
 
 Method:: `GET`
 
 URI Parameters::
-	`$proxyid`::: This is the node address of the controller to query,
-	represented as a 10-digit hexadecimal string.
+	`$controller`::: This is the name (or label) of the controller to query.
 Body Parameters::
 	None.
 
@@ -49,13 +48,12 @@ Object, with status from the server.
 
 This obtains the list of networks from the controller.
 
-URI:: `/proxy/$proxyid/network`
+URI:: `/proxy/$controller/network`
 
 Method:: `GET`
 
 URI Parameters::
-	`$proxyid`::: This is the node address of the controller to query,
-	represented as a 10-digit hexadecimal string.
+	`$controller`::: This is the name (or label) of of the controller to query.
 
 Body Parameters::
 	None.
@@ -68,13 +66,12 @@ Result::
 
 This obtains the details of a given network from the controller.
 
-URI:: `/proxy/$proxyid/network/$nwid`
+URI:: `/proxy/$controller/network/$nwid`
 
 Method:: `GET`
 
 URI Parameters::
-	`$proxyid`::: This is the node address of the controller to query,
-	represented as a 10-digit hexadecimal string.
+	`$controller`::: This is the name (or label) of the controller to query.
 	`$nwid`::: This is the network ID, as a 16-digit decimal string.
 
 Body Parameters::
@@ -96,13 +93,12 @@ Result::
 
 This obtains details of a specific network member.
 
-URI:: `/proxy/$proxyid/network/$nwid/member/$nodeid`
+URI:: `/proxy/$controller/network/$nwid/member/$nodeid`
 
 Method:: `GET`
 
 URI Parameters::
-	`$proxyid`::: This is the node address of the controller to query,
-	represented as a 10-digit hexadecimal string.
+	`$controller`::: This is name (or label) of the controller to query.
 	`$nwid`::: This is the network ID, as a 16-digit decimal string.
 	`$nodied`::: This is the node ID of the member, as a 10-digit decimal string.
 
@@ -121,13 +117,12 @@ Result::
 
 This deletes a network member.
 
-URI:: `/proxy/$proxyid/network/$nwid/member/$nodeid`
+URI:: `/proxy/$controller/network/$nwid/member/$nodeid`
 
 Method:: `DELETE`
 
 URI Parameters::
-	`$proxyid`::: This is the node address of the controller to query,
-	represented as a 10-digit hexadecimal string.
+	`$controller`::: This is the name (or label) of the controller to access.
 	`$nwid`::: This is the network ID, as a 16-digit decimal string.
 	`$nodied`::: This is the node ID of the member, as a 10-digit decimal string.
 

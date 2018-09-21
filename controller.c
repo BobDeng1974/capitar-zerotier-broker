@@ -284,7 +284,6 @@ controller_get_member_cb(worker *w, void *body, size_t len)
 		send_err(w, E_BADJSON, NULL);
 		return;
 	}
-	free_obj(obj1);
 
 	if (((obj2 = alloc_obj()) == NULL) ||
 	    (!add_obj_string(obj2, "id", id)) ||
@@ -293,12 +292,13 @@ controller_get_member_cb(worker *w, void *body, size_t len)
 	    (!add_obj_bool(obj2, "activeBridge", bridge)) ||
 	    (!add_obj_int(obj2, "revision", rev)) ||
 	    (!add_obj_obj(obj2, "ipAssignments", ipassign))) {
+		free_obj(obj1);
 		free_obj(obj2);
 		free_obj(ipassign);
 		send_err(w, E_NOMEM, NULL);
 		return;
 	}
-
+	free_obj(obj1);
 	send_result(w, obj2);
 }
 

@@ -42,6 +42,16 @@ generic 500.
 For a successful response, the proxy assumes HTTP status 200.  (We may want to
 change this to do a 201 or a 204 in some cases.)
 
+=== Controller Names
+
+The controllers we talk to are "`named`".  The name is also known as a "`label`"
+in the configuration file.  These names are used to identify the controller
+(or central API) used to talk manage networks and members.  These are
+composed of alphanumeric characters, or possibly dash (-) or underscore (_)
+characters, of arbitrary length.  It is recommended that names adhere to
+the rules for naming identifiers in C, or other common programming or scripting
+languages.  (Specifcally forbidden are whitespace and most punctuation characters.)
+
 == Method Definitions
 
 The following individual methods are defined.
@@ -56,7 +66,7 @@ This obtains the status of the named controller (or central).
 Method:: `status`
 
 Parameters::
-	`controller`:::  Controller ID (hexstring, 40-bit).
+	`controller`:::  Controller name.
 
 Result::
 Object, with status from the server.
@@ -94,7 +104,7 @@ Method:: `get-network`
 
 Parameters::
 	`controller`:::
-		Controller ID (hexstring, 40-bit).
+		Controller name.
 	`network`:::
 		Network ID (hexstring, 64-bit).
 
@@ -117,7 +127,7 @@ Method:: `get-network-members`
 
 Parameters::
 	`controller`:::
-		Controller ID (hexstring, 40-bit).
+		Controller name.
 	`network`:::
 		Network ID (hexstring, 64-bit).
 
@@ -133,7 +143,7 @@ Method:: `get-network-member`
 
 Parameters::
 	`controller`:::
-		Controller ID (hexstring, 40-bit).
+		Controller name.
 	`network`:::
 		Network ID (hexstring, 64-bit).
 	`member`:::
@@ -155,7 +165,7 @@ Method:: `delete-network-member`
 
 Parameters::
 	`controller`:::
-		Controller ID (hexstring, 40-bit).
+		Controller name.
 	`network`:::
 		Network ID (hexstring, 64-bit).
 	`member`:::

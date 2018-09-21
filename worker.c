@@ -79,6 +79,7 @@ struct worker {
 
 struct controller {
 	char *           addr;
+	char *           name;
 	char *           secret;
 	uint64_t         nodeid;
 	nng_http_client *client;
@@ -144,6 +145,9 @@ survey_loop(void)
 		uint32_t     port;
 		nng_sockaddr raddr;
 		nng_sockaddr laddr;
+		object *     obj;
+		object *     arr;
+		char *       body;
 
 		switch ((rv = nng_recvmsg(survsock, &msg, 0))) {
 		case 0:
@@ -188,42 +192,60 @@ survey_loop(void)
 			continue;
 		}
 
-		// We don't actually care what the message contents are.
-		// Note that as our 8 bit version is always zero, we
-		// can just write the 24-bit port as if it were 32-bits.
-		nng_msg_clear(msg);
-		if ((nng_msg_append_u32(msg, port) != 0) ||
-		    (nng_msg_append_u32(msg, (uint32_t) ncontrollers) != 0)) {
+		arr = alloc_arr();
+		obj = alloc_obj();
+		if (((arr == NULL) || (obj == NULL)) ||
+		    (!add_obj_int(obj, "port", port))) {
+			free_obj(arr);
+			free_obj(obj);
 			nng_msg_free(msg);
+			fprintf(stderr, "Out of memory\n");
 			continue;
 		}
 		for (int i = 0; i < ncontrollers; i++) {
 			struct controller *cp = &controllers[i];
-			if (nng_msg_append_u64(msg, cp->nodeid) != 0) {
-				nng_msg_free(msg);
-				continue;
-			}
+			// If this fails, we will get a short response,
+			// but carry on.
+			add_arr_string(arr, cp->name);
+		}
+		if (!add_obj_obj(obj, "controllers", arr)) {
+			free_obj(arr);
+			free_obj(obj);
+			nng_msg_free(msg);
+			fprintf(stderr, "Out of memory\n");
+			continue;
+		}
+
+		body = print_obj(obj);
+		free_obj(obj);
+
+		nng_msg_clear(msg);
+		if (body == NULL) {
+			fprintf(stderr, "Out of memory\n");
+			nng_msg_free(msg);
+			continue;
+		}
+
+		if (nng_msg_append(msg, body, strlen(body)) != 0) {
+			free(body);
+			nng_msg_free(msg);
+			fprintf(stderr, "Out of memory\n");
+			continue;
 		}
 
 		if (debug > 1) {
-			printf("Survey-Send {\n");
+			printf("Survey-Send: %s\n", body);
 			printf("\tfrom: zt://%llx.%llx:%u\n",
 			    laddr.s_zt.sa_nodeid, laddr.s_zt.sa_nwid,
 			    laddr.s_zt.sa_port);
 			printf("\tto:   zt://%llx.%llx:%u\n",
 			    raddr.s_zt.sa_nodeid, raddr.s_zt.sa_nwid,
 			    raddr.s_zt.sa_port);
-			printf("\tport: %u\n", port);
-			printf("\tcontrollers: [\n");
-			for (int i = 0; i < ncontrollers; i++) {
-				printf("\t\t%llx\n", controllers[i].nodeid);
-			}
-			printf("\t]\n");
-			printf("}\n");
 		} else if (debug > 0) {
 			putc('S', stdout);
 			fflush(stdout);
 		}
+		free(body);
 		switch (nng_sendmsg(survsock, msg, 0)) {
 		case 0:
 			break;
@@ -391,16 +413,33 @@ samestr(const char *s1, const char *s2)
 	return (true);
 }
 
-controller *
-find_controller(worker *w, uint64_t id)
+static controller *
+find_controller(worker *w, const char *name)
 {
 	for (int i = 0; i < ncontrollers; i++) {
-		if (controllers[i].nodeid == id) {
+		printf("CHECKING %s =? %s\n", controllers[i].name, name);
+		if (strcmp(controllers[i].name, name) == 0) {
 			w->client = controllers[i].client;
 			return (&controllers[i]);
 		}
 	}
 	return (NULL);
+}
+
+static bool
+valid_label(const char *label)
+{
+	char c;
+	if ((label == NULL) || (*label == '\0')) {
+		return (false);
+	}
+	while ((c = *label) != '\0') {
+		label++;
+		if ((!isalnum(c)) && (c != '_') && (c != '-')) {
+			return (false);
+		}
+	}
+	return (true);
 }
 
 const char *
@@ -412,34 +451,36 @@ get_controller_secret(controller *cp)
 static void
 get_status(worker *w, object *params)
 {
-	uint64_t    node;
+	char *      name;
 	controller *cp;
 
-	if (!get_obj_uint64(params, "controller", &node)) {
+	printf("GETTING STATUS\n");
+	if (!get_obj_string(params, "controller", &name)) {
 		send_err(w, E_BADPARAMS, "controller parameter required");
 		return;
 	}
 
-	if ((cp = find_controller(w, node)) == NULL) {
+	if ((cp = find_controller(w, name)) == NULL) {
 		send_err(w, E_NOCTRLR, "Controller not found");
 		return;
 	}
 
+	printf("MATCHED CONTROLLER\n");
 	cp->ops->get_status(cp, w);
 }
 
 static void
 get_networks(worker *w, object *params)
 {
-	uint64_t    node;
+	char *      name;
 	controller *cp;
 
-	if (!get_obj_uint64(params, "controller", &node)) {
+	if (!get_obj_string(params, "controller", &name)) {
 		send_err(w, E_BADPARAMS, "controller parameter required");
 		return;
 	}
 
-	if ((cp = find_controller(w, node)) == NULL) {
+	if ((cp = find_controller(w, name)) == NULL) {
 		send_err(w, E_NOCTRLR, "Controller not found");
 		return;
 	}
@@ -450,11 +491,11 @@ get_networks(worker *w, object *params)
 static void
 get_network(worker *w, object *params)
 {
-	uint64_t    node;
-	uint64_t    nwid;
+	char *      name;
 	controller *cp;
+	uint64_t    nwid;
 
-	if (!get_obj_uint64(params, "controller", &node)) {
+	if (!get_obj_string(params, "controller", &name)) {
 		send_err(w, E_BADPARAMS, "controller parameter required");
 		return;
 	}
@@ -469,7 +510,7 @@ get_network(worker *w, object *params)
 		return;
 	}
 
-	if ((cp = find_controller(w, node)) == NULL) {
+	if ((cp = find_controller(w, name)) == NULL) {
 		send_err(w, E_NOCTRLR, "Controller not found");
 		return;
 	}
@@ -480,11 +521,11 @@ get_network(worker *w, object *params)
 static void
 get_network_members(worker *w, object *params)
 {
-	uint64_t    node;
-	uint64_t    nwid;
+	char *      name;
 	controller *cp;
+	uint64_t    nwid;
 
-	if (!get_obj_uint64(params, "controller", &node)) {
+	if (!get_obj_string(params, "controller", &name)) {
 		send_err(w, E_BADPARAMS, "controller parameter required");
 		return;
 	}
@@ -497,7 +538,7 @@ get_network_members(worker *w, object *params)
 		send_err(w, 404, "no such network");
 		return;
 	}
-	if ((cp = find_controller(w, node)) == NULL) {
+	if ((cp = find_controller(w, name)) == NULL) {
 		send_err(w, E_NOCTRLR, "Controller not found");
 		return;
 	}
@@ -507,12 +548,12 @@ get_network_members(worker *w, object *params)
 static void
 get_network_member(worker *w, object *params)
 {
-	uint64_t    node;
+	char *      name;
+	controller *cp;
 	uint64_t    nwid;
 	uint64_t    member;
-	controller *cp;
 
-	if (!get_obj_uint64(params, "controller", &node)) {
+	if (!get_obj_string(params, "controller", &name)) {
 		send_err(w, E_BADPARAMS, "controller parameter required");
 		return;
 	}
@@ -531,7 +572,7 @@ get_network_member(worker *w, object *params)
 		return;
 	}
 
-	if ((cp = find_controller(w, node)) == NULL) {
+	if ((cp = find_controller(w, name)) == NULL) {
 		send_err(w, E_NOCTRLR, "Controller not found");
 		return;
 	}
@@ -853,6 +894,8 @@ load_config(const char *path)
 	for (int i = 0; i < ncontrollers; i++) {
 		controller *cp = &controllers[i];
 		char *      ct;
+		char *      label;
+		char        buf[32];
 
 		if ((!get_arr_obj(arr, i, &obj)) ||
 		    (!get_obj_string(obj, "address", &cp->addr)) ||
@@ -872,10 +915,37 @@ load_config(const char *path)
 				    "controller %d missing nodeid\n", i);
 				exit(1);
 			}
+			if (!get_obj_string(obj, "label", &label)) {
+				snprintf(buf, sizeof(buf), "%llx", cp->nodeid);
+				label = buf;
+			}
 		} else if (strcmp(ct, "central") == 0) {
+			if (!get_obj_string(obj, "label", &label)) {
+				label = "central";
+				exit(1);
+			}
 			cp->ops = &central_ops;
 		} else {
 			fprintf(stderr, "unknown controller type %s\n", ct);
+			exit(1);
+		}
+
+		if (!valid_label(label)) {
+			fprintf(stderr, "bad label for controller %d: %s\n", i,
+			    label);
+			exit(1);
+		}
+
+		for (int j = 0; j < i; i++) {
+			if (strcmp(label, controllers[j].name) == 0) {
+				fprintf(stderr,
+				    "duplicate controller label %s\n", label);
+				exit(1);
+			}
+		}
+
+		if ((cp->name = strdup(label)) == NULL) {
+			fprintf(stderr, "Out of memory\n");
 			exit(1);
 		}
 	}

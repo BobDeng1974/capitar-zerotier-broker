@@ -24,6 +24,23 @@ values are in network/big-endian order.
 ...
 ```
 
+port:: int, the ZeroTier REQ/REP port
+controllers:: array of controllers, where each is a string
+
+For example:
+
+```
+{
+        "port":  8456,
+        "controllers": [ "corporate", "central" ]
+}
+```
+
+The names of controllers are assigned by the application.
+Note that the survey response must fit within a ZeroTier frame, so
+a single worker will need to have a reasonable limit on the numnber
+of controllers it exposes.
+
 Note that the combination of the version and the ZT port can be read in
 a single 32-bit operation, and as the version is currently zero the
 resulting value can be used directly.

@@ -77,6 +77,7 @@ typedef struct controller controller;
 struct controller {
 	controller * next;
 	uint64_t     nodeid;
+	char *       name;
 	nng_sockaddr sa;    // address for its worker
 	nng_time     stamp; // when it last responded to a survey
 	nng_socket   reqsock;
@@ -98,12 +99,12 @@ struct context {
 };
 
 void
-add_controller(nng_sockaddr sa, uint64_t nodeid, nng_pipe p)
+add_controller(nng_sockaddr sa, const char *name, nng_pipe p)
 {
 	controller *cp;
 	nng_mtx_lock(lock);
 	for (cp = controllers; cp != NULL; cp = cp->next) {
-		if ((cp->nodeid == nodeid) &&
+		if ((strcmp(cp->name, name) == 0) &&
 		    (sa.s_zt.sa_port == cp->sa.s_zt.sa_port) &&
 		    (sa.s_zt.sa_nodeid == cp->sa.s_zt.sa_nodeid) &&
 		    (sa.s_zt.sa_nwid == cp->sa.s_zt.sa_nwid)) {
@@ -115,8 +116,12 @@ add_controller(nng_sockaddr sa, uint64_t nodeid, nng_pipe p)
 		}
 	}
 	if ((cp = calloc(1, sizeof(*cp))) != NULL) {
+		if ((cp->name = strdup(name)) == NULL) {
+			free(cp);
+			nng_mtx_unlock(lock);
+			return;
+		}
 		cp->sa       = sa;
-		cp->nodeid   = nodeid;
 		cp->next     = controllers;
 		cp->stamp    = nng_clock();
 		cp->survpipe = p;
@@ -125,7 +130,8 @@ add_controller(nng_sockaddr sa, uint64_t nodeid, nng_pipe p)
 		    (unsigned long long) sa.s_zt.sa_nwid,
 		    (unsigned long long) sa.s_zt.sa_port);
 		if (nng_req0_open(&cp->reqsock) != 0) {
-			nng_free(cp, sizeof(*cp));
+			free(cp->name);
+			free(cp);
 			nng_mtx_unlock(lock);
 			return;
 		}
@@ -141,14 +147,15 @@ add_controller(nng_sockaddr sa, uint64_t nodeid, nng_pipe p)
 		    (nng_dial(cp->reqsock, cp->url, NULL, NNG_FLAG_NONBLOCK) !=
 		        0)) {
 			nng_close(cp->reqsock);
-			nng_free(cp, sizeof(*cp));
+			free(cp->name);
+			free(cp);
 			nng_mtx_unlock(lock);
 			return;
 		}
 		controllers = cp;
 	}
 
-	printf("Adding %llx served by %s\n", cp->nodeid, cp->url);
+	printf("Adding %s served by %s\n", cp->name, cp->url);
 
 	nng_mtx_unlock(lock);
 }
@@ -171,10 +178,11 @@ prune_controllers(nng_time stale)
 			continue;
 		}
 		// Stale, so remove it.
-		printf("Pruning %llx served by %s\n", cp->nodeid, cp->url);
+		printf("Pruning %s served by %s\n", cp->name, cp->url);
 
 		*cpp = cp->next;
-		nng_free(cp, sizeof(*cp));
+		free(cp->name);
+		free(cp);
 	}
 	nng_mtx_unlock(lock);
 }
@@ -270,9 +278,10 @@ survey_loop(void)
 			nng_sockaddr_zt ztsa;
 			nng_sockaddr    peer;
 			nng_pipe        pipe;
-			uint32_t        port;
-			uint64_t        nodeid;
-			uint32_t        cnt;
+			char *          name;
+			int             port;
+			object *        obj;
+			object *        arr;
 
 			switch (nng_recvmsg(survsock, &msg, 0)) {
 			case NNG_ETIMEDOUT:
@@ -285,15 +294,7 @@ survey_loop(void)
 			case 0:
 				break;
 			}
-			if ((nng_msg_trim_u32(msg, &port) != 0) ||
-			    ((port & 0xff000000ul) != 0) ||
-			    (nng_msg_trim_u32(msg, &cnt) != 0) ||
-			    (cnt > 256) ||
-			    (nng_msg_len(msg) < (cnt * sizeof(uint64_t)))) {
-				nng_msg_free(msg);
-				fprintf(stderr, "Malformed survey response\n");
-				continue;
-			}
+
 			pipe = nng_msg_get_pipe(msg);
 			if (nng_pipe_getopt_sockaddr(
 			        pipe, NNG_OPT_REMADDR, &peer) != 0) {
@@ -301,13 +302,25 @@ survey_loop(void)
 				fprintf(stderr, "Cannot get peer address\n");
 				continue;
 			}
+
+			obj = parse_obj(nng_msg_body(msg), nng_msg_len(msg));
+			nng_msg_free(msg);
+
+			if ((obj == NULL) ||
+			    (!get_obj_int(obj, "port", &port)) || (port < 1) ||
+			    (port > 0xffffff) ||
+			    (!get_obj_obj(obj, "controllers", &arr)) ||
+			    (get_arr_len(arr) < 1)) {
+				fprintf(stderr, "Malformed survey response\n");
+				continue;
+			}
+
 			peer.s_zt.sa_port = port; // REP port is different!
-			for (int i = 0; i < cnt; i++) {
-				if (nng_msg_trim_u64(msg, &nodeid) != 0) {
-					// This should never happen.
+			for (int i = 0; i < get_arr_len(arr); i++) {
+				if (!get_arr_string(arr, i, &name)) {
 					continue;
 				}
-				add_controller(peer, nodeid, pipe);
+				add_controller(peer, name, pipe);
 			}
 		}
 
@@ -600,7 +613,7 @@ create_controller_params(controller *cp)
 	object *params;
 
 	if (((params = alloc_obj()) == NULL) ||
-	    (!add_obj_uint64(params, "controller", cp->nodeid))) {
+	    (!add_obj_string(params, "controller", cp->name))) {
 		free_obj(params);
 		return (NULL);
 	}
@@ -751,8 +764,8 @@ proxy_api(nng_aio *aio)
 	nng_http_req *req;
 	const char *  uri;
 	const char *  method;
+	const char *  name;
 	char *        ep;
-	uint64_t      id;
 	controller *  cp;
 
 	// Our API is:
@@ -773,10 +786,13 @@ proxy_api(nng_aio *aio)
 		return;
 	}
 	uri += PROXY_URI_LEN + 1;
-	id  = strtoull(uri, &ep, 16);
-	uri = ep;
+	name = uri;
+	while ((*uri != '/') && (*uri != '\0')) {
+		uri++;
+	}
 	for (cp = controllers; cp != NULL; cp = cp->next) {
-		if (cp->nodeid == id) {
+		if ((memcmp(name, cp->name, strlen(cp->name)) == 0) &&
+		    ((*uri == '/') || (*uri == '\0'))) {
 			break;
 		}
 	}
