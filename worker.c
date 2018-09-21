@@ -417,7 +417,6 @@ static controller *
 find_controller(worker *w, const char *name)
 {
 	for (int i = 0; i < ncontrollers; i++) {
-		printf("CHECKING %s =? %s\n", controllers[i].name, name);
 		if (strcmp(controllers[i].name, name) == 0) {
 			w->client = controllers[i].client;
 			return (&controllers[i]);
@@ -454,7 +453,6 @@ get_status(worker *w, object *params)
 	char *      name;
 	controller *cp;
 
-	printf("GETTING STATUS\n");
 	if (!get_obj_string(params, "controller", &name)) {
 		send_err(w, E_BADPARAMS, "controller parameter required");
 		return;
@@ -465,7 +463,6 @@ get_status(worker *w, object *params)
 		return;
 	}
 
-	printf("MATCHED CONTROLLER\n");
 	cp->ops->get_status(cp, w);
 }
 
@@ -936,7 +933,7 @@ load_config(const char *path)
 			exit(1);
 		}
 
-		for (int j = 0; j < i; i++) {
+		for (int j = 0; j < i; j++) {
 			if (strcmp(label, controllers[j].name) == 0) {
 				fprintf(stderr,
 				    "duplicate controller label %s\n", label);
