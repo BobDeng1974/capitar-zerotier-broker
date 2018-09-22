@@ -81,7 +81,7 @@ struct controller {
 	char *           addr;
 	char *           name;
 	char *           secret;
-	uint64_t         nodeid;
+	char *           host; // for HTTP
 	nng_http_client *client;
 	worker_ops *     ops;
 };
@@ -297,7 +297,6 @@ send_resp(worker *w, const char *key, object *obj)
 		return;
 	}
 
-	printf("SENDING REPY %s\n", str);
 	w->state = STATE_REPLYING;
 	nng_aio_set_msg(w->aio, msg);
 	nng_ctx_send(w->ctx, w->aio);
@@ -333,7 +332,6 @@ send_err(worker *w, int code, const char *rsn)
 			break;
 		}
 	}
-	printf("SENDING ERROR %d %s\n", code, rsn);
 	if (((err = alloc_obj()) == NULL) ||
 	    (!add_obj_int(err, "code", code)) ||
 	    (!add_obj_string(err, "message", rsn))) {
@@ -397,8 +395,10 @@ worker_http_res(worker *w)
 void
 worker_http(worker *w, worker_http_cb cb)
 {
+	int rv;
 	w->http_cb = cb;
 	w->state   = STATE_HTTPING;
+
 	nng_http_client_transact(w->client, w->req, w->res, w->aio);
 }
 
@@ -426,14 +426,16 @@ find_controller(worker *w, const char *name)
 }
 
 static bool
-valid_label(const char *label)
+valid_name(const char *name)
 {
 	char c;
-	if ((label == NULL) || (*label == '\0')) {
+
+	// Insist that the name start with a letter or an underscore.
+	if ((name == NULL) || ((!isalpha(*name)) && (*name != '_'))) {
 		return (false);
 	}
-	while ((c = *label) != '\0') {
-		label++;
+	while ((c = *name) != '\0') {
+		name++;
 		if ((!isalnum(c)) && (c != '_') && (c != '-')) {
 			return (false);
 		}
@@ -445,6 +447,12 @@ const char *
 get_controller_secret(controller *cp)
 {
 	return (cp->secret);
+}
+
+const char *
+get_controller_host(controller *cp)
+{
+	return (cp->host);
 }
 
 static void
@@ -620,7 +628,6 @@ recv_cb(worker *w)
 	}
 
 	obj = parse_obj(nng_msg_body(msg), nng_msg_len(msg));
-	printf("RECV REQ: %s\n", nng_msg_body(msg));
 	nng_msg_free(msg);
 
 	// The following is sort of a violation of the JSON-RPC 2.0
@@ -765,6 +772,19 @@ setup_controllers(void)
 			fprintf(stderr, "%s\n", nng_strerror(rv));
 			exit(1);
 		}
+
+		if (((strcmp(url->u_scheme, "http") == 0) &&
+		        (strcmp(url->u_port, "80") == 0)) ||
+		    ((strcmp(url->u_scheme, "https") == 0) &&
+		        (strcmp(url->u_port, "443") == 0))) {
+			cp->host = strdup(url->u_host);
+		} else {
+			cp->host = strdup(url->u_hostname);
+		}
+		if (cp->host == NULL) {
+			fprintf(stderr, "Out of memory\n");
+			exit(1);
+		}
 		nng_url_free(url);
 
 		if (strncmp(cp->addr, "https", 5) == 0) {
@@ -891,12 +911,11 @@ load_config(const char *path)
 	for (int i = 0; i < ncontrollers; i++) {
 		controller *cp = &controllers[i];
 		char *      ct;
-		char *      label;
-		char        buf[32];
 
 		if ((!get_arr_obj(arr, i, &obj)) ||
 		    (!get_obj_string(obj, "address", &cp->addr)) ||
-		    (!get_obj_string(obj, "secret", &cp->secret))) {
+		    (!get_obj_string(obj, "secret", &cp->secret)) ||
+		    (!get_obj_string(obj, "name", &cp->name))) {
 			fprintf(stderr, "controller %d incomplete\n", i);
 			exit(1);
 		}
@@ -907,43 +926,26 @@ load_config(const char *path)
 
 		if (strcmp(ct, "controller") == 0) {
 			cp->ops = &controller_ops;
-			if (!get_obj_uint64(obj, "nodeid", &cp->nodeid)) {
-				fprintf(stderr,
-				    "controller %d missing nodeid\n", i);
-				exit(1);
-			}
-			if (!get_obj_string(obj, "label", &label)) {
-				snprintf(buf, sizeof(buf), "%llx", cp->nodeid);
-				label = buf;
-			}
 		} else if (strcmp(ct, "central") == 0) {
-			if (!get_obj_string(obj, "label", &label)) {
-				label = "central";
-				exit(1);
-			}
 			cp->ops = &central_ops;
 		} else {
 			fprintf(stderr, "unknown controller type %s\n", ct);
 			exit(1);
 		}
 
-		if (!valid_label(label)) {
-			fprintf(stderr, "bad label for controller %d: %s\n", i,
-			    label);
+		if (!valid_name(cp->name)) {
+			fprintf(stderr, "bad name for controller %d: %s\n", i,
+			    cp->name);
 			exit(1);
 		}
 
 		for (int j = 0; j < i; j++) {
-			if (strcmp(label, controllers[j].name) == 0) {
+			if (strcmp(cp->name, controllers[j].name) == 0) {
 				fprintf(stderr,
-				    "duplicate controller label %s\n", label);
+				    "duplicate controller name %s\n",
+				    cp->name);
 				exit(1);
 			}
-		}
-
-		if ((cp->name = strdup(label)) == NULL) {
-			fprintf(stderr, "Out of memory\n");
-			exit(1);
 		}
 	}
 
@@ -1045,7 +1047,7 @@ int
 main(int argc, char **argv)
 {
 	int         optc;
-	const char *opta;
+	char *      opta;
 	int         opti = 1;
 	const char *path = CONFIG;
 	int         rv;

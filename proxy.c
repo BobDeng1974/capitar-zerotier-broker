@@ -102,6 +102,7 @@ void
 add_controller(nng_sockaddr sa, const char *name, nng_pipe p)
 {
 	controller *cp;
+	nng_dialer *dialer;
 	nng_mtx_lock(lock);
 	for (cp = controllers; cp != NULL; cp = cp->next) {
 		if ((strcmp(cp->name, name) == 0) &&
@@ -115,45 +116,45 @@ add_controller(nng_sockaddr sa, const char *name, nng_pipe p)
 			return;
 		}
 	}
-	if ((cp = calloc(1, sizeof(*cp))) != NULL) {
-		if ((cp->name = strdup(name)) == NULL) {
-			free(cp);
-			nng_mtx_unlock(lock);
-			return;
-		}
-		cp->sa       = sa;
-		cp->next     = controllers;
-		cp->stamp    = nng_clock();
-		cp->survpipe = p;
-		snprintf(cp->url, sizeof(cp->url), "zt://%llx.%llx:%llu",
-		    (unsigned long long) sa.s_zt.sa_nodeid,
-		    (unsigned long long) sa.s_zt.sa_nwid,
-		    (unsigned long long) sa.s_zt.sa_port);
-		if (nng_req0_open(&cp->reqsock) != 0) {
-			free(cp->name);
-			free(cp);
-			nng_mtx_unlock(lock);
-			return;
-		}
-		if ((nng_setopt_ms(cp->reqsock, NNG_OPT_RECONNMINT, 1) != 0) ||
-		    (nng_setopt_ms(cp->reqsock, NNG_OPT_RECONNMAXT, 1000) !=
-		        0) ||
-		    (nng_setopt_ms(
-		         cp->reqsock, NNG_OPT_REQ_RESENDTIME, 1000) != 0) ||
-		    (nng_setopt_ms(cp->reqsock, NNG_OPT_ZT_PING_TIME, 1000) !=
-		        0) ||
-		    (nng_setopt_ms(cp->reqsock, NNG_OPT_ZT_CONN_TIME, 1000) !=
-		        0) ||
-		    (nng_dial(cp->reqsock, cp->url, NULL, NNG_FLAG_NONBLOCK) !=
-		        0)) {
-			nng_close(cp->reqsock);
-			free(cp->name);
-			free(cp);
-			nng_mtx_unlock(lock);
-			return;
-		}
-		controllers = cp;
+	if ((cp = calloc(1, sizeof(*cp))) == NULL) {
+		nng_mtx_unlock(lock);
+		return;
 	}
+
+	if ((cp->name = strdup(name)) == NULL) {
+		nng_mtx_unlock(lock);
+		free(cp);
+		return;
+	}
+	cp->sa       = sa;
+	cp->next     = controllers;
+	cp->stamp    = nng_clock();
+	cp->survpipe = p;
+	snprintf(cp->url, sizeof(cp->url), "zt://%llx.%llx:%llu",
+	    (unsigned long long) sa.s_zt.sa_nodeid,
+	    (unsigned long long) sa.s_zt.sa_nwid,
+	    (unsigned long long) sa.s_zt.sa_port);
+
+	if (nng_req0_open(&cp->reqsock) != 0) {
+		nng_mtx_unlock(lock);
+		free(cp->name);
+		free(cp);
+		return;
+	}
+
+	if ((nng_setopt_ms(cp->reqsock, NNG_OPT_RECONNMINT, 1) != 0) ||
+	    (nng_setopt_ms(cp->reqsock, NNG_OPT_RECONNMAXT, 1000) != 0) ||
+	    (nng_setopt_ms(cp->reqsock, NNG_OPT_REQ_RESENDTIME, 1000) != 0) ||
+	    (nng_setopt_ms(cp->reqsock, NNG_OPT_ZT_PING_TIME, 1000) != 0) ||
+	    (nng_setopt_ms(cp->reqsock, NNG_OPT_ZT_CONN_TIME, 1000) != 0) ||
+	    (nng_dial(cp->reqsock, cp->url, NULL, NNG_FLAG_NONBLOCK) != 0)) {
+		nng_mtx_unlock(lock);
+		nng_close(cp->reqsock);
+		free(cp->name);
+		free(cp);
+		return;
+	}
+	controllers = cp;
 
 	printf("Adding %s served by %s\n", cp->name, cp->url);
 
@@ -180,6 +181,7 @@ prune_controllers(nng_time stale)
 		// Stale, so remove it.
 		printf("Pruning %s served by %s\n", cp->name, cp->url);
 
+		nng_close(cp->reqsock);
 		*cpp = cp->next;
 		free(cp->name);
 		free(cp);
@@ -205,9 +207,9 @@ survey_pipe_cb(nng_pipe p, int ev, void *arg)
 		for (cp = controllers; cp != NULL; cp = cp->next) {
 			if (nng_pipe_id(cp->survpipe) == nng_pipe_id(p)) {
 				// Remote peer is removed, mark it stale.
-				// This will force it to be reaped.
+				// This will force it to be reaped.  Note
+				// that there can be more than one such.
 				cp->stamp = 0;
-				break;
 			}
 		}
 		nng_mtx_unlock(lock);
@@ -594,7 +596,7 @@ do_rpc(nng_aio *aio, controller *cp, const char *rpcmeth, object *params)
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
-	strcpy(nng_msg_body(msg), str);
+	memcpy(nng_msg_body(msg), str, strlen(str));
 	free(str);
 	free_obj(obj);
 
@@ -939,7 +941,7 @@ int
 main(int argc, char **argv)
 {
 	int         optc;
-	const char *opta;
+	char *      opta;
 	int         opti = 1;
 	const char *path = CONFIG;
 	int         rv;

@@ -33,22 +33,22 @@ central_init_req(controller *cp, worker *w, const char *fmt, ...)
 	char          uri[256];
 	char          token[256];
 	nng_http_req *req;
-	const char *  secret;
 	va_list       ap;
 
 	req = worker_http_req(w);
 	nng_http_req_reset(req);
 
-	secret = get_controller_secret(cp);
-
 	va_start(ap, fmt);
 	vsnprintf(uri, sizeof(uri), fmt, ap);
 	va_end(ap);
 
-	snprintf(token, sizeof(token), "bearer %s", get_controller_secret(cp));
+	snprintf(token, sizeof(token), "Bearer %s", get_controller_secret(cp));
 
 	if ((nng_http_req_set_uri(req, uri) != 0) ||
-	    (nng_http_req_set_header(req, "Authorization", secret) != 0)) {
+	    (nng_http_req_set_header(req, "Host", get_controller_host(cp)) !=
+	        0) ||
+	    (nng_http_req_set_header(req, "Authorization", token) != 0) ||
+	    (nng_http_req_set_data(req, NULL, 0) != 0)) {
 		send_err(w, E_NOMEM, NULL);
 		return (false);
 	}

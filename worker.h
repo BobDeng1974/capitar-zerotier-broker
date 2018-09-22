@@ -40,6 +40,7 @@ typedef struct worker_ops worker_ops;
 typedef struct worker     worker;
 typedef struct controller controller;
 
+extern const char *get_controller_host(controller *);
 extern const char *get_controller_secret(controller *);
 
 // send_resp sends a response object (on success).
