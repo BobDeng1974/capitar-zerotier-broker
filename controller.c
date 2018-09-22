@@ -174,8 +174,6 @@ controller_get_network_cb(worker *w, void *body, size_t len)
 		return;
 	}
 
-	free_obj(obj1);
-
 	if (((obj2 = alloc_obj()) == NULL) ||
 	    (!add_obj_string(obj2, "id", id)) ||
 	    (!add_obj_string(obj2, "name", name)) ||
@@ -196,8 +194,10 @@ controller_get_network_cb(worker *w, void *body, size_t len)
 	}
 
 	send_result(w, obj2);
+	free_obj(obj1);
 	return;
 err:
+	free_obj(obj1);
 	free_obj(obj2);
 	free_obj(routes);
 	free_obj(v4am);
@@ -298,8 +298,8 @@ controller_get_member_cb(worker *w, void *body, size_t len)
 		send_err(w, E_NOMEM, NULL);
 		return;
 	}
-	free_obj(obj1);
 	send_result(w, obj2);
+	free_obj(obj1);
 }
 
 static void

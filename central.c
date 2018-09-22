@@ -145,6 +145,7 @@ central_get_networks(controller *cp, worker *w)
 static void
 central_get_network_cb(worker *w, void *body, size_t len)
 {
+	object *obj0;
 	object *obj1;
 	object *obj2;
 	object *obj3;
@@ -158,7 +159,8 @@ central_get_network_cb(worker *w, void *body, size_t len)
 	object *v6am   = NULL;
 	object *routes = NULL;
 
-	if (((obj1 = parse_obj(body, len)) == NULL) ||
+	if (((obj0 = parse_obj(body, len)) == NULL) ||
+	    (!get_obj_obj(obj0, "config", &obj1)) ||
 	    (!get_obj_string(obj1, "id", &id)) ||
 	    (!get_obj_string(obj1, "name", &name)) ||
 	    (!get_obj_number(obj1, "creationTime", &crtime)) ||
@@ -171,15 +173,13 @@ central_get_network_cb(worker *w, void *body, size_t len)
 	    (!get_obj_obj(obj1, "v6AssignMode", &obj3)) ||
 	    ((v6am = clone_obj(obj3)) == NULL) ||
 	    (!get_obj_bool(obj1, "private", &prv))) {
-		free_obj(obj1);
+		free_obj(obj0);
 		free_obj(routes);
 		free_obj(v4am);
 		free_obj(v6am);
 		send_err(w, E_BADJSON, NULL);
 		return;
 	}
-
-	free_obj(obj1);
 
 	if (((obj2 = alloc_obj()) == NULL) ||
 	    (!add_obj_string(obj2, "id", id)) ||
@@ -200,9 +200,11 @@ central_get_network_cb(worker *w, void *body, size_t len)
 		goto err;
 	}
 
+	free_obj(obj0);
 	send_result(w, obj2);
 	return;
 err:
+	free_obj(obj0);
 	free_obj(obj2);
 	free_obj(routes);
 	free_obj(v4am);
@@ -223,32 +225,39 @@ central_get_network(controller *cp, worker *w, uint64_t nwid)
 static void
 central_get_members_cb(worker *w, void *body, size_t len)
 {
-	object *obj;
-	object *arr;
-	char *  name;
+	object *arr1;
+	object *arr2;
 
-	if ((obj = parse_obj(body, len)) == NULL) {
+	if ((arr1 = parse_obj(body, len)) == NULL) {
 		send_err(w, E_BADJSON, NULL);
 		return;
 	}
 
-	if ((arr = alloc_arr()) == NULL) {
-		free_obj(obj);
+	if ((arr2 = alloc_arr()) == NULL) {
+		free_obj(arr1);
 		send_err(w, E_NOMEM, NULL);
 		return;
 	}
-	name = NULL;
-	while ((name = next_obj_key(obj, name)) != NULL) {
-		if (!add_arr_string(arr, name)) {
-			free_obj(arr);
-			free_obj(obj);
+	for (int i = 0; i < get_arr_len(arr1); i++) {
+		object *obj;
+		char *  s;
+		if ((!get_arr_obj(arr1, i, &obj)) ||
+		    (!get_obj_string(obj, "nodeId", &s))) {
+			free_obj(arr2);
+			free_obj(arr1);
+			send_err(w, E_BADJSON, NULL);
+			return;
+		}
+		if (!add_arr_string(arr2, s)) {
+			free_obj(arr2);
+			free_obj(arr1);
 			send_err(w, E_NOMEM, NULL);
 			return;
 		}
 	}
-	free_obj(obj);
+	free_obj(arr1);
 
-	send_result(w, arr);
+	send_result(w, arr2);
 }
 
 static void
@@ -264,6 +273,7 @@ central_get_members(controller *cp, worker *w, uint64_t nwid)
 static void
 central_get_member_cb(worker *w, void *body, size_t len)
 {
+	object *obj0;
 	object *obj1;
 	object *obj2;
 	object *obj3;
@@ -275,7 +285,8 @@ central_get_member_cb(worker *w, void *body, size_t len)
 	int     rev;
 	object *ipassign = NULL;
 
-	if (((obj1 = parse_obj(body, len)) == NULL) ||
+	if (((obj0 = parse_obj(body, len)) == NULL) ||
+	    (!get_obj_obj(obj0, "config", &obj1)) ||
 	    (!get_obj_string(obj1, "id", &id)) ||
 	    (!get_obj_string(obj1, "nwid", &nwid)) ||
 	    (!get_obj_bool(obj1, "authorized", &auth)) ||
@@ -283,12 +294,11 @@ central_get_member_cb(worker *w, void *body, size_t len)
 	    (!get_obj_obj(obj1, "ipAssignments", &obj3)) ||
 	    ((ipassign = clone_obj(obj3)) == NULL) ||
 	    (!get_obj_bool(obj1, "activeBridge", &bridge))) {
-		free_obj(obj1);
+		free_obj(obj0);
 		free_obj(ipassign);
 		send_err(w, E_BADJSON, NULL);
 		return;
 	}
-	free_obj(obj1);
 
 	if (((obj2 = alloc_obj()) == NULL) ||
 	    (!add_obj_string(obj2, "id", id)) ||
@@ -297,6 +307,7 @@ central_get_member_cb(worker *w, void *body, size_t len)
 	    (!add_obj_bool(obj2, "activeBridge", bridge)) ||
 	    (!add_obj_int(obj2, "revision", rev)) ||
 	    (!add_obj_obj(obj2, "ipAssignments", ipassign))) {
+		free_obj(obj0);
 		free_obj(obj2);
 		free_obj(ipassign);
 		send_err(w, E_NOMEM, NULL);
@@ -304,6 +315,7 @@ central_get_member_cb(worker *w, void *body, size_t len)
 	}
 
 	send_result(w, obj2);
+	free_obj(obj0);
 }
 
 static void
