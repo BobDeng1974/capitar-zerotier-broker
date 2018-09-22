@@ -106,10 +106,12 @@ central_get_networks_cb(worker *w, void *body, size_t len)
 	}
 
 	for (int i = 0; i < get_arr_len(arr); i++) {
+		object * obj;
 		char *   s;
 		char *   ep;
 		uint64_t nwid;
-		if ((!get_arr_string(arr, i, &s)) ||
+		if ((!get_arr_obj(arr, i, &obj)) ||
+		    (!get_obj_string(obj, "id", &s)) ||
 		    ((nwid = strtoull(s, &ep, 16)) == 0) || (*ep != '\0')) {
 			free_obj(arr);
 			free_obj(arr2);
