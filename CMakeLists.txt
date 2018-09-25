@@ -11,6 +11,8 @@ cmake_minimum_required (VERSION 3.1)
 project(ztc C)
 cmake_policy(SET CMP0028 NEW)
 
+find_package(Threads)
+find_package(zerotiercore REQUIRED)
 find_package(nng CONFIG REQUIRED)
 
 add_executable(${PROJECT_NAME}-worker worker.c cJSON.c central.c controller.c cfgfile.c object.c)

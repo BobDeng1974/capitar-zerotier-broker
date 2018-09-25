@@ -1,0 +1,9 @@
+[submodule "extern/nng"]
+	path = extern/nng
+	url = https://github.com/nanomsg/nng.git
+[submodule "extern/libzerotiercore"]
+	path = extern/libzerotiercore
+	url = https://github.com/staysail/libzerotiercore
+[submodule "extern/mbedtls"]
+	path = extern/mbedtls
+	url = https://github.com/ARMmbed/mbedtls
