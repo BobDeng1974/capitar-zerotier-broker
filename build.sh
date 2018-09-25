@@ -20,7 +20,7 @@ srcdir="$(cd $(dirname $0); pwd)"
 blddir="${bindir}/build"
 insdir="${bindir}/install"
 
-git submodule update --depth=1
+git submodule update --init --recursive
 
 repos="mbedtls libzerotiercore nng"
 
