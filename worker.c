@@ -353,6 +353,9 @@ static void get_networks(worker *, object *);
 static void get_network(worker *, object *);
 static void get_network_members(worker *, object *);
 static void get_network_member(worker *, object *);
+static void delete_network_member(worker *, object *);
+static void authorize_network_member(worker *, object *);
+static void deauthorize_network_member(worker *, object *);
 
 static struct {
 	const char *method;
@@ -363,6 +366,9 @@ static struct {
 	{ "get-network", get_network },
 	{ "get-network-members", get_network_members },
 	{ "get-network-member", get_network_member },
+	{ "delete-network-member", delete_network_member },
+	{ "authorize-network-member", authorize_network_member },
+	{ "deauthorize-network-member", deauthorize_network_member },
 	{ NULL, NULL },
 };
 
@@ -398,6 +404,17 @@ worker_http(worker *w, worker_http_cb cb)
 	int rv;
 	w->http_cb = cb;
 	w->state   = STATE_HTTPING;
+
+	if (debug > 1) {
+		void * body;
+		size_t len;
+		nng_http_req_get_data(w->req, &body, &len);
+		printf("Controller-Send %s %s:\n",
+		    nng_http_req_get_method(w->req),
+		    nng_http_req_get_uri(w->req));
+		fwrite(body, len, 1, stdout);
+		printf("\n");
+	}
 
 	nng_http_client_transact(w->client, w->req, w->res, w->aio);
 }
@@ -455,133 +472,158 @@ get_controller_host(controller *cp)
 	return (cp->host);
 }
 
-static void
-get_status(worker *w, object *params)
+static bool
+get_contoller_param(worker *w, object *params, controller **cpp)
 {
 	char *      name;
 	controller *cp;
 
 	if (!get_obj_string(params, "controller", &name)) {
 		send_err(w, E_BADPARAMS, "controller parameter required");
-		return;
+		return (false);
 	}
-
 	if ((cp = find_controller(w, name)) == NULL) {
-		send_err(w, E_NOCTRLR, "Controller not found");
-		return;
+		send_err(w, E_NOCTRLR, NULL);
+		return (false);
 	}
 
-	cp->ops->get_status(cp, w);
+	*cpp = cp;
+	return (true);
+}
+
+static void
+get_status(worker *w, object *params)
+{
+	controller *cp;
+
+	if (get_contoller_param(w, params, &cp)) {
+		cp->ops->get_status(cp, w);
+	}
 }
 
 static void
 get_networks(worker *w, object *params)
 {
-	char *      name;
 	controller *cp;
 
-	if (!get_obj_string(params, "controller", &name)) {
-		send_err(w, E_BADPARAMS, "controller parameter required");
-		return;
+	if (get_contoller_param(w, params, &cp)) {
+		cp->ops->get_networks(cp, w);
+	}
+}
+
+static bool
+get_network_param(worker *w, object *params, controller **cpp, uint64_t *nwidp)
+{
+	controller *cp;
+	uint64_t    nwid;
+
+	if (!get_contoller_param(w, params, &cp)) {
+		return (false);
+	}
+	if (!get_obj_uint64(params, "network", &nwid)) {
+		send_err(w, E_BADPARAMS, "network parameter required");
+		return (false);
+	}
+	if (!nwid_allowed(nwid)) {
+		// Security: Treat network denied as if it does not exist.
+		send_err(w, 404, "no such network");
+		return (false);
 	}
 
-	if ((cp = find_controller(w, name)) == NULL) {
-		send_err(w, E_NOCTRLR, "Controller not found");
-		return;
-	}
-
-	cp->ops->get_networks(cp, w);
+	*cpp   = cp;
+	*nwidp = nwid;
+	return (true);
 }
 
 static void
 get_network(worker *w, object *params)
 {
-	char *      name;
 	controller *cp;
 	uint64_t    nwid;
 
-	if (!get_obj_string(params, "controller", &name)) {
-		send_err(w, E_BADPARAMS, "controller parameter required");
-		return;
+	if (get_network_param(w, params, &cp, &nwid)) {
+		cp->ops->get_network(cp, w, nwid);
 	}
-
-	if (!get_obj_uint64(params, "network", &nwid)) {
-		send_err(w, E_BADPARAMS, "network parameter required");
-		return;
-	}
-	if (!nwid_allowed(nwid)) {
-		// Security: Treat network denied as if it does not exist.
-		send_err(w, 404, "no such network");
-		return;
-	}
-
-	if ((cp = find_controller(w, name)) == NULL) {
-		send_err(w, E_NOCTRLR, "Controller not found");
-		return;
-	}
-
-	cp->ops->get_network(cp, w, nwid);
 }
 
 static void
 get_network_members(worker *w, object *params)
 {
-	char *      name;
 	controller *cp;
 	uint64_t    nwid;
 
-	if (!get_obj_string(params, "controller", &name)) {
-		send_err(w, E_BADPARAMS, "controller parameter required");
-		return;
+	if (get_network_param(w, params, &cp, &nwid)) {
+		cp->ops->get_members(cp, w, nwid);
 	}
-	if (!get_obj_uint64(params, "network", &nwid)) {
-		send_err(w, E_BADPARAMS, "network parameter required");
-		return;
+}
+
+static bool
+get_member_param(worker *w, object *params, controller **cpp, uint64_t *nwidp,
+    uint64_t *memidp)
+{
+	controller *cp;
+	uint64_t    nwid;
+	uint64_t    memid;
+
+	if (!get_network_param(w, params, &cp, &nwid)) {
+		return (false);
 	}
-	if (!nwid_allowed(nwid)) {
-		// Security: Treat network denied as if it does not exist.
-		send_err(w, 404, "no such network");
-		return;
+	if (!get_obj_uint64(params, "member", &memid)) {
+		send_err(w, E_BADPARAMS, "member parameter required");
+		return (false);
 	}
-	if ((cp = find_controller(w, name)) == NULL) {
-		send_err(w, E_NOCTRLR, "Controller not found");
-		return;
-	}
-	cp->ops->get_members(cp, w, nwid);
+	*cpp    = cp;
+	*nwidp  = nwid;
+	*memidp = memid;
+	return (true);
 }
 
 static void
 get_network_member(worker *w, object *params)
 {
-	char *      name;
 	controller *cp;
 	uint64_t    nwid;
 	uint64_t    member;
 
-	if (!get_obj_string(params, "controller", &name)) {
-		send_err(w, E_BADPARAMS, "controller parameter required");
-		return;
+	if (get_member_param(w, params, &cp, &nwid, &member)) {
+		cp->ops->get_member(cp, w, nwid, member);
 	}
+}
 
-	if (!get_obj_uint64(params, "network", &nwid)) {
-		send_err(w, E_BADPARAMS, "network parameter required");
-		return;
-	}
-	if (!get_obj_uint64(params, "member", &member)) {
-		send_err(w, E_BADPARAMS, "member parameter required");
-		return;
-	}
-	if (!nwid_allowed(nwid)) {
-		// Security: Treat network denied as if it does not exist.
-		send_err(w, 404, "no such network");
-		return;
-	}
+static void
+delete_network_member(worker *w, object *params)
+{
+	controller *cp;
+	uint64_t    nwid;
+	uint64_t    member;
 
-	if ((cp = find_controller(w, name)) == NULL) {
-		send_err(w, E_NOCTRLR, "Controller not found");
-		return;
+	if (get_member_param(w, params, &cp, &nwid, &member)) {
+		cp->ops->delete_member(cp, w, nwid, member);
 	}
-	cp->ops->get_member(cp, w, nwid, member);
+}
+
+static void
+authorize_network_member(worker *w, object *params)
+{
+	controller *cp;
+	uint64_t    nwid;
+	uint64_t    member;
+
+	if (get_member_param(w, params, &cp, &nwid, &member)) {
+		cp->ops->authorize_member(cp, w, nwid, member);
+	}
+}
+
+static void
+deauthorize_network_member(worker *w, object *params)
+{
+	controller *cp;
+	uint64_t    nwid;
+	uint64_t    member;
+
+	if (get_member_param(w, params, &cp, &nwid, &member)) {
+		cp->ops->deauthorize_member(cp, w, nwid, member);
+	}
 }
 
 static void
@@ -681,12 +723,18 @@ http_cb(worker *w)
 		return;
 	}
 
+	nng_http_res_get_data(res, &body, &len);
 	if ((rv = nng_http_res_get_status(res)) > 299) {
+		if (debug > 1) {
+			printf("Controller-Error: %d %s\n", rv,
+			    nng_http_res_get_reason(res));
+			fwrite(body, len, 1, stdout);
+			printf("\n");
+		}
 		send_err(w, rv, nng_http_res_get_reason(res));
 		return;
 	}
 
-	nng_http_res_get_data(res, &body, &len);
 	if (debug > 1) {
 		printf("Controller-Reply:\n");
 		fwrite(body, len, 1, stdout);

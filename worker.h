@@ -75,6 +75,9 @@ struct worker_ops {
 	void (*get_network)(controller *, worker *, uint64_t);
 	void (*get_members)(controller *, worker *, uint64_t);
 	void (*get_member)(controller *, worker *, uint64_t, uint64_t);
+	void (*delete_member)(controller *, worker *, uint64_t, uint64_t);
+	void (*authorize_member)(controller *, worker *, uint64_t, uint64_t);
+	void (*deauthorize_member)(controller *, worker *, uint64_t, uint64_t);
 };
 
 extern worker_ops controller_ops;

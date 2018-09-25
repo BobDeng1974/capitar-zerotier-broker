@@ -173,3 +173,37 @@ Parameters::
 
 Result::
 	Empty object.
+
+=== Authorize Network Member
+
+This authorizes a single network member.
+
+Method:: `authorize-network-member`
+
+Parameters::
+	`controller`:::
+		Controller name.
+	`network`:::
+		Network ID (hexstring, 64-bit).
+	`member`:::
+		Member node ID (hexstring, 40-bit).
+
+Result::
+	Empty object.
+
+=== Deauthorize Network Member
+
+This deauthorizes a single network member.
+
+Method:: `deauthorize-network-member`
+
+Parameters::
+	`controller`:::
+		Controller name.
+	`network`:::
+		Network ID (hexstring, 64-bit).
+	`member`:::
+		Member node ID (hexstring, 40-bit).
+
+Result::
+	Empty object.

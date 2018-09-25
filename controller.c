@@ -208,7 +208,7 @@ err:
 static void
 controller_get_network(controller *cp, worker *w, uint64_t nwid)
 {
-	if (!controller_init_req(cp, w, "/controller/network/%llx", nwid)) {
+	if (!controller_init_req(cp, w, "/controller/network/%016llx", nwid)) {
 		return;
 	}
 
@@ -250,7 +250,7 @@ static void
 controller_get_members(controller *cp, worker *w, uint64_t nwid)
 {
 	if (!controller_init_req(
-	        cp, w, "/controller/network/%llx/member", nwid)) {
+	        cp, w, "/controller/network/%016llx/member", nwid)) {
 		return;
 	}
 
@@ -305,18 +305,147 @@ controller_get_member_cb(worker *w, void *body, size_t len)
 static void
 controller_get_member(controller *cp, worker *w, uint64_t nwid, uint64_t node)
 {
-	if (!controller_init_req(
-	        cp, w, "/controller/network/%llx/member/%llx", nwid, node)) {
+	if (!controller_init_req(cp, w,
+	        "/controller/network/%016llx/member/%010llx", nwid, node)) {
 		return;
 	}
 
 	worker_http(w, controller_get_member_cb);
 }
 
+static void
+controller_delete_member_cb(worker *w, void *body, size_t len)
+{
+	object *obj;
+
+	// Delete has no body text.
+	// NB: As of this writing, the controller responds with a 200
+	// error code, and does not actually delete the member.  We are
+	// going to pretend it worked for now, and when the upstream bug
+	// is fixed this code will Just Work.  Short of performing another
+	// GET to see if it worked, there isn't much else we can do anyway.
+	if ((obj = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+	} else {
+		send_result(w, obj);
+	}
+}
+
+static void
+controller_delete_member(
+    controller *cp, worker *w, uint64_t nwid, uint64_t node)
+{
+	nng_http_req *req;
+
+	if (!controller_init_req(cp, w,
+	        "/controller/network/%016llx/member/%010llx", nwid, node)) {
+		return;
+	}
+	req = worker_http_req(w);
+	if (nng_http_req_set_method(req, "DELETE") != 0) {
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+	worker_http(w, controller_delete_member_cb);
+}
+
+static void
+controller_authorize_member_cb(worker *w, void *body, size_t len)
+{
+	object *obj;
+	bool    auth;
+
+	if (((obj = parse_obj(body, len)) == NULL) ||
+	    (!get_obj_bool(obj, "authorized", &auth))) {
+		free_obj(obj);
+		send_err(w, E_BADJSON, NULL);
+		return;
+	}
+	free_obj(obj);
+	if (!auth) {
+		send_err(w, E_INTERNAL, "Member not authorized");
+		return;
+	}
+
+	if ((obj = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+	} else {
+		send_result(w, obj);
+	}
+}
+
+static void
+controller_authorize_member(
+    controller *cp, worker *w, uint64_t nwid, uint64_t node)
+{
+	nng_http_req *req;
+	char *        body = "{ \"authorized\": true }";
+
+	if (!controller_init_req(cp, w,
+	        "/controller/network/%016llx/member/%010llx", nwid, node)) {
+		return;
+	}
+	req = worker_http_req(w);
+	if ((nng_http_req_set_method(req, "POST") != 0) ||
+	    (nng_http_req_copy_data(req, body, strlen(body)) != 0)) {
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+	worker_http(w, controller_authorize_member_cb);
+}
+
+static void
+controller_deauthorize_member_cb(worker *w, void *body, size_t len)
+{
+	object *obj;
+	bool    auth;
+
+	if (((obj = parse_obj(body, len)) == NULL) ||
+	    (!get_obj_bool(obj, "authorized", &auth))) {
+		free_obj(obj);
+		send_err(w, E_BADJSON, NULL);
+		return;
+	}
+	free_obj(obj);
+	if (auth) {
+		send_err(w, E_INTERNAL, "Member still authorized");
+		return;
+	}
+
+	if ((obj = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+	} else {
+		send_result(w, obj);
+	}
+}
+
+static void
+controller_deauthorize_member(
+    controller *cp, worker *w, uint64_t nwid, uint64_t node)
+{
+	nng_http_req *req;
+	char *        body = "{ \"authorized\": false }";
+
+	if (!controller_init_req(cp, w,
+	        "/controller/network/%016llx/member/%010llx", nwid, node)) {
+		return;
+	}
+	req = worker_http_req(w);
+	if ((nng_http_req_set_method(req, "POST") != 0) ||
+	    (nng_http_req_copy_data(req, body, strlen(body)) != 0)) {
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+	worker_http(w, controller_deauthorize_member_cb);
+}
+
 worker_ops controller_ops = {
-	.get_status   = controller_get_status,
-	.get_networks = controller_get_networks,
-	.get_network  = controller_get_network,
-	.get_members  = controller_get_members,
-	.get_member   = controller_get_member,
+	.get_status         = controller_get_status,
+	.get_networks       = controller_get_networks,
+	.get_network        = controller_get_network,
+	.get_members        = controller_get_members,
+	.get_member         = controller_get_member,
+	.delete_member      = controller_delete_member,
+	.authorize_member   = controller_authorize_member,
+	.deauthorize_member = controller_deauthorize_member,
 };

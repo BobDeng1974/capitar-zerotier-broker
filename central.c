@@ -215,7 +215,7 @@ err:
 static void
 central_get_network(controller *cp, worker *w, uint64_t nwid)
 {
-	if (!central_init_req(cp, w, "/api/network/%llx", nwid)) {
+	if (!central_init_req(cp, w, "/api/network/%016llx", nwid)) {
 		return;
 	}
 
@@ -263,7 +263,7 @@ central_get_members_cb(worker *w, void *body, size_t len)
 static void
 central_get_members(controller *cp, worker *w, uint64_t nwid)
 {
-	if (!central_init_req(cp, w, "/api/network/%llx/member", nwid)) {
+	if (!central_init_req(cp, w, "/api/network/%016llx/member", nwid)) {
 		return;
 	}
 
@@ -322,17 +322,124 @@ static void
 central_get_member(controller *cp, worker *w, uint64_t nwid, uint64_t node)
 {
 	if (!central_init_req(
-	        cp, w, "/api/network/%llx/member/%llx", nwid, node)) {
+	        cp, w, "/api/network/%016llx/member/%010llx", nwid, node)) {
 		return;
 	}
 
 	worker_http(w, central_get_member_cb);
 }
 
+static void
+central_delete_member(controller *cp, worker *w, uint64_t nwid, uint64_t node)
+{
+	// Feel free to fix this when/if Central adds DELETE support.
+
+	send_err(w, E_INTERNAL, "Central does not support DELETE of members");
+}
+
+static void
+central_authorize_member_cb(worker *w, void *body, size_t len)
+{
+	object *obj1;
+	object *obj2;
+	bool    auth;
+
+	if (((obj1 = parse_obj(body, len)) == NULL) ||
+	    (!get_obj_obj(obj1, "config", &obj2)) ||
+	    (!get_obj_bool(obj2, "authorized", &auth))) {
+		free_obj(obj1);
+		send_err(w, E_BADJSON, NULL);
+		return;
+	}
+	free_obj(obj1);
+	if (!auth) {
+		send_err(w, E_INTERNAL, "Member not authorized");
+		return;
+	}
+
+	if ((obj1 = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+	} else {
+		send_result(w, obj1);
+	}
+}
+
+static void
+central_authorize_member(
+    controller *cp, worker *w, uint64_t nwid, uint64_t node)
+{
+	nng_http_req *req;
+	char *        body = "{ \"config\": { \"authorized\": true }}";
+
+	if (!central_init_req(
+	        cp, w, "/api/network/%016llx/member/%010llx", nwid, node)) {
+		return;
+	}
+
+	req = worker_http_req(w);
+	if ((nng_http_req_set_method(req, "POST") != 0) ||
+	    (nng_http_req_copy_data(req, body, strlen(body)) != 0)) {
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+	worker_http(w, central_authorize_member_cb);
+}
+
+static void
+central_deauthorize_member_cb(worker *w, void *body, size_t len)
+{
+	object *obj1;
+	object *obj2;
+	bool    auth;
+
+	if (((obj1 = parse_obj(body, len)) == NULL) ||
+	    (!get_obj_obj(obj1, "config", &obj2)) ||
+	    (!get_obj_bool(obj2, "authorized", &auth))) {
+		free_obj(obj1);
+		send_err(w, E_BADJSON, NULL);
+		return;
+	}
+	free_obj(obj1);
+	if (auth) {
+		send_err(w, E_INTERNAL, "Member still authorized");
+		return;
+	}
+
+	if ((obj1 = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+	} else {
+		send_result(w, obj1);
+	}
+}
+
+static void
+central_deauthorize_member(
+    controller *cp, worker *w, uint64_t nwid, uint64_t node)
+{
+	nng_http_req *req;
+	char *        body = "{ \"config\": { \"authorized\": false }}";
+
+	if (!central_init_req(
+	        cp, w, "/api/network/%016llx/member/%010llx", nwid, node)) {
+		return;
+	}
+
+	req = worker_http_req(w);
+	if ((nng_http_req_set_method(req, "POST") != 0) ||
+	    (nng_http_req_copy_data(req, body, strlen(body)) != 0)) {
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+	worker_http(w, central_deauthorize_member_cb);
+}
+
 worker_ops central_ops = {
-	.get_status   = central_get_status,
-	.get_networks = central_get_networks,
-	.get_network  = central_get_network,
-	.get_members  = central_get_members,
-	.get_member   = central_get_member,
+	.get_status         = central_get_status,
+	.get_networks       = central_get_networks,
+	.get_network        = central_get_network,
+	.get_members        = central_get_members,
+	.get_member         = central_get_member,
+	.delete_member      = central_delete_member,
+	.authorize_member   = central_authorize_member,
+	.deauthorize_member = central_deauthorize_member,
 };

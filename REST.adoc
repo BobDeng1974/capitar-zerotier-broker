@@ -131,3 +131,41 @@ Body Parameters::
 
 Result::
 	Empty object.  (Perhaps instead a 204 No Content response?)
+
+=== Authorize Network Member
+
+This authorizes a network member.
+
+URI:: `/proxy/$controller/network/$nwid/member/$nodeid/authorize`
+
+Method:: `POST`
+
+URI Parameters::
+	`$controller`::: This is the name (or label) of the controller to access.
+	`$nwid`::: This is the network ID, as a 16-digit decimal string.
+	`$nodied`::: This is the node ID of the member, as a 10-digit decimal string.
+
+Body Parameters::
+	Empty object.
+
+Result::
+	Empty object.
+
+=== Deauthorize Network Member
+
+This deauthorizes a network member.
+
+URI:: `/proxy/$controller/network/$nwid/member/$nodeid/deauthorize`
+
+Method:: `POST`
+
+URI Parameters::
+	`$controller`::: This is the name (or label) of the controller to access.
+	`$nwid`::: This is the network ID, as a 16-digit decimal string.
+	`$nodied`::: This is the node ID of the member, as a 10-digit decimal string.
+
+Body Parameters::
+	Empty object.
+
+Result::
+	Empty object.

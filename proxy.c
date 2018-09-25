@@ -196,7 +196,7 @@ static nng_optspec opts[] = {
 static void
 survey_pipe_cb(nng_pipe p, int ev, void *arg)
 {
-	// We actually don't care about the arguments for now.
+	// We actually don't care about the arguments for 	xnow.
 	// Later we might actually want to print these.  We could also
 	// apply a more aggressive pruning for peers that have dropped.
 	(void) arg;
@@ -343,18 +343,24 @@ rpcerr(nng_aio *aio, uint16_t code, const char *msg)
 	char          doc[256];
 	int           rv;
 
-	snprintf(doc, sizeof(doc), "{ \"status\": %d, \"message\": \"%s\" }",
-	    code, msg);
-
 	if (((rv = nng_http_res_alloc(&res)) != 0) ||
 	    ((rv = nng_http_res_set_status(res, code)) != 0) ||
 	    ((rv = nng_http_res_set_reason(res, msg)) != 0) ||
 	    ((rv = nng_http_res_set_header(
-	          res, "Content-Type", "application/json")) != 0) ||
-	    ((rv = nng_http_res_copy_data(res, doc, strlen(doc))) != 0)) {
+	          res, "Content-Type", "application/json")) != 0)) {
 		if (res != NULL) {
 			nng_http_res_free(res);
 		}
+		nng_aio_finish(aio, rv);
+		return;
+	}
+
+	// Message will be same as passed in, or HTTP default reason if NULL.
+	snprintf(doc, sizeof(doc), "{ \"status\": %d, \"message\": \"%s\" }",
+	    code, nng_http_res_get_reason(res));
+
+	if ((rv = nng_http_res_copy_data(res, doc, strlen(doc))) != 0) {
+		nng_http_res_free(res);
 		nng_aio_finish(aio, rv);
 		return;
 	}
@@ -627,8 +633,7 @@ do_status(nng_aio *aio, const char *method, controller *cp)
 {
 	object *params;
 	if (strcmp(method, "GET") != 0) {
-		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED,
-		    "method not allowed");
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
 		return;
 	}
 	if ((params = create_controller_params(cp)) == NULL) {
@@ -644,8 +649,7 @@ do_networks(nng_aio *aio, const char *method, controller *cp)
 {
 	object *params;
 	if (strcmp(method, "GET") != 0) {
-		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED,
-		    "method not allowed");
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
 		return;
 	}
 	if ((params = create_controller_params(cp)) == NULL) {
@@ -683,8 +687,7 @@ do_get_network_members(nng_aio *aio, controller *cp, uint64_t nwid)
 }
 
 static void
-do_get_network_member(
-    nng_aio *aio, controller *cp, uint64_t nwid, uint64_t nodeid)
+do_get_member(nng_aio *aio, controller *cp, uint64_t nwid, uint64_t nodeid)
 {
 	object *params;
 
@@ -698,18 +701,86 @@ do_get_network_member(
 }
 
 static void
+do_delete_member(nng_aio *aio, controller *cp, uint64_t nwid, uint64_t nodeid)
+{
+	object *params;
+
+	if (((params = create_controller_params(cp)) == NULL) ||
+	    (!add_obj_uint64(params, "network", nwid)) ||
+	    (!add_obj_uint64(params, "member", nodeid))) {
+		nng_aio_finish(aio, NNG_ENOMEM);
+		return;
+	}
+	do_rpc(aio, cp, "delete-network-member", params);
+}
+
+static void
+do_authorize_member(
+    nng_aio *aio, controller *cp, uint64_t nwid, uint64_t nodeid)
+{
+	object *params;
+
+	if (((params = create_controller_params(cp)) == NULL) ||
+	    (!add_obj_uint64(params, "network", nwid)) ||
+	    (!add_obj_uint64(params, "member", nodeid))) {
+		nng_aio_finish(aio, NNG_ENOMEM);
+		return;
+	}
+	do_rpc(aio, cp, "authorize-network-member", params);
+}
+
+static void
+do_deauthorize_member(
+    nng_aio *aio, controller *cp, uint64_t nwid, uint64_t nodeid)
+{
+	object *params;
+
+	if (((params = create_controller_params(cp)) == NULL) ||
+	    (!add_obj_uint64(params, "network", nwid)) ||
+	    (!add_obj_uint64(params, "member", nodeid))) {
+		nng_aio_finish(aio, NNG_ENOMEM);
+		return;
+	}
+	do_rpc(aio, cp, "deauthorize-network-member", params);
+}
+
+static void
 do_network_member(nng_aio *aio, const char *method, controller *cp,
     uint64_t nwid, uint64_t nodeid, const char *uri)
 {
 	if (strcmp(uri, "") == 0) {
 		if (strcmp(method, "GET") == 0) {
-			do_get_network_member(aio, cp, nwid, nodeid);
+			do_get_member(aio, cp, nwid, nodeid);
 			return;
 		}
-		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED,
-		    "method not allowed");
+		if (strcmp(method, "DELETE") == 0) {
+			do_delete_member(aio, cp, nwid, nodeid);
+			return;
+		}
+		// In the future we could support POST for creating members.
+		// This is useful for ensuring that the member exists.  Having
+		// said that, I believe that /authorize or /deauthorize will
+		// create the member if it does not already exist.
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+		return;
 	}
-	rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, "no such resource");
+	if (strcmp(uri, "/authorize") == 0) {
+		if (strcmp(method, "POST") == 0) {
+			do_authorize_member(aio, cp, nwid, nodeid);
+			return;
+		}
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+		return;
+	}
+	if (strcmp(uri, "/deauthorize") == 0) {
+		if (strcmp(method, "POST") == 0) {
+			do_deauthorize_member(aio, cp, nwid, nodeid);
+			return;
+		}
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+		return;
+	}
+	rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
 }
 
 static void
@@ -728,8 +799,7 @@ do_network(nng_aio *aio, const char *method, controller *cp, uint64_t nwid,
 			do_get_network(aio, cp, nwid);
 			return;
 		}
-		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED,
-		    "method not allowed");
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
 		return;
 	}
 	if (strcmp(uri, "/member") == 0) {
@@ -737,8 +807,7 @@ do_network(nng_aio *aio, const char *method, controller *cp, uint64_t nwid,
 			do_get_network_members(aio, cp, nwid);
 			return;
 		}
-		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED,
-		    "method not allowed");
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
 		return;
 	}
 	if (strncmp(uri, "/member/", strlen("/member/")) == 0) {
@@ -751,10 +820,10 @@ do_network(nng_aio *aio, const char *method, controller *cp, uint64_t nwid,
 			do_network_member(aio, method, cp, nwid, nodeid, ep);
 			return;
 		}
-		rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, "invalid member");
+		rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
 		return;
 	}
-	rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, "no such resource");
+	rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
 }
 
 #define PROXY_URI "/api/1.0/proxy"
@@ -771,11 +840,13 @@ proxy_api(nng_aio *aio)
 	controller *  cp;
 
 	// Our API is:
-	// GET /api/1.0/proxy/<controller>/status
-	// GET /api/1.0/proxy/<controller>/network
-	// GET /api/1.0/proxy/<controller>/network/<nwid>/members
-	// POST /api/1.0/proxy/<controller>/network {body}
-	// DELETE /api/1.0/proxy/<controller>/network
+	// GET /api/1.0/proxy/<name>/status
+	// GET /api/1.0/proxy/<name>/network
+	// GET /api/1.0/proxy/<name>/network/<nwid>/member
+	// GET /api/1.0/proxy/<name>/network/<nwid>/member/<node>
+	// DELETE /api/1.0/proxy/<name>/network/<nwid>/member/<node>
+	// POST /api/1.0/proxy/<name>/network/<nwid>/member/<node>/authorize
+	// POST /api/1.0/proxy/<name>/network/<nwid>/member/<node>/deauthorize
 
 	req    = nng_aio_get_input(aio, 0);
 	method = nng_http_req_get_method(req);
@@ -784,7 +855,7 @@ proxy_api(nng_aio *aio)
 	if ((strncmp(uri, PROXY_URI, PROXY_URI_LEN) != 0) ||
 	    (uri[PROXY_URI_LEN] != '/')) {
 		// This is not us.
-		rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, "wrong base uri");
+		rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
 		return;
 	}
 	uri += PROXY_URI_LEN + 1;
@@ -799,7 +870,7 @@ proxy_api(nng_aio *aio)
 		}
 	}
 	if (cp == NULL) {
-		rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, "no such controller");
+		rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
 		return;
 	}
 
@@ -827,10 +898,10 @@ proxy_api(nng_aio *aio)
 			do_network(aio, method, cp, nwid, ep);
 			return;
 		}
-		rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, "invalid network");
+		rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
 		return;
 	}
-	rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, "no such resource");
+	rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
 }
 
 void
@@ -841,9 +912,13 @@ serve_http(void)
 	nng_http_handler *h;
 	int               rv;
 
+	// Note that we set the method to NULL, as we want to receive
+	// all methods, not just GET.  This means we are obliged to inspect
+	// the method.
 	if (((rv = nng_url_parse(&url, httpurl)) != 0) ||
 	    ((rv = nng_http_server_hold(&server, url)) != 0) ||
 	    ((rv = nng_http_handler_alloc(&h, PROXY_URI, proxy_api)) != 0) ||
+	    ((rv = nng_http_handler_set_method(h, NULL)) != 0) ||
 	    ((rv = nng_http_handler_set_tree(h)) != 0) ||
 	    ((rv = nng_http_server_add_handler(server, h)) != 0)) {
 		fprintf(stderr, "%s\n", nng_strerror(rv));
@@ -907,7 +982,6 @@ load_config(const char *path)
 		if ((get_obj_string(tobj, "keyfile", &key)) &&
 		    ((rv = nng_tls_config_cert_key_file(tls, key, str)) !=
 		        0)) {
-			printf("DOING KEY %s PASS [%s]\n", key, str);
 			fprintf(stderr, "TLS keyfile: %s\n", nng_strerror(rv));
 			exit(1);
 		}
