@@ -1,0 +1,231 @@
+= AUTHENTICATION
+
+There are several places where authentication is concerned.
+
+The worker "`trusts`" the proxies, and trusts the channel between them.
+This relies upon ZeroTier network authentication, and correct administrative
+handling by the network owner, and is not dealt with further here.
+
+The worker authenticates to either the local controller or to Central.
+This is handled via the worker's local configuration file, which will
+contain a "`secret`" value, corresponding either to an API token at
+Central, or to the local secret used by the controller.  This is not
+discussed further here.
+
+Finally, and what we need to consider, is how do end-user/administrators authenticate to the worker, so that the worker knows it can or should perform
+the action on the user's behalf?
+
+== Principles
+
+. The proxy should be stateless, and have no idea about end-user credentials
+. The proxy and the network between the proxy and the workers, is considered to be authenticated and confidential (i.e. we need not worry about man-in-the-middle attacks.
+. Users may have different permissions, for different networks or for different methods.
+. We desire to enable the use of one-time passwords e.g. via OATH.  (Not to be confused with OAuth).
+. We should support the use of API tokens (bearer tokens) for longer term uses.
+. If API tokens are possible, they must be manageable.
+. Whatever we do here needs to be extensible for the future (e.g. adding further roles, time limits, etc.)
+. The channel between the end-user/application and the proxy is encrypted via TLS, which we trust (so we can use Basic auth).
+. The end-user's authentication is between the end-user and the worker.
+. Consequently, the same end user may have different credentials for different workers.
+
+== Basic Authentication
+
+The most basic authentication, this method uses HTTP basic auth, with a username and password.  If nothing else is configured, this must be available.
+
+Requests to authenticate will be passed from the worker to the proxy as a 401
+status, which will carry a little more detail in the `error` object (such
+as the contents intended for the `WWW-Authenticate` header.
+
+== API Token Authentication
+
+In addition to user-based <<Basic Authentication>>, the system will also
+support the creation and management of API Tokens.  API Tokens are
+created on demand.  This may be done using `/token` API following
+an OAuth 2.0 style, or it may be done in another way (e.g. via another
+creation page).
+
+It is not our intent to follow the full OAuth 2.0 flow with redirects, at
+this time.  (That can be done later if time and needs dictate.)
+
+API tokens are presented to the proxy via a "`Bearer`" style of HTTP authentication.
+
+API tokens also have a "`lifetime`".  This can be infinite (meaning that the
+tokens never expire), a fixed date (e.g. token expires after 2 weeks).
+(We can also use a shorter, ephemeral session based token.  It's not
+immediately clear that this is warranted.)
+
+During normal use of the primary API, only API tokens would be used.
+
+== One Time Passwords
+
+// This section needs some thought.  It's not clear to me how to pass
+// the OTP.  Probably via another header.
+For One Time Passwords, when appropriate, the same HTTP Basic Authentication
+is used, but the password used is a one-time password.  A different realm
+is provided so that client software knows to use the one time password.
+
+== Roles
+
+We define some roles for permissions.
+
+Proposed roles:
+
+"token-admin":: can create new API tokens
+"self-admin":: can change own password, provision or change OTP
+"user-admin":: can create new users, manage user passwords, API tokens
+"network-view":: can view network, including members
+"network-admin":: can manage network, authorize, deauth members, etc.
+"server-admin":: can restart the worker, etc.
+
+In order to make it easy to pass around the list of authenticated
+roles, and mask them, we limit the total number of roles to 64, so we
+can use uint64_t to hold them as a bitmask.
+
+== RPC Details
+
+For authenticating to the worker, we will use the 401 Unauthorized code
+as an error code, and we provide a custom "auth" parameter to carry
+current parameters.
+
+=== RPC Auth Parameter
+
+For an API token, the token is self describing (long random string which
+is a filename, probably a SHA signature):
+
+```
+{ "auth": { "token": "757575757557575757" } }
+```
+
+For an initial password exchange:
+
+```
+{ "auth": { "username": "garrett", "password": "maryhadalittlelamb" }}
+```
+
+We might wind up needing a one-time password.  In that case we might
+have more structure, something like this:
+
+```
+{ "auth": {
+	"username": "garrett",
+	"password": "maryhadalittlelamb",
+	"token": "Google Authenticator",
+	"otp": "abcdef"
+	}
+}
+```
+
+This example lists a "`token`" name, which is used to distinguish
+which token the password is supplied for (in case multiple tokens
+exist for the user), as well as the six character one-time-password.
+
+Note that OTP must always be used with the user's normal password as
+well.  (Otherwise we lack the 2FA assurance).
+
+The intention is that password and otp authentication are only used
+to provision API tokens.  The otp mechanism will be required if
+any otp is configured.
+
+=== RPC Auth Error
+
+As we are using JSON-RPCv2, when more authentication is needed the
+RPC server will return an `error` object with the error code set
+to one of our implementation specific error codes:
+
+4010:: Authentication was well-formed, but failed (wrong password, etc.)
+4011:: An API token should be supplied.
+4012:: A username and password should be supplied (basic auth).
+4013:: A username, password, and OTP are required.
+4014-4019:: Reserved for future authentication uses.
+
+
+== RPC Methods
+
+=== Get a Token
+
+get-token:: gets a token
+
+This method will require OTP if OTP is configured, or username/password
+otherwise.
+
+==== Parameters
+
+lifetime:: time in seconds until token expires.  Default value tunable.
+roles:: array of named "`roles`".  Only currently authenticated roles can be named.  If ommitted roles will be everything user has auth for.
+
+==== Result
+
+token:: string
+expires:: msec from epoch.  if not present or zero, never expires (informational only)
+
+=== Delete a Token
+
+delete-token:: deletes token
+
+May delete own token, otherwise needs "auth" role.
+
+==== Parameters
+
+token:: token to delete
+
+==== Result
+
+Empty object.
+
+=== New OTP
+
+new-otp::
+
+Creates a new one time password
+
+==== Parameters
+
+TBD.  (Type, etc.?  Name?)
+
+==== Result
+
+otpauth:// url?  would include
+TYPE:: totp
+LABEL:: name?
+SECRET:: blah
+ISSUER:: worker identity?
+
+== Backing Store on Workers
+
+The worker shall maintain a list of user credentials as JSON files.
+Each user shall have a file, named with the user name, which will contain a hash of the user's password, a list of "`roles`" that the user has (which act as permissions), and a possible set of One Time Passwords.  It might also
+contain other data.  For example, a file
+`garrett.json` for user named `garrett` might contain:
+
+[json]
+```
+{
+	"username": "garrett",
+	"password": "ab47fe28572023",
+	"roles": [ "admin", "staff" ],
+	"tokens": [
+		{
+			"token": "Google Authenticator",
+			"secret": "91929394969a",
+			"type": "totp",
+			"digits": 6,
+			"period": 30
+		}
+	],
+	"lastlogin": 1537907232495
+}
+```
+
+The `lastlogin` field above would correspond to a last login time, and
+isn't specified here.  There might be other fields, to be added by additional
+authentication or auditing systems later.
+
+The `tokens` field above corresponds to a list of time-based one-time-password
+generators. It's likely that we will only support one of these at a time,
+but having a list here makes it possible to support more (e.g. if a user
+has both a phone and smart watch with different credentials).
+
+=== API Token Storage
+
+API tokens are stored in a subdirectory of their own, and are simply
+files (JSON again) where the file name is the token itself.
