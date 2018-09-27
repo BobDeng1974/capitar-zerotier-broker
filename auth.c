@@ -42,6 +42,7 @@ struct otpwd {
 };
 
 struct token {
+	object * json;
 	char *   id;
 	char *   desc;
 	user *   user;
@@ -51,6 +52,7 @@ struct token {
 };
 
 struct user {
+	object * json;
 	char *   name;
 	char *   encpass;
 	uint64_t tag;    // random tag prevents reuse
@@ -66,6 +68,19 @@ check_password(const char *pass, const char *hash)
 	mbedtls_sha1_context ctx;
 	unsigned char        out[20];
 
+	if ((hash[0] == '\0') && (pass[0] == '\0')) {
+		return (true);
+	}
+
+	// If the password is written as type 0, remainder is
+	// the password in cleartext.  Not ideal, but easy for
+	// simplistic start up passwords.
+	if ((strncmp(hash, "0:", 2)) == 0) {
+		if (strcmp(pass, hash + 2) == 0) {
+			return (true);
+		}
+		return (false);
+	}
 	if ((strncmp(hash, "1:", 2) != 0) && (strlen(hash) != 51)) {
 		return (false);
 	}
@@ -105,112 +120,51 @@ free_user(user *u)
 	if (u == NULL) {
 		return;
 	}
-	free(u->name);
-	free(u->encpass);
+	free_obj(u->json);
 	free(u->otpwds);
 	free(u);
 }
 
-user *
-dup_user(const user *u)
+static bool
+parse_user(user *u)
 {
-	user *dup;
+	object *o = u->json;
+	object *a;
 
-	if (((dup = calloc(1, sizeof(user))) == NULL) ||
-	    ((dup->name = strdup(u->name)) == NULL) ||
-	    ((dup->encpass = strdup(u->encpass)) == NULL) ||
-	    ((dup->otpwds = calloc(u->notpwds, sizeof(otpwd))) == NULL)) {
-		free_user(dup);
-		return (NULL);
+	if ((!get_obj_string(o, "name", &u->name)) ||
+	    (!get_obj_uint64(o, "tag", &u->tag)) ||
+	    (!get_obj_string(o, "passwd", &u->encpass))) {
+		return (false);
 	}
-	for (int i = 0; i < dup->notpwds; i++) {
-		otpwd *sp = &u->otpwds[i];
-		otpwd *dp = &u->otpwds[i];
-		if (((dp->secret = strdup(sp->secret)) == NULL) ||
-		    ((dp->name = strdup(sp->name)) == NULL) ||
-		    ((dp->type = strdup(sp->type)) == NULL)) {
-			free_user(dup);
-			return (NULL);
-		}
-		dp->digits  = sp->digits;
-		dp->counter = sp->counter;
-		dp->period  = sp->period;
-	}
-	dup->roles   = u->roles;
-	dup->tag     = u->tag;
-	dup->notpwds = u->notpwds;
-	return (dup);
-}
-
-user *
-find_user(const char *name)
-{
-	char *  path;
-	int     i;
-	user *  u;
-	char *  str;
-	bool    b;
-	object *obj;
-	object *arr;
-
-	if ((wc == NULL) || (wc->userdir == NULL)) {
-		return (NULL);
-	}
-	// Sanity check here to ensure name is safe for files.
-	if ((!safe_filename(name)) ||
-	    ((path = path_join(wc->userdir, name, ".usr")) == NULL)) {
-		return (NULL);
-	}
-	obj = obj_load(path, NULL);
-	free(path);
-	if (obj == NULL) {
-		return (NULL);
-	}
-	if ((u = calloc(1, sizeof(user))) == NULL) {
-		free_obj(obj);
-		return (NULL);
-	}
-	if ((!get_obj_uint64(obj, "tag", &u->tag)) ||
-	    ((u->name = strdup(name)) == NULL) ||
-	    (!get_obj_string(obj, "password", &str)) ||
-	    ((u->encpass = strdup(str)) == NULL)) {
-		free_obj(obj);
-		free_user(u);
-		return (NULL);
-	}
-
-	get_obj_bool(obj, "locked", &u->locked);
+	u->locked = false;
+	get_obj_bool(o, "locked", &u->locked);
 
 	// Load the user roles.  If any named roles are not found,
 	// they are ignored.  This leaves us with more security by default.
-	if (get_obj_obj(obj, "roles", &arr)) {
-		for (int i = 0; i < get_arr_len(arr); i++) {
-			if (get_arr_string(arr, i, &str)) {
-				u->roles |= find_role(str);
+	if (get_obj_obj(o, "roles", &a)) {
+		char *s;
+		for (int i = 0; i < get_arr_len(a); i++) {
+			if (get_arr_string(a, i, &s)) {
+				u->roles |= find_role(s);
 			}
 		}
 	}
 
-	if (get_obj_obj(obj, "tokens", &arr)) {
-		u->notpwds = get_arr_len(arr);
+	u->notpwds = 0;
+	if (get_obj_obj(o, "otpwds", &a)) {
+		u->notpwds = get_arr_len(a);
 		if ((u->otpwds = calloc(u->notpwds, sizeof(otpwd))) == NULL) {
-			free_user(u);
-			free_obj(obj);
-			return (NULL);
+			return (false);
 		}
 
 		for (int i = 0; i < u->notpwds; i++) {
 			object *t;
 			otpwd * otp = &u->otpwds[i];
-			if ((!get_arr_obj(arr, i, &t)) ||
-			    (!get_obj_string(t, "name", &str)) ||
-			    ((otp->name = strdup(str)) == NULL) ||
-			    (!get_obj_string(t, "secret", &str)) ||
-			    ((otp->secret = strdup(str)) == NULL) ||
-			    (!get_obj_string(t, "type", &str)) ||
-			    ((otp->type = strdup(str)) == NULL)) {
+			if ((!get_arr_obj(a, i, &t)) ||
+			    (!get_obj_string(t, "name", &otp->name)) ||
+			    (!get_obj_string(t, "secret", &otp->secret)) ||
+			    (!get_obj_string(t, "type", &otp->type))) {
 				free_user(u);
-				free_obj(obj);
 				return (NULL);
 			}
 			otp->period  = 30;
@@ -225,6 +179,46 @@ find_user(const char *name)
 
 	// We could add additional attributes here -- last login, expiration,
 	// password security settings, etc. etc.
+
+	return (true);
+}
+
+user *
+dup_user(const user *u)
+{
+	user *dup;
+
+	if (((dup = calloc(1, sizeof(user))) == NULL) ||
+	    ((dup->json = clone_obj(u->json)) == NULL) || (!parse_user(dup))) {
+		free_user(dup);
+		return (NULL);
+	}
+	return (dup);
+}
+
+user *
+find_user(const char *name)
+{
+	char *path;
+	user *u;
+
+	if ((wc == NULL) || (wc->userdir == NULL)) {
+		return (NULL);
+	}
+	// Sanity check here to ensure name is safe for files.
+	if ((!safe_filename(name)) ||
+	    ((path = path_join(wc->userdir, name, ".usr")) == NULL)) {
+		return (NULL);
+	}
+	if (((u = calloc(1, sizeof(user))) == NULL) ||
+	    ((u->json = obj_load(path, NULL)) == NULL) || (!parse_user(u)) ||
+	    (strcmp(u->name, name) != 0)) {
+		free(path);
+		free_user(u);
+		return (NULL);
+	}
+	free(path);
+
 	return (u);
 }
 
@@ -287,6 +281,7 @@ free_token(token *tok)
 {
 	if (tok != NULL) {
 		free_user(tok->user);
+		free(tok->json);
 		free(tok);
 	}
 }
@@ -303,17 +298,49 @@ token_user(const token *tok)
 	return (tok->user);
 }
 
+bool
+parse_token(token *t)
+{
+	char *  s;
+	object *o = t->json;
+	object *a;
+
+	if (t->user != NULL) {
+		free_user(t->user);
+	}
+
+	if ((!get_obj_string(o, "id", &t->id)) ||
+	    (!get_obj_string(o, "user", &s)) ||
+	    (!get_obj_string(o, "desc", &s)) ||
+	    ((t->user = find_user(s)) == NULL) ||
+	    (!get_obj_uint64(o, "tag", &t->tag)) ||
+	    (!get_obj_obj(o, "roles", &a))) {
+		return (false);
+	}
+	for (int i = 0; i < get_arr_len(a); i++) {
+		if (get_arr_string(a, i, &s)) {
+			t->roles |= find_role(s);
+		}
+	}
+	get_obj_number(o, "expire", &t->expire);
+	// Mask off any roles the user doesn't have.
+	t->roles &= t->user->roles;
+
+	// The tag must match the original user, the user must not be locked,
+	// and the token should not have expired.
+	if ((t->tag != t->user->tag) || t->user->locked ||
+	    ((t->expire != 0) && (t->expire < time(NULL)))) {
+		return (false);
+	}
+
+	return (true);
+}
+
 token *
 find_token(const char *id)
 {
-	char *  path;
-	int     i;
-	user *  u;
-	char *  str;
-	bool    b;
-	token * t;
-	object *obj;
-	object *arr;
+	char * path;
+	token *t;
 
 	if ((wc == NULL) || (wc->tokendir == NULL)) {
 		return (NULL);
@@ -323,53 +350,14 @@ find_token(const char *id)
 	    ((path = path_join(wc->tokendir, id, ".tok")) == NULL)) {
 		return (NULL);
 	}
-	obj = obj_load(path, NULL);
-	free(path);
-	if (obj == NULL) {
-		return (NULL);
-	}
 	if (((t = calloc(1, sizeof(token))) == NULL) ||
-	    ((t->id = strdup(id)) == NULL) ||
-	    (!get_obj_string(obj, "id", &str)) || (strcmp(t->id, str) != 0) ||
-	    (!get_obj_string(obj, "user", &str)) ||
-	    ((t->user = find_user(str)) == NULL) ||
-	    (!get_obj_uint64(obj, "tag", &t->tag)) ||
-	    (t->tag != t->user->tag) || (!get_obj_obj(obj, "roles", &arr))) {
+	    ((t->json = obj_load(path, NULL)) == NULL) || (!parse_token(t)) ||
+	    (strcmp(t->id, id) != 0)) {
+		free(path);
 		free_token(t);
-		free_obj(obj);
 		return (NULL);
 	}
-	for (int i = 0; i < get_arr_len(arr); i++) {
-		if (get_arr_string(arr, i, &str)) {
-			t->roles |= find_role(str);
-		}
-	}
-	// Mask off any roles the user doesn't have.
-	t->roles &= t->user->roles;
-
-	if (t->user->locked) {
-		// Maybe we should delete the token as well?
-		free_token(t);
-		free_obj(obj);
-		return (NULL);
-	}
-
-	if (t->user->tag != t->tag) {
-		// Stale token from an earlier version of this user,
-		// delete it.
-		delete_token(t);
-		free_obj(obj);
-		return (NULL);
-	}
-
-	if (get_obj_number(obj, "expire", &t->expire) &&
-	    (t->expire < time(NULL))) {
-		// its already expired, or its the wrong user.
-		free_obj(obj);
-		delete_token(t);
-		return (NULL);
-	}
-
+	free(path);
 	return (t);
 }
 
@@ -391,8 +379,7 @@ create_token(user *u, const char *desc, time_t expire, uint64_t roles)
 {
 	token * t;
 	char *  path;
-	object *obj;
-	object *arr;
+	object *a;
 	char    idbuf[64];
 
 	// 192 bit token, plenty of entropy, 48 hex characters.  Base 64 would
@@ -407,58 +394,55 @@ create_token(user *u, const char *desc, time_t expire, uint64_t roles)
 	if (desc == NULL) {
 		desc = "";
 	}
-	if (expire && (expire < time(NULL))) {
-		return (NULL);
-	}
-	if ((t = calloc(1, sizeof(token))) == NULL) {
-		return (NULL);
-	}
-	t->expire = expire;
-	t->tag    = u->tag;
-	if (((t->id = strdup(idbuf)) == NULL) ||
-	    ((t->user = dup_user(u)) == NULL) ||
-	    ((t->desc = strdup(desc)) == NULL)) {
+
+	// mask off roles the user object lacks
+	roles &= u->roles;
+
+	if (((t = calloc(1, sizeof(token))) == NULL) ||
+	    ((t->json = alloc_obj()) == NULL) ||
+	    (!add_obj_string(t->json, "id", idbuf)) ||
+	    (!add_obj_string(t->json, "user", u->name)) ||
+	    (!add_obj_string(t->json, "desc", desc)) ||
+	    (!add_obj_uint64(t->json, "tag", u->tag)) ||
+	    (!add_obj_number(t->json, "expire", expire))) {
 		free_token(t);
 		return (NULL);
 	}
-	if ((arr = alloc_arr()) == NULL) {
-		for (int i = 0; i < wc->nroles; i++) {
-			if ((wc->roles[i].mask & t->roles) == 0) {
-				continue;
-			}
-			if (!add_arr_string(arr, wc->roles[i].name)) {
-				free_token(t);
-				free_obj(arr);
-				return (NULL);
-			}
+	if ((a = alloc_arr()) == NULL) {
+		free_token(t);
+		return (NULL);
+	}
+	for (int i = 0; i < wc->nroles; i++) {
+		if ((wc->roles[i].mask & roles) == 0) {
+			continue;
+		}
+		if (!add_arr_string(a, wc->roles[i].name)) {
+			free_token(t);
+			free_obj(a);
+			return (NULL);
 		}
 	}
-	if (((obj = alloc_obj()) == NULL) ||
-	    (!add_obj_string(obj, "id", t->id)) ||
-	    (!add_obj_string(obj, "desc", t->desc)) ||
-	    (!add_obj_string(obj, "user", t->user->name)) ||
-	    (!add_obj_uint64(obj, "tag", t->tag)) ||
-	    (!add_obj_number(obj, "expire", t->expire)) ||
-	    (!add_obj_obj(obj, "roles", arr))) {
-		free_obj(obj);
-		free_obj(arr);
+	if (!add_obj_obj(t->json, "roles", a)) {
+		free_obj(a);
+		free_token(t);
+		return (NULL);
+	}
+	if (!parse_token(t)) {
 		free_token(t);
 		return (NULL);
 	}
 
 	if ((path = path_join(wc->tokendir, t->id, ".tok")) == NULL) {
-		free_obj(obj);
 		free_token(t);
 		return (NULL);
 	}
-	if (!obj_save(path, obj, NULL)) {
+	if (!obj_save(path, t->json, NULL)) {
 		free(path);
-		free_obj(obj);
 		free_token(t);
 		return (NULL);
 	}
+
 	free(path);
-	free_obj(obj);
 	return (t);
 }
 
