@@ -14,25 +14,21 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#ifndef UTIL_H
+#define UTIL_H
+
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "cfgfile.h"
-#include "object.h"
+#include "config.h"
 
-object *
-cfgfile_load(const char *path)
-{
-	object *tree;
-	char *  emsg;
+#ifndef HAVE_ASPRINTF
+extern int asprintf(char **, const char *, ...);
+#endif
 
-	if ((tree = obj_load(path, &emsg)) == NULL) {
-		if (emsg == NULL) {
-			fprintf(stderr, "Out of memory\n");
-		} else {
-			fprintf(stderr, "%s\n", emsg);
-			free(emsg);
-		}
-	}
-	return (tree);
-}
+extern char *path_join(const char *, const char *, const char *);
+extern bool  path_delete(const char *);
+extern bool  safe_filename(const char *);
+
+#endif // UTIL_H

@@ -34,11 +34,20 @@ enum worker_errors {
 	E_NOMEM      = -32001, // Out of memory
 	E_BADJSON    = -32002, // Bad JSON from backend
 	E_NOCTRLR    = -32003, // Specified controller does not exist
+	E_AUTHFAIL   = 4010,   // Authentication well-formed, but invalid
+	E_AUTHTOKEN  = 4011,   // API token (bearer) needed
+	E_AUTHBASIC  = 4012,   // Basic auth (username / password) needed
+	E_AUTHOTP    = 4013,   // Basic+OTP auth needed
+	E_FORBIDDEN  = 403,    // Forbidden (insufficient permission)
 };
 
 typedef struct worker_ops worker_ops;
 typedef struct worker     worker;
 typedef struct controller controller;
+
+// when authenticating a user using username/password, we return the actual
+// user structure.  As we only do this for auth methods, we want the
+// user structure.
 
 extern const char *get_controller_host(controller *);
 extern const char *get_controller_secret(controller *);
@@ -82,5 +91,73 @@ struct worker_ops {
 
 extern worker_ops controller_ops;
 extern worker_ops central_ops;
+
+typedef struct proxy_config      proxy_config;
+typedef struct controller_config controller_config;
+typedef struct worker_config     worker_config;
+typedef struct tls_config        tls_config;
+typedef struct net_config        net_config;
+typedef struct api_config        api_config;
+typedef struct role_config       role_config;
+
+struct tls_config {
+	char *keypass;
+	char *keyfile;
+	char *cacert;
+	bool  insecure;
+};
+
+struct role_config {
+	char *   name;
+	uint64_t mask;
+};
+
+struct proxy_config {
+	char *   survurl;
+	char *   rpcurl;
+	int      nworkers;
+	uint64_t rolemask;
+};
+
+struct controller_config {
+	char *url;
+	char *secret;
+	bool  central; // false for controller
+};
+
+struct api_config {
+	char *   method;
+	uint64_t allow; // mask of allowed roles
+	uint64_t deny;  // mask of denied roles
+};
+
+struct net_config {
+	uint64_t nwid;
+	uint64_t allow; // mask of allowed roles
+	uint64_t deny;  // mask of denied roles
+	                // alternatively:
+	                // int nperms;
+	                // struct { bool allow; uint64_t role };
+};
+
+// A worker_config has the JSON tree associated with it and references
+// that.  The configuration is destroyed at the same time the tree is.
+struct worker_config {
+	object *           json;         // JSON for the entire tree
+	tls_config         tls;          // TLS settings
+	int                nproxies;     // Number of proxies
+	proxy_config *     proxies;      // Proxy structures
+	int                ncontrollers; // Number of controllers
+	controller_config *controllers;  // Controller structures
+	int                nroles;
+	role_config *      roles;
+	int                napis;
+	api_config *       apis;
+	int                nnets;
+	net_config *       nets;
+	char *             zthome;
+	char *             userdir;
+	char *             tokendir;
+};
 
 #endif // WORKER_H

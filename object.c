@@ -16,12 +16,15 @@
 
 // Implement our "object" interface in terms of cJSON.
 
+#include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "cJSON.h"
 #include "object.h"
+#include "util.h"
 
 // An object is a cJSON item.  (Identity for now.)
 struct object {
@@ -323,4 +326,160 @@ next_obj_key(object *obj, const char *name)
 		return (NULL);
 	}
 	return (child->next->string);
+}
+
+enum { STATE_BEGIN, STATE_NORMAL, STATE_COMMENT };
+
+static void
+errf(char **eptr, const char *fmt, ...)
+{
+	int     len;
+	va_list ap;
+	if (eptr == NULL) {
+		return;
+	}
+
+	va_start(ap, fmt);
+	len = vsnprintf(NULL, 0, fmt, ap);
+	va_end(ap);
+	if (len < 0) {
+		*eptr = NULL;
+		return;
+	}
+	if ((*eptr = malloc(len + 1)) == NULL) {
+		return;
+	}
+	va_start(ap, fmt);
+	vsnprintf(*eptr, len + 1, fmt, ap);
+	va_end(ap);
+}
+
+object *
+obj_load(const char *path, char **err)
+{
+	FILE *  f;
+	object *tree;
+	char *  buf;
+	size_t  len;
+	size_t  i;
+	int     c;
+	int     state;
+
+	if ((f = fopen(path, "rb")) == NULL) {
+		errf(err, "fopen(%s): %s", path, strerror(errno));
+		return (NULL);
+	}
+
+	// Find the file size.
+	if (fseek(f, 0, SEEK_END) < 0) {
+		errf(err, "fseek: %s", strerror(errno));
+		fclose(f);
+		return (NULL);
+	}
+	len = (size_t) ftell(f);
+	if (fseek(f, 0, SEEK_SET) < 0) {
+		errf(err, "fseek: %s", strerror(errno));
+		fclose(f);
+		return (NULL);
+	}
+	if (len == 0) {
+		errf(err, "%s: empty file", path);
+		fclose(f);
+		return (NULL);
+	}
+	if ((buf = malloc(len)) == NULL) {
+		errf(err, "malloc: %s", strerror(errno));
+		fclose(f);
+		return (NULL);
+	}
+
+	// Read, but strip out comments while doing it.  This can lead to
+	// a smaller length overall.
+	i     = 0;
+	state = STATE_BEGIN;
+	while (len-- > 0) {
+		if ((c = fgetc(f)) == EOF) {
+			break;
+		}
+
+		switch (state) {
+		case STATE_BEGIN:
+			switch (c) {
+			case ' ':
+			case '\t':
+				buf[i++] = c;
+				break;
+			case '#':
+				state = STATE_COMMENT;
+				break;
+			default:
+				state    = STATE_NORMAL;
+				buf[i++] = c;
+				break;
+			}
+			break;
+		case STATE_COMMENT:
+			if (c == '\n') {
+				buf[i++] = c;
+				state    = STATE_BEGIN;
+			}
+			break;
+		case STATE_NORMAL:
+			buf[i++] = c;
+			if (c == '\n') {
+				state = STATE_BEGIN;
+			}
+			break;
+		}
+	}
+
+	fclose(f);
+
+	tree = parse_obj(buf, i);
+	free(buf);
+	if (tree == NULL) {
+		errf(err, "%s: Parse error", path);
+		return (NULL);
+	}
+	return (tree);
+}
+
+// We try to do an atomic-in-place update.  Windows is not
+// very cooperative here, at least not for earlier versions.
+// (No rename() call.)
+bool
+obj_save(const char *path, object *obj, char **err)
+{
+	FILE *f;
+	char *buf;
+	char  tmp[256];
+
+	snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+
+	if ((buf = print_obj(obj)) == NULL) {
+		errf(err, "Out of memory");
+		return (false);
+	}
+
+	if ((f = fopen(tmp, "wb")) == NULL) {
+		errf(err, "fopen(%s): %s", tmp, strerror(errno));
+		return (false);
+	}
+	if (fwrite(buf, 1, strlen(buf), f) != strlen(buf)) {
+		errf(err, "fwrite(%s): %s", tmp, strerror(errno));
+		path_delete(tmp);
+		return (false);
+	}
+	if (fclose(f) != 0) {
+		errf(err, "fclose(%s): %s", tmp, strerror(errno));
+		path_delete(tmp);
+		return (false);
+	}
+
+	if (path_rename(tmp, path) != 0) {
+		errf(err, "rename(%s, %s): failed", tmp, path);
+		path_delete(tmp);
+		return (false);
+	}
+	return (true);
 }

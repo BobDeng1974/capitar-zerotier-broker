@@ -26,6 +26,8 @@
 // local network address, where proxy can reach us.  This is a TCP
 // address.
 
+#include "config.h"
+
 #include <nng/nng.h>
 #include <nng/protocol/reqrep0/rep.h>
 #include <nng/protocol/survey0/respond.h>
@@ -34,6 +36,8 @@
 #include <nng/supplemental/util/options.h>
 #include <nng/supplemental/util/platform.h>
 #include <nng/transport/zerotier/zerotier.h>
+
+#include <mbedtls/sha1.h>
 
 #include "cfgfile.h"
 #include "object.h"
@@ -45,6 +49,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #ifndef CONFIG
 #define CONFIG "worker.cfg"
@@ -54,6 +59,8 @@ nng_socket repsock;
 nng_socket survsock;
 char *     zthome;
 int        debug;
+char *     userdb;
+char *     tokendb;
 
 typedef enum {
 	STATE_RECVING,
@@ -259,6 +266,18 @@ survey_loop(void)
 	}
 }
 
+// now returns the current time of day since the UNIX epoch in millseconds.
+// As we only use this for token expiration, we have time granularity of
+// 1 second.  That's fine for us.
+static uint64_t
+now(void)
+{
+	uint64_t ms;
+	ms = time(NULL);
+	ms *= 1000; // convert to milliseconds
+	return (ms);
+}
+
 static void
 recv_request(worker *w)
 {
@@ -360,16 +379,17 @@ static void deauthorize_network_member(worker *, object *);
 static struct {
 	const char *method;
 	void (*func)(worker *, object *);
+	uint64_t rolemask;
 } jsonrpc_methods[] = {
-	{ "get-status", get_status },
-	{ "get-networks", get_networks },
-	{ "get-network", get_network },
-	{ "get-network-members", get_network_members },
-	{ "get-network-member", get_network_member },
-	{ "delete-network-member", delete_network_member },
-	{ "authorize-network-member", authorize_network_member },
-	{ "deauthorize-network-member", deauthorize_network_member },
-	{ NULL, NULL },
+	{ "get-status", get_status, 0 },
+	{ "get-networks", get_networks, 0 },
+	{ "get-network", get_network, 0 },
+	{ "get-network-members", get_network_members, 0 },
+	{ "get-network-member", get_network_member, 0 },
+	{ "delete-network-member", delete_network_member, 0 },
+	{ "authorize-network-member", authorize_network_member, 0 },
+	{ "deauthorize-network-member", deauthorize_network_member, 0 },
+	{ NULL, NULL, 0 },
 };
 
 static void
@@ -473,7 +493,156 @@ get_controller_host(controller *cp)
 }
 
 static bool
-get_contoller_param(worker *w, object *params, controller **cpp)
+get_auth_token_param(worker *w, object *params, char **userp, uint64_t *rolesp)
+{
+	char     path[256];
+	object * obj;
+	object * tok;
+	char *   tokid;
+	char *   user;
+	uint64_t expire;
+
+	if (tokendb == NULL) {
+		return (false);
+	}
+	if ((!get_obj_obj(params, "auth", &obj)) ||
+	    (!get_obj_string(params, "token", &tokid))) {
+		send_err(w, E_AUTHTOKEN, NULL);
+		return (false);
+	}
+	if (tokid[0] == '\0') {
+		send_err(w, E_BADPARAMS, "empty auth token");
+		return (false);
+	}
+	for (int i = 0; tokid[i] != '\0'; i++) {
+		if ((i > 128) || (!isalnum(tokid[i]))) {
+			send_err(w, E_BADPARAMS, "malformed auth token");
+			return (false);
+		}
+	}
+	snprintf(path, sizeof(path), "%s%s%s", tokendb, PATH_SEP, tokid);
+	if ((tok = obj_load(path, NULL)) == NULL) {
+		send_err(w, E_AUTHFAIL, NULL); // No token.
+		return (false);
+	}
+	if (!get_obj_string(tok, "user", &user)) {
+		free_obj(tok); // token file malformed?
+		send_err(w, E_AUTHFAIL, NULL);
+		return (false);
+	}
+	// If the token has an expire field, check it.
+	if ((get_obj_uint64(tok, "expire", &expire)) && (expire < now())) {
+		free_obj(tok); // token expired
+		send_err(w, E_AUTHFAIL, NULL);
+		return (false);
+	}
+	if ((userp != NULL) && ((*userp = strdup(user)) == NULL)) {
+		free_obj(tok);
+		send_err(w, E_NOMEM, NULL);
+		return (false);
+	}
+	// In the future, parse out the roles/grants from the
+	// ticket, and use them to set grants.  For now we set the
+	// grant to -1 (meaning all).
+	if (rolesp != NULL) {
+		*rolesp = (uint64_t) -1;
+	}
+	free(tok);
+	return (true);
+}
+
+static bool
+get_auth_basic_param(worker *w, object *params, char **userp, uint64_t *rolesp)
+{
+	char                 path[256];
+	object *             obj;
+	object *             auth;
+	char *               pass;
+	char *               username;
+	char *               password;
+	unsigned char        hash[20];
+	char                 result[50];
+	mbedtls_sha1_context sc;
+	char                 c;
+
+	if (userdb == NULL) {
+		return (false);
+	}
+	if ((!get_obj_obj(params, "auth", &obj)) ||
+	    (!get_obj_string(params, "username", &username)) ||
+	    (!get_obj_string(params, "password", &password))) {
+		send_err(w, E_AUTHBASIC, NULL);
+		return (false);
+	}
+	if (username[0] == '\0') {
+		send_err(w, E_BADPARAMS, "empty username");
+		return (false);
+	}
+	// Usernames are limited to < 128 characters of alphanumerics.
+	// Arguably we could extend this to support a lot more flexibility,
+	// so you could support email addresses, but its probably not needed.
+	// Plus, I want to avoid special filesystem characters.  (If this
+	// were a SQL column, it would be a lot easier to be more flexible.)
+	for (int i = 0; (c = username[i]) != '\0'; i++) {
+		if ((i > 128) || (!isalnum(c))) {
+			send_err(w, E_BADPARAMS, "invalid username");
+			return (false);
+		}
+	}
+	snprintf(path, sizeof(path), "%s%s%s", userdb, PATH_SEP, username);
+	if ((auth = obj_load(path, NULL)) == NULL) {
+		send_err(w, E_AUTHFAIL, NULL); // No such user?
+		return (false);
+	}
+
+	// NOTE: We are hashing the password by taking a random
+	// string (the salt), and prepending it to the real
+	// password, which then we run SHA1 over.  This is not
+	// recommended for cases when the passwords are exposed to
+	// the world, but this approach may limit accidental exposure
+	// of passwords to an administrator.  Its not good enough to
+	// resist a determined attacker with access the encrypted form.
+	// SHA1 form is <salt(4 bytes)><40 hex bytes hash (SHA1)>
+	// The SHA1 is is calcululated by doing SHA1(<salt> + <clear pass>).
+	if ((!get_obj_string(auth, "password", &pass)) ||
+	    (strlen(pass) != 44)) {
+		free_obj(auth); // user file malformed?
+		send_err(w, E_AUTHFAIL, NULL);
+		return (false);
+	}
+	mbedtls_sha1_init(&sc);
+	mbedtls_sha1_update_ret(&sc, (void *) pass, 4);
+	mbedtls_sha1_update_ret(&sc, (void *) password, strlen(password));
+	mbedtls_sha1_finish_ret(&sc, hash);
+	mbedtls_sha1_free(&sc);
+
+	pass += 4;
+	for (int i = 0, j = 0; i < 20; i++, j += 2) {
+		sprintf(result + j, "%02x", hash[i]);
+	}
+	if (memcmp(result, pass, 40) != 0) {
+		free_obj(auth);
+		send_err(w, E_AUTHFAIL, NULL);
+		return (false);
+	}
+
+	if ((userp != NULL) && ((*userp = strdup(username)) == NULL)) {
+		free_obj(auth);
+		send_err(w, E_NOMEM, NULL);
+		return (false);
+	}
+	// In the future, parse out the roles/grants from the
+	// ticket, and use them to set grants.  For now we set the
+	// grant to -1 (meaning all).
+	if (rolesp != NULL) {
+		*rolesp = (uint64_t) -1;
+	}
+	free(auth);
+	return (true);
+}
+
+static bool
+get_controller_param(worker *w, object *params, controller **cpp)
 {
 	char *      name;
 	controller *cp;
@@ -496,7 +665,7 @@ get_status(worker *w, object *params)
 {
 	controller *cp;
 
-	if (get_contoller_param(w, params, &cp)) {
+	if (get_controller_param(w, params, &cp)) {
 		cp->ops->get_status(cp, w);
 	}
 }
@@ -506,7 +675,7 @@ get_networks(worker *w, object *params)
 {
 	controller *cp;
 
-	if (get_contoller_param(w, params, &cp)) {
+	if (get_controller_param(w, params, &cp)) {
 		cp->ops->get_networks(cp, w);
 	}
 }
@@ -517,7 +686,7 @@ get_network_param(worker *w, object *params, controller **cpp, uint64_t *nwidp)
 	controller *cp;
 	uint64_t    nwid;
 
-	if (!get_contoller_param(w, params, &cp)) {
+	if (!get_controller_param(w, params, &cp)) {
 		return (false);
 	}
 	if (!get_obj_uint64(params, "network", &nwid)) {
@@ -597,7 +766,8 @@ delete_network_member(worker *w, object *params)
 	uint64_t    nwid;
 	uint64_t    member;
 
-	if (get_member_param(w, params, &cp, &nwid, &member)) {
+	if (get_auth_token_param(w, params, NULL, NULL) &&
+	    get_member_param(w, params, &cp, &nwid, &member)) {
 		cp->ops->delete_member(cp, w, nwid, member);
 	}
 }
@@ -624,6 +794,19 @@ deauthorize_network_member(worker *w, object *params)
 	if (get_member_param(w, params, &cp, &nwid, &member)) {
 		cp->ops->deauthorize_member(cp, w, nwid, member);
 	}
+}
+
+static void
+get_auth_token(worker *w, object *params)
+{
+	char *   user;
+	uint64_t roles;
+
+	if (!get_auth_basic_param(w, params, &user, &roles)) {
+		return;
+	}
+
+	// XXX: get a token
 }
 
 static void
@@ -1076,7 +1259,8 @@ load_config(const char *path)
 
 	// These might be missing. Note that if they are, they don't
 	// overwrite values.
-
+	(void) get_obj_string(cfg, "userdb", &userdb);
+	(void) get_obj_string(cfg, "tokendb", &tokendb);
 	(void) get_obj_string(cfg, "zthome", &zthome);
 	(void) get_obj_int(cfg, "workers", &nworkers);
 
