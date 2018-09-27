@@ -88,9 +88,15 @@ check_password(const char *pass, const char *hash)
 }
 
 uint64_t
-user_roles(user *u)
+user_roles(const user *u)
 {
 	return (u->roles);
+}
+
+const char *
+user_name(const user *u)
+{
+	return (u->name);
 }
 
 void
@@ -106,7 +112,7 @@ free_user(user *u)
 }
 
 user *
-dup_user(user *u)
+dup_user(const user *u)
 {
 	user *dup;
 
@@ -114,7 +120,7 @@ dup_user(user *u)
 	    ((dup->name = strdup(u->name)) == NULL) ||
 	    ((dup->encpass = strdup(u->encpass)) == NULL) ||
 	    ((dup->otpwds = calloc(u->notpwds, sizeof(otpwd))) == NULL)) {
-		free_user(u);
+		free_user(dup);
 		return (NULL);
 	}
 	for (int i = 0; i < dup->notpwds; i++) {
@@ -123,7 +129,7 @@ dup_user(user *u)
 		if (((dp->secret = strdup(sp->secret)) == NULL) ||
 		    ((dp->name = strdup(sp->name)) == NULL) ||
 		    ((dp->type = strdup(sp->type)) == NULL)) {
-			free_user(u);
+			free_user(dup);
 			return (NULL);
 		}
 		dp->digits  = sp->digits;
@@ -222,22 +228,39 @@ find_user(const char *name)
 	return (u);
 }
 
+static bool
+check_otp(const user *u, const char *otp)
+{
+	// Add validation of OTP here.
+	// For now we are returning false.
+	return (false);
+}
+
 user *
-auth_user(const char *name, const char *pass)
+auth_user(const char *name, const char *pass, const char *otp, int *code)
 {
 	user *u;
 
 	if ((u = find_user(name)) == NULL) {
+		*code = E_AUTHFAIL;
 		return (NULL);
 	}
 	if ((u->locked) || (!check_password(pass, u->encpass))) {
+		*code = E_AUTHFAIL;
 		free_user(u);
 		return (NULL);
 	}
 	// If the user has 2FA configured, then we refuse to let them in.
 	if (u->notpwds > 0) {
-		free_user(u);
-		return (NULL);
+		if (otp == NULL) {
+			*code = E_AUTHOTP;
+			free_user(u);
+			return (NULL);
+		} else if (!check_otp(u, otp)) {
+			*code = E_AUTHFAIL;
+			free_user(u);
+			return (NULL);
+		}
 	}
 	return (u);
 }
@@ -269,9 +292,15 @@ free_token(token *tok)
 }
 
 uint64_t
-token_roles(token *tok)
+token_roles(const token *tok)
 {
 	return (tok->roles);
+}
+
+const user *
+token_user(const token *tok)
+{
+	return (tok->user);
 }
 
 token *
@@ -490,14 +519,31 @@ hash_password(const char *pass)
 
 // Returns the bit associated with a role name.
 uint64_t
-find_role(const char *role)
+find_role_ext(worker_config *c, const char *role)
 {
-	for (int i = 0; i < wc->nroles; i++) {
-		if (strcmp(wc->roles[i].name, role) == 0) {
-			return (wc->roles[i].mask);
+	for (int i = 0; i < c->nroles; i++) {
+		if (strcmp(c->roles[i].name, role) == 0) {
+			return (c->roles[i].mask);
 		}
 	}
 	return (0);
+}
+
+uint64_t
+find_role(const char *role)
+{
+	return (find_role_ext(wc, role));
+}
+
+const char *
+role_name(uint64_t role)
+{
+	for (int i = 0; i < wc->nroles; i++) {
+		if (wc->roles[i].mask == role) {
+			return (wc->roles[i].name);
+		}
+	}
+	return (NULL);
 }
 
 void

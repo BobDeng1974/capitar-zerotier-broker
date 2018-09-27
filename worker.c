@@ -37,10 +37,10 @@
 #include <nng/supplemental/util/platform.h>
 #include <nng/transport/zerotier/zerotier.h>
 
-#include <mbedtls/sha1.h>
-
+#include "auth.h"
 #include "cfgfile.h"
 #include "object.h"
+#include "util.h"
 #include "worker.h"
 
 #include <ctype.h>
@@ -493,151 +493,69 @@ get_controller_host(controller *cp)
 }
 
 static bool
-get_auth_token_param(worker *w, object *params, char **userp, uint64_t *rolesp)
+get_auth_param(worker *w, object *params, char **userp, uint64_t *rolesp)
 {
-	char     path[256];
-	object * obj;
-	object * tok;
-	char *   tokid;
-	char *   user;
-	uint64_t expire;
+	char *  id;
+	char *  pass;
+	char *  otp;
+	object *obj;
+	user *  user;
+	int     code;
 
-	if (tokendb == NULL) {
-		return (false);
-	}
-	if ((!get_obj_obj(params, "auth", &obj)) ||
-	    (!get_obj_string(params, "token", &tokid))) {
-		send_err(w, E_AUTHTOKEN, NULL);
-		return (false);
-	}
-	if (tokid[0] == '\0') {
-		send_err(w, E_BADPARAMS, "empty auth token");
-		return (false);
-	}
-	for (int i = 0; tokid[i] != '\0'; i++) {
-		if ((i > 128) || (!isalnum(tokid[i]))) {
-			send_err(w, E_BADPARAMS, "malformed auth token");
-			return (false);
-		}
-	}
-	snprintf(path, sizeof(path), "%s%s%s", tokendb, PATH_SEP, tokid);
-	if ((tok = obj_load(path, NULL)) == NULL) {
-		send_err(w, E_AUTHFAIL, NULL); // No token.
-		return (false);
-	}
-	if (!get_obj_string(tok, "user", &user)) {
-		free_obj(tok); // token file malformed?
+	// Rules:
+	// We accept a token, if one is present.
+	// Otherwise, we check for user, password, and otp. If the
+	// otp is not present, but is required, we will fail with
+	// an error condition requesting it.
+
+	if (!get_obj_obj(params, "auth", &obj)) {
 		send_err(w, E_AUTHFAIL, NULL);
 		return (false);
 	}
+
+	if (get_obj_string(obj, "token", &id)) {
+		token *tok;
+		if ((tok = find_token(id)) == NULL) {
+			send_err(w, E_AUTHFAIL, NULL); // Invalid token.
+			return (false);
+		}
+		if ((userp != NULL) &&
+		    ((*userp = strdup(user_name(token_user(tok)))) == NULL)) {
+			free_token(tok);
+			send_err(w, E_NOMEM, NULL);
+			return (false);
+		}
+
+		if (rolesp != NULL) {
+			*rolesp = (uint64_t) token_roles(tok);
+		}
+		free_token(tok);
+		return (true);
+	}
+
+	otp = NULL;
+	if ((!get_obj_string(obj, "user", &id)) ||
+	    (!get_obj_string(obj, "pass", &pass))) {
+		send_err(w, E_AUTHFAIL, NULL);
+		return (false);
+	}
+	get_obj_string(obj, "otp", &otp);
+	if ((user = auth_user(id, pass, otp, &code)) == NULL) {
+		send_err(w, code, NULL);
+		return (false);
+	}
+
 	// If the token has an expire field, check it.
-	if ((get_obj_uint64(tok, "expire", &expire)) && (expire < now())) {
-		free_obj(tok); // token expired
-		send_err(w, E_AUTHFAIL, NULL);
-		return (false);
-	}
-	if ((userp != NULL) && ((*userp = strdup(user)) == NULL)) {
-		free_obj(tok);
+	if ((userp != NULL) && ((*userp = strdup(user_name(user))) == NULL)) {
+		free_user(user);
 		send_err(w, E_NOMEM, NULL);
 		return (false);
 	}
-	// In the future, parse out the roles/grants from the
-	// ticket, and use them to set grants.  For now we set the
-	// grant to -1 (meaning all).
+
 	if (rolesp != NULL) {
-		*rolesp = (uint64_t) -1;
+		*rolesp = (uint64_t) user_roles(user);
 	}
-	free(tok);
-	return (true);
-}
-
-static bool
-get_auth_basic_param(worker *w, object *params, char **userp, uint64_t *rolesp)
-{
-	char                 path[256];
-	object *             obj;
-	object *             auth;
-	char *               pass;
-	char *               username;
-	char *               password;
-	unsigned char        hash[20];
-	char                 result[50];
-	mbedtls_sha1_context sc;
-	char                 c;
-
-	if (userdb == NULL) {
-		return (false);
-	}
-	if ((!get_obj_obj(params, "auth", &obj)) ||
-	    (!get_obj_string(params, "username", &username)) ||
-	    (!get_obj_string(params, "password", &password))) {
-		send_err(w, E_AUTHBASIC, NULL);
-		return (false);
-	}
-	if (username[0] == '\0') {
-		send_err(w, E_BADPARAMS, "empty username");
-		return (false);
-	}
-	// Usernames are limited to < 128 characters of alphanumerics.
-	// Arguably we could extend this to support a lot more flexibility,
-	// so you could support email addresses, but its probably not needed.
-	// Plus, I want to avoid special filesystem characters.  (If this
-	// were a SQL column, it would be a lot easier to be more flexible.)
-	for (int i = 0; (c = username[i]) != '\0'; i++) {
-		if ((i > 128) || (!isalnum(c))) {
-			send_err(w, E_BADPARAMS, "invalid username");
-			return (false);
-		}
-	}
-	snprintf(path, sizeof(path), "%s%s%s", userdb, PATH_SEP, username);
-	if ((auth = obj_load(path, NULL)) == NULL) {
-		send_err(w, E_AUTHFAIL, NULL); // No such user?
-		return (false);
-	}
-
-	// NOTE: We are hashing the password by taking a random
-	// string (the salt), and prepending it to the real
-	// password, which then we run SHA1 over.  This is not
-	// recommended for cases when the passwords are exposed to
-	// the world, but this approach may limit accidental exposure
-	// of passwords to an administrator.  Its not good enough to
-	// resist a determined attacker with access the encrypted form.
-	// SHA1 form is <salt(4 bytes)><40 hex bytes hash (SHA1)>
-	// The SHA1 is is calcululated by doing SHA1(<salt> + <clear pass>).
-	if ((!get_obj_string(auth, "password", &pass)) ||
-	    (strlen(pass) != 44)) {
-		free_obj(auth); // user file malformed?
-		send_err(w, E_AUTHFAIL, NULL);
-		return (false);
-	}
-	mbedtls_sha1_init(&sc);
-	mbedtls_sha1_update_ret(&sc, (void *) pass, 4);
-	mbedtls_sha1_update_ret(&sc, (void *) password, strlen(password));
-	mbedtls_sha1_finish_ret(&sc, hash);
-	mbedtls_sha1_free(&sc);
-
-	pass += 4;
-	for (int i = 0, j = 0; i < 20; i++, j += 2) {
-		sprintf(result + j, "%02x", hash[i]);
-	}
-	if (memcmp(result, pass, 40) != 0) {
-		free_obj(auth);
-		send_err(w, E_AUTHFAIL, NULL);
-		return (false);
-	}
-
-	if ((userp != NULL) && ((*userp = strdup(username)) == NULL)) {
-		free_obj(auth);
-		send_err(w, E_NOMEM, NULL);
-		return (false);
-	}
-	// In the future, parse out the roles/grants from the
-	// ticket, and use them to set grants.  For now we set the
-	// grant to -1 (meaning all).
-	if (rolesp != NULL) {
-		*rolesp = (uint64_t) -1;
-	}
-	free(auth);
+	free_user(user);
 	return (true);
 }
 
@@ -766,7 +684,7 @@ delete_network_member(worker *w, object *params)
 	uint64_t    nwid;
 	uint64_t    member;
 
-	if (get_auth_token_param(w, params, NULL, NULL) &&
+	if (get_auth_param(w, params, NULL, NULL) &&
 	    get_member_param(w, params, &cp, &nwid, &member)) {
 		cp->ops->delete_member(cp, w, nwid, member);
 	}
@@ -794,19 +712,6 @@ deauthorize_network_member(worker *w, object *params)
 	if (get_member_param(w, params, &cp, &nwid, &member)) {
 		cp->ops->deauthorize_member(cp, w, nwid, member);
 	}
-}
-
-static void
-get_auth_token(worker *w, object *params)
-{
-	char *   user;
-	uint64_t roles;
-
-	if (!get_auth_basic_param(w, params, &user, &roles)) {
-		return;
-	}
-
-	// XXX: get a token
 }
 
 static void
@@ -1268,6 +1173,273 @@ load_config(const char *path)
 		fprintf(stderr, "workers must be positive\n");
 		exit(1);
 	}
+}
+
+static void
+free_config(worker_config *wc)
+{
+	if (wc != NULL) {
+		free_obj(wc->json);
+		free(wc->proxies);
+		free(wc->controllers);
+		free(wc->roles);
+		free(wc->apis);
+		free(wc->nets);
+		free(wc);
+	}
+}
+// This macro makes us do asprintf conditionally.
+#define ERRF(strp, fmt, ...) \
+	if (strp != NULL)    \
+	asprintf(strp, fmt, ##__VA_ARGS__)
+
+static worker_config *
+load_config2(const char *path, char **errmsg)
+{
+	object *       obj;
+	object *       arr;
+	worker_config *wc;
+
+	if ((wc = calloc(1, sizeof(worker_config))) == NULL) {
+		ERRF(errmsg, "calloc: %s", strerror(errno));
+		return (NULL);
+	}
+	if ((wc->json = obj_load(path, errmsg)) == NULL) {
+		free_config(wc);
+		return (NULL);
+	}
+
+	if (get_obj_obj(wc->json, "roles", &arr)) {
+		uint64_t mask;
+		int      i;
+		if (!is_obj_array(arr)) {
+			ERRF(errmsg, "roles must be array");
+			free_config(wc);
+			return (NULL);
+		}
+		if ((wc->nroles = get_arr_len(arr)) > 64) {
+			ERRF(errmsg, "too many roles");
+			free_config(wc);
+			return (NULL);
+		}
+		if ((wc->roles = calloc(sizeof(role_config), wc->nroles)) ==
+		    NULL) {
+			ERRF(errmsg, "calloc: %s", strerror(errno));
+			free_config(wc);
+			return (NULL);
+		}
+		mask = 1;
+		for (i = 0; i < get_arr_len(arr); i++) {
+			role_config *r = &wc->roles[i];
+			if (!get_arr_string(arr, i, &r->name)) {
+				ERRF(errmsg, "roles must be array of strings");
+				free_config(wc);
+				return (NULL);
+			}
+			// alphnumeric + _ for role names.  We want to reserve
+			// other characters for future special purposes.
+			for (int j = 0; j < strlen(r->name); j++) {
+				if ((!isalnum(r->name[j])) &&
+				    (r->name[j] != '_')) {
+					ERRF(errmsg, "invalid role name");
+					free_config(wc);
+					return (NULL);
+				}
+			}
+			for (int j = 0; j < i; j++) {
+				if (strcmp(r->name, wc->roles[j].name) == 0) {
+					ERRF(errmsg, "duplicate role name %s",
+					    r->name);
+					free_config(wc);
+					return (NULL);
+				}
+			}
+		}
+	} else {
+		wc->nroles = 0;
+	}
+
+	if ((!get_obj_obj(wc->json, "proxies", &arr)) ||
+	    (!is_obj_array(arr))) {
+		ERRF(errmsg, "missing proxies array");
+		free_config(wc);
+		return (NULL);
+	}
+
+	wc->nproxies = get_arr_len(arr);
+	if ((wc->proxies = calloc(sizeof(proxy_config), wc->nproxies)) ==
+	    NULL) {
+		ERRF(errmsg, "calloc: %s", strerror(errno));
+		free_config(wc);
+		return (NULL);
+	}
+
+	for (int i = 0; i < nproxies; i++) {
+		object *      arr2;
+		proxy_config *pp = &wc->proxies[i];
+
+		if ((!get_arr_obj(arr, i, &obj)) ||
+		    (!get_obj_string(obj, "survey", &pp->survurl)) ||
+		    (!get_obj_string(obj, "reqrep", &pp->rpcurl))) {
+			ERRF(errmsg, "proxy %d malformed", i);
+			free_config(wc);
+			return (NULL);
+		}
+		pp->nworkers = 4;
+		if (get_obj_int(obj, "workers", &pp->nworkers) &&
+		    ((nworkers < 1) || (nworkers > 1024))) {
+			ERRF(errmsg, "proxy %d invalid worker count", i);
+			free_config(wc);
+			return (NULL);
+		}
+
+		// load in roles for proxy
+		pp->roles = 0;
+		if (get_obj_obj(obj, "roles", &arr2)) {
+			for (int j = 0; j < get_arr_len(arr2); j++) {
+				char *   s;
+				uint64_t mask;
+				if ((!get_arr_string(arr2, j, &s)) ||
+				    ((mask = find_role_ext(wc, s)) == 0)) {
+					ERRF(errmsg, "proxy %d bad role", i);
+					free_config(wc);
+					return (NULL);
+				}
+				pp->roles |= mask;
+			}
+		}
+	}
+
+	// Look up the list of controllers.
+	if ((!get_obj_obj(wc->json, "controllers", &arr)) ||
+	    ((wc->ncontrollers = get_arr_len(arr)) < 1)) {
+
+		ERRF(errmsg, "no controllers supplied");
+		free_config(wc);
+		return (NULL);
+	}
+	wc->controllers = calloc(sizeof(controller_config), wc->ncontrollers);
+	if (wc->controllers == NULL) {
+		ERRF(errmsg, "calloc: %s", strerror(errno));
+		free_config(wc);
+		return (NULL);
+	}
+
+	for (int i = 0; i < wc->ncontrollers; i++) {
+		controller_config *cp = &wc->controllers[i];
+		char *             ct;
+
+		if ((!get_arr_obj(arr, i, &obj)) ||
+		    (!get_obj_string(obj, "address", &cp->url)) ||
+		    (!get_obj_string(obj, "secret", &cp->secret)) ||
+		    (!get_obj_string(obj, "name", &cp->name))) {
+			ERRF(errmsg, "controller %d incomplete", i);
+			free_config(wc);
+			return (NULL);
+		}
+		cp->central = false;
+		if ((get_obj_string(obj, "type", &ct)) &&
+		    (strcmp(ct, "central") == 0)) {
+			// Fall back to default "controller"
+			cp->central = true;
+		}
+
+		if (!valid_name(cp->name)) {
+			ERRF(errmsg, "invalid controller name %d", i);
+			free_config(wc);
+			return (NULL);
+		}
+
+		for (int j = 0; j < i; j++) {
+			if (strcmp(cp->name, wc->controllers[j].name) == 0) {
+				ERRF(errmsg, "duplicate controller name %s",
+				    cp->name);
+				free_config(wc);
+				return (NULL);
+			}
+		}
+	}
+
+#if 0
+	// WE need to review the filtering of the API and network
+	// configuration objects.
+	if (get_obj_obj(cfg, "networks", &arr)) {
+		netperm **npp = &netperms;
+		netperm * np;
+		char *    s;
+		char *    ep;
+		bool      allow;
+		uint64_t  nwid;
+
+		for (int i = 0; i < get_arr_len(arr); i++) {
+			if (!get_arr_string(arr, i, &s)) {
+				fprintf(stderr, "network %d malformed\n", i);
+				exit(1);
+			}
+			if (*s == '+') {
+				s++;
+				allow = true;
+			} else if (*s == '-') {
+				s++;
+				allow = false;
+			} else {
+				allow = true;
+			}
+			if (strcmp(s, "all")) {
+				nwid = 0;
+			} else if (((nwid = strtoull(s, &ep, 16)) == 0) ||
+			    (*ep != '\0')) {
+				fprintf(stderr, "network %d malformed\n", i);
+				exit(1);
+			}
+			if ((np = malloc(sizeof(netperm))) == NULL) {
+				fprintf(stderr, "out of memory\n");
+				exit(1);
+			}
+			np->nwid  = nwid;
+			np->allow = allow;
+			np->next  = NULL;
+			*npp      = np;
+			npp       = &np;
+		}
+	}
+#endif
+
+	// TLS can be missing.
+	if (get_obj_obj(wc->json, "tls", &obj)) {
+		get_obj_string(obj, "keypass", &wc->tls.keypass);
+		get_obj_string(obj, "keyfile", &wc->tls.keyfile);
+		get_obj_string(obj, "cacert", &wc->tls.cacert);
+		get_obj_bool(obj, "insecure", &wc->tls.insecure);
+
+		if ((wc->tls.keyfile) && (!path_exists(wc->tls.keyfile))) {
+			ERRF(errmsg, "keyfile does not exist");
+			free_config(wc);
+			return (NULL);
+		}
+		if ((wc->tls.cacert) && (!path_exists(wc->tls.cacert))) {
+			ERRF(errmsg, "cacert does not exist");
+			free_config(wc);
+			return (NULL);
+		}
+	}
+	if ((!get_obj_string(wc->json, "userdir", &wc->userdir)) ||
+	    (!path_exists(wc->userdir))) {
+		ERRF(errmsg, "userdir missing or does not exist");
+		free_config(wc);
+		return (NULL);
+	}
+	if ((!get_obj_string(wc->json, "tokendir", &wc->tokendir)) ||
+	    (!path_exists(wc->tokendir))) {
+		ERRF(errmsg, "tokendir missing or does not exist");
+		free_config(wc);
+		return (NULL);
+	}
+
+	// zthome is optional, but recommended.  If not used,
+	// then an ephemeral ZeroTier node will be used.
+	(void) get_obj_string(wc->json, "zthome", &wc->zthome);
+	return (wc);
 }
 
 static nng_optspec opts[] = {

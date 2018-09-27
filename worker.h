@@ -116,13 +116,14 @@ struct proxy_config {
 	char *   survurl;
 	char *   rpcurl;
 	int      nworkers;
-	uint64_t rolemask;
+	uint64_t roles;
 };
 
 struct controller_config {
+	char *name;
 	char *url;
 	char *secret;
-	bool  central; // false for controller
+	bool  central; // false for controller ("type" in JSON)
 };
 
 struct api_config {

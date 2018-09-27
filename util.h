@@ -29,6 +29,7 @@ extern int asprintf(char **, const char *, ...);
 
 extern char *path_join(const char *, const char *, const char *);
 extern bool  path_delete(const char *);
+extern bool  path_rename(const char *, const char *);
 extern bool  safe_filename(const char *);
-
+extern bool  path_exists(const char *);
 #endif // UTIL_H

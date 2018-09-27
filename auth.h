@@ -34,20 +34,23 @@ typedef struct user  user;
 // start of operations, or nothing else will work.
 extern void auth_init(worker_config *);
 
-extern uint64_t user_roles(user *);
-extern void     free_user(user *);
-extern user *   dup_user(user *);
-extern user *   find_user(const char *);
-extern user *   auth_user(const char *name, const char *);
-extern void     delete_user(user *);
+extern uint64_t    user_roles(const user *);
+extern const char *user_name(const user *);
+extern void        free_user(user *);
+extern user *      dup_user(const user *);
+extern user *      find_user(const char *);
+extern user *auth_user(const char *name, const char *, const char *, int *);
+extern void  delete_user(user *);
 
-extern void     free_token(token *);
-extern uint64_t token_roles(token *);
-extern token *  find_token(const char *);
-extern void     delete_token(token *);
-extern token *  create_token(user *, const char *, time_t, uint64_t);
+extern void        free_token(token *);
+extern uint64_t    token_roles(const token *);
+extern const user *token_user(const token *);
+extern token *     find_token(const char *);
+extern void        delete_token(token *);
+extern token *     create_token(user *, const char *, time_t, uint64_t);
 
 extern uint64_t    find_role(const char *);
+extern uint64_t    find_role_ext(worker_config *, const char *);
 extern const char *role_name(uint64_t);
 
 #endif

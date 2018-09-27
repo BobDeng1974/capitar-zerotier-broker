@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(HAVE_UNLINK) || defined(HAVE_RENAME)
+#if defined(HAVE_UNLINK) || defined(HAVE_RENAME) || defined(HAVE_ACCESS)
 #include <unistd.h>
 #endif
 
@@ -32,6 +32,13 @@
 
 #include <nng/nng.h>
 #include <nng/supplemental/util/platform.h>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 #include "auth.h"
 
@@ -86,7 +93,7 @@ path_delete(const char *path)
 	if (unlink(path) == 0) {
 		return (true);
 	}
-#elif defined(HAVE_DELETEFILE)
+#elif defined(_WIN32)
 	if (DeleteFileA(path)) {
 		return (true);
 	}
@@ -95,14 +102,29 @@ path_delete(const char *path)
 }
 
 bool
-path_rename(const char *path)
+path_rename(const char *oldpath, const char *newpath)
 {
 #ifdef HAVE_RENAME
-	if (rename(old, new) == 0) {
+	if (rename(oldpath, newpath) == 0) {
 		return (true);
 	}
-#elif defined(HAVE_MOVEFILEEX)
-	if (MoveFileEx(old, new, 1)) {
+#elif defined(_WIN32)
+	if (MoveFileEx(oldpath, newpath, 1)) {
+		return (true);
+	}
+#endif
+	return (false);
+}
+
+bool
+path_exists(const char *path)
+{
+#if defined(HAVE_ACCESS)
+	if (access(path, F_OK) == 0) {
+		return (true);
+	}
+#elif defined(_WIN32)
+	if (GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES) {
 		return (true);
 	}
 #endif
@@ -167,4 +189,52 @@ path_readdir(void *arg)
 	}
 	return (NULL);
 }
-#endif
+#elif defined(_WIN32)
+
+struct findh {
+	HANDLE h;
+	WIN32_FIND_DATA ent;
+	bool first;
+};
+
+void *
+path_opendir(char *path)
+{
+	char name[MAX_PATH + 1];
+	struct findh *fh;
+
+	snprintf(name, sizeof(name), "%s\\*", path);
+
+	if (fh = malloc(sizeof(*fh)) == NULL) {
+		return (NULL);
+	}
+	if ((fh->h = FindFirstFileA(name, &fh->ent)) == INVALID_HANDLE_VALUE) {
+		free(fh);
+		return (NULL);
+	}
+	fh->first = true;
+	return (fh);
+}
+
+const char *
+path_readdir(void *arg)
+{
+	struct findh *fh = arg;
+	if (fh->first) {
+		fh->first = false;
+		return (fh->ent.cFileName);
+	}
+	if (FindNextFileA(fh->h, &fh->ent)) {
+		return (fh->ent.cFileName);
+	}
+	return (NULL);
+}
+
+void
+path_closedir(void *arg)
+{
+	struct findh *fh = arg;
+	FindClose(fh->h);
+	free(fh);
+}
+#endif // HAVE_OPENDIR
