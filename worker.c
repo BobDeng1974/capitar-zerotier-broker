@@ -49,18 +49,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #ifndef CONFIG
 #define CONFIG "worker.cfg"
 #endif
 
-nng_socket repsock;
-nng_socket survsock;
-char *     zthome;
-int        debug;
-char *     userdb;
-char *     tokendb;
+// This macro makes us do asprintf conditionally.
+#define ERRF(strp, fmt, ...) \
+	if (strp != NULL)    \
+	asprintf(strp, fmt, ##__VA_ARGS__)
+
+static worker_config *cfg;
+
+char *zthome;
+int   debug;
+bool  started;
 
 typedef enum {
 	STATE_RECVING,
@@ -74,6 +77,7 @@ typedef struct netperm netperm;
 nng_tls_config *tls = NULL;
 
 struct worker {
+	proxy *          proxy;
 	nng_ctx          ctx; // REP context
 	nng_http_req *   req;
 	nng_http_res *   res;
@@ -94,11 +98,13 @@ struct controller {
 };
 
 struct proxy {
-	char *       survurl;
-	char *       repurl;
-	nng_sockaddr repsa;
-	nng_dialer   d; // outgoing dialer to surveyor
-	nng_listener l; // incoming listener from req
+	nng_socket survsock;
+	nng_socket repsock;
+	uint32_t   repport;
+	int        nworkers;
+	worker *   workers;
+	nng_aio *  survaio;
+	int        state; // 0 - receiving, 1 sending
 };
 
 struct netperm {
@@ -143,139 +149,81 @@ nwid_allowed(uint64_t nwid)
 }
 
 static void
-survey_loop(void)
+survey_cb(void *arg)
 {
-	for (;;) {
-		nng_msg *    msg;
-		nng_pipe     pipe;
-		int          rv;
-		uint32_t     port;
-		nng_sockaddr raddr;
-		nng_sockaddr laddr;
-		object *     obj;
-		object *     arr;
-		char *       body;
+	proxy *  p = arg;
+	nng_msg *msg;
+	int      rv;
+	char *   body;
+	object * obj;
+	object * arr;
 
-		switch ((rv = nng_recvmsg(survsock, &msg, 0))) {
-		case 0:
-			break;
-		case NNG_ECLOSED:
+	if ((rv = nng_aio_result(p->survaio)) == NNG_ECLOSED) {
+		// This only happens if the respondent socket is closed.
+		// If so we want to bail out asap.
+		return;
+	}
+
+	switch (p->state) {
+	case 0: // receiving
+		if (rv != 0) {
+			// Failure receiving for some reason.  Try again.
+			nng_recv_aio(p->survsock, p->survaio);
 			return;
-		default:
-			fprintf(stderr, "Survey recv: %s\n", nng_strerror(rv));
-			continue;
 		}
-		pipe = nng_msg_get_pipe(msg);
+		break;
 
-		if (debug > 1) {
-			nng_pipe_getopt_sockaddr(
-			    pipe, NNG_OPT_REMADDR, &raddr);
-			nng_pipe_getopt_sockaddr(
-			    pipe, NNG_OPT_LOCADDR, &laddr);
-			printf("Survey-Recv {\n");
-			printf("\tfrom: zt://%llx.%llx:%u\n",
-			    raddr.s_zt.sa_nodeid, raddr.s_zt.sa_nwid,
-			    raddr.s_zt.sa_port);
-			printf("\tto:   zt://%llx.%llx:%u\n",
-			    laddr.s_zt.sa_nodeid, laddr.s_zt.sa_nwid,
-			    laddr.s_zt.sa_port);
-			printf("}\n");
-		} else if (debug > 0) {
-			putc('s', stdout);
-			fflush(stdout);
-		}
-
-		port = 0;
-		for (int i = 0; i < nproxies; i++) {
-			proxy *p = &proxies[i];
-			if (nng_dialer_id(nng_pipe_dialer(pipe)) ==
-			    nng_dialer_id(p->d)) {
-				port = p->repsa.s_zt.sa_port;
-				break;
-			}
-		}
-		if (port == 0) {
-			fprintf(stderr, "Survey recv: bad dialer?\n");
-			continue;
-		}
-
-		arr = alloc_arr();
-		obj = alloc_obj();
-		if (((arr == NULL) || (obj == NULL)) ||
-		    (!add_obj_int(obj, "port", port))) {
-			free_obj(arr);
-			free_obj(obj);
+	case 1: // sending
+		if (rv != 0) {
+			// Failed send, so just discard it.
+			msg = nng_aio_get_msg(p->survaio);
+			nng_aio_set_msg(p->survaio, NULL);
 			nng_msg_free(msg);
-			fprintf(stderr, "Out of memory\n");
-			continue;
 		}
-		for (int i = 0; i < ncontrollers; i++) {
-			struct controller *cp = &controllers[i];
-			// If this fails, we will get a short response,
-			// but carry on.
-			add_arr_string(arr, cp->name);
-		}
-		if (!add_obj_obj(obj, "controllers", arr)) {
-			free_obj(arr);
-			free_obj(obj);
-			nng_msg_free(msg);
-			fprintf(stderr, "Out of memory\n");
-			continue;
-		}
+		p->state = 0;
+		nng_recv_aio(p->survsock, p->survaio);
+		return;
+	}
 
-		body = print_obj(obj);
-		free_obj(obj);
+	msg  = nng_aio_get_msg(p->survaio);
+	body = NULL;
+	arr  = alloc_arr();
+	obj  = alloc_obj();
+	nng_msg_clear(msg);
 
-		nng_msg_clear(msg);
-		if (body == NULL) {
-			fprintf(stderr, "Out of memory\n");
-			nng_msg_free(msg);
-			continue;
-		}
+	if (((arr == NULL) || (obj == NULL)) ||
+	    (!add_obj_int(obj, "port", (int) p->repport))) {
+		goto fail;
+	}
 
-		if (nng_msg_append(msg, body, strlen(body)) != 0) {
-			free(body);
-			nng_msg_free(msg);
-			fprintf(stderr, "Out of memory\n");
-			continue;
-		}
-
-		if (debug > 1) {
-			printf("Survey-Send: %s\n", body);
-			printf("\tfrom: zt://%llx.%llx:%u\n",
-			    laddr.s_zt.sa_nodeid, laddr.s_zt.sa_nwid,
-			    laddr.s_zt.sa_port);
-			printf("\tto:   zt://%llx.%llx:%u\n",
-			    raddr.s_zt.sa_nodeid, raddr.s_zt.sa_nwid,
-			    raddr.s_zt.sa_port);
-		} else if (debug > 0) {
-			putc('S', stdout);
-			fflush(stdout);
-		}
-		free(body);
-		switch (nng_sendmsg(survsock, msg, 0)) {
-		case 0:
-			break;
-		case NNG_ECLOSED:
-			nng_msg_free(msg);
-			return;
-		default:
-			nng_msg_free(msg);
-			break;
+	for (int i = 0; i < ncontrollers; i++) {
+		struct controller *cp = &controllers[i];
+		if (!add_arr_string(arr, cp->name)) {
+			goto fail;
 		}
 	}
-}
+	if (!add_obj_obj(obj, "controllers", arr)) {
+		goto fail;
+	}
+	arr = NULL;
 
-// now returns the current time of day since the UNIX epoch in millseconds.
-// As we only use this for token expiration, we have time granularity of
-// 1 second.  That's fine for us.
-static uint64_t
-now(void)
-{
-	uint64_t ms;
-	ms = time(NULL);
-	ms *= 1000; // convert to milliseconds
-	return (ms);
+	if (((body = print_obj(obj)) == NULL) ||
+	    (nng_msg_append(msg, body, strlen(body)) != 0)) {
+		goto fail;
+	}
+
+	free(body);
+	free_obj(obj);
+	p->state = 1;
+	nng_aio_set_msg(p->survaio, msg);
+	nng_send_aio(p->survsock, p->survaio);
+	return;
+
+fail:
+	nng_msg_free(msg);
+	free(body);
+	free_obj(obj);
+	free_obj(arr);
 }
 
 static void
@@ -869,28 +817,16 @@ worker_cb(void *arg)
 }
 
 static void
-start_workers(void)
+start_proxies(worker_config *wc)
 {
-	if ((workers = calloc(nworkers, sizeof(worker))) == NULL) {
-		fprintf(stderr, "Out of memory\n");
-		exit(1);
-	}
-	if (debug > 0) {
-		printf("Using %d workers\n", nworkers);
-	}
+	for (int i = 0; i < wc->nproxies; i++) {
+		proxy *p = &proxies[i];
+		nng_recv_aio(p->survsock, p->survaio);
 
-	for (int i = 0; i < nworkers; i++) {
-		worker *w = &workers[i];
-		int     rv;
-
-		if (((rv = nng_aio_alloc(&w->aio, worker_cb, w)) != 0) ||
-		    ((rv = nng_http_req_alloc(&w->req, NULL)) != 0) ||
-		    ((rv = nng_http_res_alloc(&w->res)) != 0) ||
-		    ((rv = nng_ctx_open(&w->ctx, repsock)) != 0)) {
-			fprintf(stderr, "%s\n", nng_strerror(rv));
-			exit(1);
+		for (int j = 0; j < p->nworkers; j++) {
+			worker *w = &p->workers[j];
+			recv_request(w);
 		}
-		recv_request(w);
 	}
 }
 
@@ -937,66 +873,98 @@ setup_controllers(void)
 	}
 }
 
-static void
-setup_sockets(void)
+static bool
+setup_proxy(worker_config *wc, proxy *p, proxy_config *pc, char **errmsg)
 {
-	int   rv;
-	char *zth;
-	if (((rv = nng_rep0_open(&repsock)) != 0) ||
-	    ((rv = nng_respondent0_open(&survsock)) != 0)) {
-		fprintf(stderr, "%s\n", nng_strerror(rv));
-		exit(1);
+	int          rv;
+	nng_listener l;
+	nng_sockaddr sa;
+	nng_socket   s;
+	char *       url;
+
+	memset(&s, 0, sizeof(s));
+	if (((rv = nng_rep0_open(&s)) != 0) ||
+	    ((rv = nng_setopt_string(s, NNG_OPT_ZT_HOME, wc->zthome)) != 0) ||
+	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_PING_TIME, 1000)) != 0) ||
+	    ((rv = nng_listen(s, pc->rpcurl, &l, 0)) != 0)) {
+		ERRF(errmsg, "rep(%s): %s", pc->rpcurl, nng_strerror(rv));
+		nng_close(s);
+		nng_aio_free(p->survaio);
+		p->survaio = NULL;
+		return (false);
 	}
-	if ((zth = zthome) == NULL) {
-		return;
-	}
-	if (((rv = nng_setopt_string(repsock, NNG_OPT_ZT_HOME, zth)) != 0) ||
-	    ((rv = nng_setopt_string(survsock, NNG_OPT_ZT_HOME, zth)) != 0) ||
-	    ((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_PING_TIME, 1000)) !=
+
+	if (((rv = nng_listener_getopt_sockaddr(l, NNG_OPT_LOCADDR, &sa)) !=
 	        0) ||
-	    ((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_CONN_TIME, 1000)) !=
-	        0) ||
-	    ((rv = nng_setopt_ms(survsock, NNG_OPT_RECONNMINT, 1)) != 0) ||
-	    ((rv = nng_setopt_ms(survsock, NNG_OPT_RECONNMAXT, 10)) != 0)) {
-		fprintf(stderr, "setting options: %s\n", nng_strerror(rv));
-		exit(1);
+	    ((rv = nng_listener_getopt_string(l, NNG_OPT_URL, &url)) != 0)) {
+		ERRF(errmsg, "listener_getopt: %s", nng_strerror(rv));
+		nng_close(s);
+		return (false);
 	}
+
+	p->repport = sa.s_zt.sa_port;
+	p->repsock = s;
+	printf("REP listening at %s\n", url);
+
+	memset(&s, 0, sizeof(s));
+	if (((rv = nng_aio_alloc(&p->survaio, survey_cb, p)) != 0) ||
+	    ((rv = nng_respondent0_open(&s)) != 0) ||
+	    ((rv = nng_setopt_string(s, NNG_OPT_ZT_HOME, wc->zthome)) != 0) ||
+	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_PING_TIME, 1000)) != 0) ||
+	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_CONN_TIME, 1000)) != 0) ||
+	    ((rv = nng_setopt_ms(s, NNG_OPT_RECONNMINT, 1)) != 0) ||
+	    ((rv = nng_setopt_ms(s, NNG_OPT_RECONNMAXT, 10)) != 0) ||
+	    ((rv = nng_dial(s, pc->survurl, NULL, NNG_FLAG_NONBLOCK)) != 0)) {
+		ERRF(errmsg, "respondent: %s", nng_strerror(rv));
+		nng_close(p->repsock);
+		nng_close(s);
+		return (false);
+	}
+	p->survsock = s;
+	printf("RESPONDENT dialing to %s\n", pc->survurl);
+
+	p->nworkers = pc->nworkers;
+	if ((p->workers = calloc(p->nworkers, sizeof(worker))) == NULL) {
+		ERRF(errmsg, "calloc: %s", strerror(errno));
+		return (false);
+	}
+	for (int i = 0; i < p->nworkers; i++) {
+		worker *w = &p->workers[i];
+		w->proxy  = p;
+
+		if (((rv = nng_aio_alloc(&w->aio, worker_cb, w)) != 0) ||
+		    ((rv = nng_http_req_alloc(&w->req, NULL)) != 0) ||
+		    ((rv = nng_http_res_alloc(&w->res)) != 0) ||
+		    ((rv = nng_ctx_open(&w->ctx, p->repsock)) != 0)) {
+			ERRF(errmsg, "worker init: %s", nng_strerror(rv));
+			nng_close(p->repsock);
+			nng_close(p->survsock);
+			return (false);
+		}
+	}
+
+	return (true);
 }
 
-static void
-setup_proxy(proxy *p)
+static bool
+setup_proxies(worker_config *wc, char **errmsg)
 {
-	char *s;
-	int   rv;
-
-	if (((rv = nng_listener_create(&p->l, repsock, p->repurl)) != 0) ||
-	    ((rv = nng_listener_start(p->l, 0)) != 0) ||
-	    ((rv = nng_listener_getopt_sockaddr(
-	          p->l, NNG_OPT_LOCADDR, &p->repsa)) != 0) ||
-	    ((rv = nng_listener_getopt_string(p->l, NNG_OPT_URL, &s)) != 0)) {
-		fprintf(stderr, "%s\n", nng_strerror(rv));
-		exit(1);
+	if ((proxies = calloc(sizeof(proxy), wc->nproxies)) == NULL) {
+		ERRF(errmsg, "calloc: %s", strerror(errno));
+		return (false);
 	}
-	printf("REP listening at %s\n", s);
-
-	// We dial in the background.
-	if (((rv = nng_dialer_create(&p->d, survsock, p->survurl)) != 0) ||
-
-	    ((rv = nng_dialer_start(p->d, NNG_FLAG_NONBLOCK)) != 0)) {
-		fprintf(stderr, "%s\n", nng_strerror(rv));
-		exit(1);
+	for (int i = 0; i < wc->nproxies; i++) {
+		if (!setup_proxy(wc, &proxies[i], &wc->proxies[i], errmsg)) {
+			for (int j = 0; j < i; j++) {
+				nng_close(proxies[j].survsock);
+				nng_close(proxies[j].repsock);
+			}
+			free(proxies);
+			proxies = NULL;
+			return (false);
+		}
 	}
-
-	printf("RESPONDENT dialing to %s\n", p->survurl);
-}
-
-static void
-setup_proxies(void)
-{
-	setup_sockets();
-	for (int i = 0; i < nproxies; i++) {
-		setup_proxy(&proxies[i]);
-	}
+	return (true);
 }
 
 static void
@@ -1012,6 +980,7 @@ load_config(const char *path)
 		exit(1);
 	}
 
+#if 0
 	if ((!get_obj_obj(cfg, "proxies", &arr)) || (!is_obj_array(arr))) {
 		fprintf(stderr, "cannot locate proxies array\n");
 		exit(1);
@@ -1032,6 +1001,7 @@ load_config(const char *path)
 			exit(1);
 		}
 	}
+#endif
 
 	// Look up the list of controllers.
 	if ((!get_obj_obj(cfg, "controllers", &arr)) || (!is_obj_array(arr))) {
@@ -1164,8 +1134,6 @@ load_config(const char *path)
 
 	// These might be missing. Note that if they are, they don't
 	// overwrite values.
-	(void) get_obj_string(cfg, "userdb", &userdb);
-	(void) get_obj_string(cfg, "tokendb", &tokendb);
 	(void) get_obj_string(cfg, "zthome", &zthome);
 	(void) get_obj_int(cfg, "workers", &nworkers);
 
@@ -1173,6 +1141,57 @@ load_config(const char *path)
 		fprintf(stderr, "workers must be positive\n");
 		exit(1);
 	}
+}
+
+static bool
+apply_tls(worker_config *wc, char **errmsg)
+{
+	nng_tls_config *tc;
+	nng_tls_config *old;
+	int             rv;
+	int             amode;
+
+	if ((rv = nng_tls_config_alloc(&tc, NNG_TLS_MODE_CLIENT)) != 0) {
+		ERRF(errmsg, "tls_config_alloc: Out of memory");
+		return (false);
+	}
+	if ((wc->tls.keyfile != NULL) &&
+	    ((rv = nng_tls_config_cert_key_file(
+	          tc, wc->tls.keyfile, wc->tls.keypass)) != 0)) {
+		ERRF(errmsg, "TLS keyfile: %s", nng_strerror(rv));
+		return (false);
+	}
+
+	if ((wc->tls.cacert != NULL) &&
+	    ((rv = nng_tls_config_ca_file(tc, wc->tls.cacert)) != 0)) {
+		ERRF(errmsg, "TLS cacert: %s", nng_strerror(rv));
+		return (false);
+	}
+	amode = wc->tls.insecure ? NNG_TLS_AUTH_MODE_NONE
+	                         : NNG_TLS_AUTH_MODE_REQUIRED;
+	if ((rv = nng_tls_config_auth_mode(tc, amode)) != 0) {
+		ERRF(errmsg, "TLS config_auth_mode: %s", nng_strerror(rv));
+		return (false);
+	}
+	old = tls;
+	tls = tc;
+	if (old != NULL) {
+		nng_tls_config_free(old);
+	}
+	return (true);
+}
+
+static bool
+apply_config(worker_config *wc, char **errmsg)
+{
+	auth_init(wc);
+	if (!apply_tls(wc, errmsg)) {
+		return (false);
+	}
+	if (!setup_proxies(wc, errmsg)) {
+		return (false);
+	}
+	return (true);
 }
 
 static void
@@ -1188,10 +1207,6 @@ free_config(worker_config *wc)
 		free(wc);
 	}
 }
-// This macro makes us do asprintf conditionally.
-#define ERRF(strp, fmt, ...) \
-	if (strp != NULL)    \
-	asprintf(strp, fmt, ##__VA_ARGS__)
 
 static worker_config *
 load_config2(const char *path, char **errmsg)
@@ -1236,8 +1251,9 @@ load_config2(const char *path, char **errmsg)
 				free_config(wc);
 				return (NULL);
 			}
-			// alphnumeric + _ for role names.  We want to reserve
-			// other characters for future special purposes.
+			// alphnumeric + _ for role names.  We want to
+			// reserve other characters for future special
+			// purposes.
 			for (int j = 0; j < strlen(r->name); j++) {
 				if ((!isalnum(r->name[j])) &&
 				    (r->name[j] != '_')) {
@@ -1274,7 +1290,7 @@ load_config2(const char *path, char **errmsg)
 		return (NULL);
 	}
 
-	for (int i = 0; i < nproxies; i++) {
+	for (int i = 0; i < wc->nproxies; i++) {
 		object *      arr2;
 		proxy_config *pp = &wc->proxies[i];
 
@@ -1412,12 +1428,14 @@ load_config2(const char *path, char **errmsg)
 		get_obj_string(obj, "cacert", &wc->tls.cacert);
 		get_obj_bool(obj, "insecure", &wc->tls.insecure);
 
-		if ((wc->tls.keyfile) && (!path_exists(wc->tls.keyfile))) {
+		if ((wc->tls.keyfile != NULL) &&
+		    (!path_exists(wc->tls.keyfile))) {
 			ERRF(errmsg, "keyfile does not exist");
 			free_config(wc);
 			return (NULL);
 		}
-		if ((wc->tls.cacert) && (!path_exists(wc->tls.cacert))) {
+		if ((wc->tls.cacert != NULL) &&
+		    (!path_exists(wc->tls.cacert))) {
 			ERRF(errmsg, "cacert does not exist");
 			free_config(wc);
 			return (NULL);
@@ -1455,6 +1473,7 @@ main(int argc, char **argv)
 	int         opti = 1;
 	const char *path = CONFIG;
 	int         rv;
+	char *      err;
 
 	while (nng_opts_parse(argc, argv, opts, &optc, &opta, &opti) == 0) {
 		switch (optc) {
@@ -1472,18 +1491,28 @@ main(int argc, char **argv)
 		    nng_strerror(rv));
 	}
 
+	if ((cfg = load_config2(path, &err)) == NULL) {
+		fprintf(stderr, "Failed to load config: %s\n", err);
+		exit(1);
+	}
+
+	if (!apply_config(cfg, &err)) {
+		fprintf(stderr, "Failed to apply config: %s\n", err);
+		exit(1);
+	};
+
 	load_config(path);
 
 	setup_controllers();
 
-	setup_proxies();
-
-	start_workers();
+	start_proxies(cfg);
 
 	if (debug) {
 		printf("Waiting for requests...\n");
 	}
 
-	survey_loop();
+	for (;;) {
+		nng_msleep(3600000); // an hour
+	}
 	exit(0);
 }

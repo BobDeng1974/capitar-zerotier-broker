@@ -19,11 +19,9 @@
 
 #define PATH_SEP "${PATH_SEP}"
 #cmakedefine HAVE_ASPRINTF
+#cmakedefine HAVE_ACCESS
 #cmakedefine HAVE_OPENDIR
-#cmakedefine HAVE_FINDFILE
 #cmakedefine HAVE_RENAME
-#cmakedefine HAVE_MOVEFILEEX
 #cmakedefine HAVE_UNLINK
-#cmakedefine HAVE_DELETEFILE
 
 #endif // CONFIG_H

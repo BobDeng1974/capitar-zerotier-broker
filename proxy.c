@@ -1008,7 +1008,7 @@ load_config(const char *path)
 
 	// This can be missing, but if it is, then we are an ephemeral
 	// proxy server.  This is generally not desirable.
-	(void) get_obj_string(proxy, "zthome", &zthome);
+	(void) get_obj_string(cfg, "zthome", &zthome);
 }
 
 int
