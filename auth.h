@@ -45,7 +45,7 @@ extern void  delete_user(user *);
 extern void        free_token(token *);
 extern uint64_t    token_roles(const token *);
 extern const user *token_user(const token *);
-extern token *     find_token(const char *);
+extern token *     find_token(const char *, int *);
 extern void        delete_token(token *);
 extern token *     create_token(user *, const char *, time_t, uint64_t);
 

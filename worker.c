@@ -288,6 +288,21 @@ send_err(worker *w, int code, const char *rsn)
 		case E_BADMETHOD:
 			rsn = "Method not found";
 			break;
+		case E_AUTHREQD:
+			rsn = "Authentication required";
+			break;
+		case E_AUTHFAIL:
+			rsn = "Authentication failed";
+			break;
+		case E_AUTHOTP:
+			rsn = "One-time password required";
+			break;
+		case E_AUTHTOKEN:
+			rsn = "Bearer token invalid";
+			break;
+		case E_AUTHEXPIRE:
+			rsn = "Bearer token expired";
+			break;
 		default:
 			rsn = "Unknown error";
 			break;
@@ -323,14 +338,14 @@ static struct {
 	void (*func)(worker *, object *);
 	uint64_t rolemask;
 } jsonrpc_methods[] = {
-	{ "get-status", get_status, 0 },
-	{ "get-networks", get_networks, 0 },
-	{ "get-network", get_network, 0 },
-	{ "get-network-members", get_network_members, 0 },
-	{ "get-network-member", get_network_member, 0 },
-	{ "delete-network-member", delete_network_member, 0 },
-	{ "authorize-network-member", authorize_network_member, 0 },
-	{ "deauthorize-network-member", deauthorize_network_member, 0 },
+	{ METHOD_GET_STATUS, get_status, 0 },
+	{ METHOD_LIST_NETWORKS, get_networks, 0 },
+	{ METHOD_GET_NETWORK, get_network, 0 },
+	{ METHOD_LIST_MEMBERS, get_network_members, 0 },
+	{ METHOD_GET_MEMBER, get_network_member, 0 },
+	{ METHOD_DELETE_MEMBER, delete_network_member, 0 },
+	{ METHOD_AUTH_MEMBER, authorize_network_member, 0 },
+	{ METHOD_DEAUTH_MEMBER, deauthorize_network_member, 0 },
 	{ NULL, NULL, 0 },
 };
 
@@ -457,8 +472,8 @@ get_auth_param(worker *w, object *params, char **userp, uint64_t *rolesp)
 
 	if (get_obj_string(obj, "token", &id)) {
 		token *tok;
-		if ((tok = find_token(id)) == NULL) {
-			send_err(w, E_AUTHFAIL, NULL); // Invalid token.
+		if ((tok = find_token(id, &code)) == NULL) {
+			send_err(w, code, NULL); // Invalid token.
 			return (false);
 		}
 		if ((userp != NULL) &&

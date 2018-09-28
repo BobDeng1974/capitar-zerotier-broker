@@ -20,26 +20,7 @@
 #include <nng/supplemental/http/http.h>
 
 #include "object.h"
-
-// RPC VERSION number.  Remember to bump according to SemVer.
-#ifndef RPC_VERSION
-#define RPC_VERSION "1.0"
-#endif
-
-enum worker_errors {
-	E_BADREQUEST = -32600, // Invalid Request
-	E_BADMETHOD  = -32601, // Method not found
-	E_BADPARAMS  = -32602, // Invalid params
-	E_INTERNAL   = -32000, // Internal error (see message)
-	E_NOMEM      = -32001, // Out of memory
-	E_BADJSON    = -32002, // Bad JSON from backend
-	E_NOCTRLR    = -32003, // Specified controller does not exist
-	E_AUTHFAIL   = 4010,   // Authentication well-formed, but invalid
-	E_AUTHTOKEN  = 4011,   // API token (bearer) needed
-	E_AUTHBASIC  = 4012,   // Basic auth (username / password) needed
-	E_AUTHOTP    = 4013,   // Basic+OTP auth needed
-	E_FORBIDDEN  = 403,    // Forbidden (insufficient permission)
-};
+#include "rpc.h"
 
 typedef struct worker_ops worker_ops;
 typedef struct worker     worker;

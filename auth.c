@@ -328,8 +328,7 @@ parse_token(token *t)
 
 	// The tag must match the original user, the user must not be locked,
 	// and the token should not have expired.
-	if ((t->tag != t->user->tag) || t->user->locked ||
-	    ((t->expire != 0) && (t->expire < time(NULL)))) {
+	if ((t->tag != t->user->tag) || t->user->locked) {
 		return (false);
 	}
 
@@ -337,17 +336,19 @@ parse_token(token *t)
 }
 
 token *
-find_token(const char *id)
+find_token(const char *id, int *code)
 {
 	char * path;
 	token *t;
 
 	if ((wc == NULL) || (wc->tokendir == NULL)) {
+		*code = E_AUTHTOKEN;
 		return (NULL);
 	}
 	// Sanity check here to ensure name is safe for files.
 	if ((!safe_filename(id)) ||
 	    ((path = path_join(wc->tokendir, id, ".tok")) == NULL)) {
+		*code = E_AUTHTOKEN;
 		return (NULL);
 	}
 	if (((t = calloc(1, sizeof(token))) == NULL) ||
@@ -358,6 +359,12 @@ find_token(const char *id)
 		return (NULL);
 	}
 	free(path);
+	if ((t->expire != 0) && (t->expire < time(NULL))) {
+		*code = E_AUTHEXPIRE;
+		free_token(t);
+		return (NULL);
+	}
+
 	return (t);
 }
 
