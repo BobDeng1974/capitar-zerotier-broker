@@ -61,9 +61,7 @@
 
 static worker_config *cfg;
 
-char *zthome;
-int   debug;
-bool  started;
+int debug;
 
 typedef enum {
 	STATE_RECVING,
@@ -89,22 +87,23 @@ struct worker {
 };
 
 struct controller {
-	char *           addr;
-	char *           name;
-	char *           secret;
-	char *           host; // for HTTP
-	nng_http_client *client;
-	worker_ops *     ops;
+	char *             addr;
+	char *             name;
+	char *             secret;
+	char *             host; // for HTTP
+	nng_http_client *  client;
+	worker_ops *       ops;
+	controller_config *config;
 };
 
 struct proxy {
-	nng_socket survsock;
-	nng_socket repsock;
-	uint32_t   repport;
-	int        nworkers;
-	worker *   workers;
-	nng_aio *  survaio;
-	int        state; // 0 - receiving, 1 sending
+	nng_socket    survsock;
+	nng_socket    repsock;
+	uint32_t      repport;
+	worker *      workers;
+	nng_aio *     survaio;
+	int           state; // 0 - receiving, 1 sending
+	proxy_config *config;
 };
 
 struct netperm {
@@ -114,12 +113,11 @@ struct netperm {
 };
 
 controller *controllers;
-int         ncontrollers;
-
-proxy *proxies;
-int    nproxies;
+proxy *     proxies;
 
 netperm *netperms;
+
+static worker_ops *find_worker_ops(const char *);
 
 // Note that the CTRLR NODE will almost certainly not be the same as the ZT
 // address.  That's because we can create per-process (ephemeral) ZT nodes
@@ -193,9 +191,8 @@ survey_cb(void *arg)
 		goto fail;
 	}
 
-	for (int i = 0; i < ncontrollers; i++) {
-		struct controller *cp = &controllers[i];
-		if (!add_arr_string(arr, cp->name)) {
+	for (int i = 0; i < cfg->ncontrollers; i++) {
+		if (!add_arr_string(arr, controllers[i].config->name)) {
 			goto fail;
 		}
 	}
@@ -398,8 +395,8 @@ samestr(const char *s1, const char *s2)
 static controller *
 find_controller(worker *w, const char *name)
 {
-	for (int i = 0; i < ncontrollers; i++) {
-		if (strcmp(controllers[i].name, name) == 0) {
+	for (int i = 0; i < cfg->ncontrollers; i++) {
+		if (strcmp(controllers[i].config->name, name) == 0) {
 			w->client = controllers[i].client;
 			return (&controllers[i]);
 		}
@@ -428,7 +425,7 @@ valid_name(const char *name)
 const char *
 get_controller_secret(controller *cp)
 {
-	return (cp->secret);
+	return (cp->config->secret);
 }
 
 const char *
@@ -820,58 +817,82 @@ start_proxies(worker_config *wc)
 		proxy *p = &proxies[i];
 		nng_recv_aio(p->survsock, p->survaio);
 
-		for (int j = 0; j < p->nworkers; j++) {
+		for (int j = 0; j < p->config->nworkers; j++) {
 			worker *w = &p->workers[j];
 			recv_request(w);
 		}
 	}
 }
-
-static void
-setup_controllers(void)
+static bool
+setup_controller(worker_config *wc, controller *cp, char **errmsg)
 {
-	for (int i = 0; i < ncontrollers; i++) {
-		int         rv;
-		nng_url *   url;
-		controller *cp = &controllers[i];
+	int      rv;
+	nng_url *url = NULL;
 
-		// Allocate an HTTP client.  We can reuse the client.
-		if (((rv = nng_url_parse(&url, cp->addr)) != 0) ||
-		    ((rv = nng_http_client_alloc(&cp->client, url)) != 0)) {
-			fprintf(stderr, "%s\n", nng_strerror(rv));
-			exit(1);
-		}
-
-		if (((strcmp(url->u_scheme, "http") == 0) &&
-		        (strcmp(url->u_port, "80") == 0)) ||
-		    ((strcmp(url->u_scheme, "https") == 0) &&
-		        (strcmp(url->u_port, "443") == 0))) {
-			cp->host = strdup(url->u_host);
-		} else {
-			cp->host = strdup(url->u_hostname);
-		}
-		if (cp->host == NULL) {
-			fprintf(stderr, "Out of memory\n");
-			exit(1);
-		}
+	// Allocate an HTTP client.  We can reuse the client.
+	if (((rv = nng_url_parse(&url, cp->config->url)) != 0) ||
+	    ((rv = nng_http_client_alloc(&cp->client, url)) != 0)) {
+		ERRF(errmsg, "controller: %s", nng_strerror(rv));
 		nng_url_free(url);
+		return (false);
+	}
 
-		if (strncmp(cp->addr, "https", 5) == 0) {
-			if (tls == NULL) {
-				fprintf(stderr, "Missing TLS configuration\n");
-				exit(1);
-			}
-			if ((rv = nng_http_client_set_tls(cp->client, tls)) !=
-			    0) {
-				fprintf(stderr, "TLS: %s\n", nng_strerror(rv));
-				exit(1);
-			}
+	if (((strcmp(url->u_scheme, "http") == 0) &&
+	        (strcmp(url->u_port, "80") == 0)) ||
+	    ((strcmp(url->u_scheme, "https") == 0) &&
+	        (strcmp(url->u_port, "443") == 0))) {
+		cp->host = strdup(url->u_host);
+	} else {
+		cp->host = strdup(url->u_hostname);
+	}
+	nng_url_free(url);
+	if (cp->host == NULL) {
+		ERRF(errmsg, "strdup: %s", strerror(ENOMEM));
+		return (false);
+	}
+
+	if (strncmp(cp->config->url, "https", 5) == 0) {
+		if (tls == NULL) {
+			ERRF(errmsg, "controller: missing TLS config");
+			return (false);
+		}
+		if ((rv = nng_http_client_set_tls(cp->client, tls)) != 0) {
+			ERRF(errmsg, "controller TLS: %s", nng_strerror(rv));
+			return (false);
 		}
 	}
+	if ((cp->ops = find_worker_ops(cp->config->type)) == NULL) {
+		ERRF(errmsg, "controller: unable to find ops vector");
+		return (false);
+	}
+	return (true);
 }
 
 static bool
-setup_proxy(worker_config *wc, proxy *p, proxy_config *pc, char **errmsg)
+setup_controllers(worker_config *wc, char **errmsg)
+{
+	if ((controllers = calloc(sizeof(controller), wc->ncontrollers)) ==
+	    NULL) {
+		ERRF(errmsg, "calloc: %s", strerror(errno));
+		return (false);
+	}
+	for (int i = 0; i < wc->ncontrollers; i++) {
+		controllers[i].config = &wc->controllers[i];
+		if (!setup_controller(wc, &controllers[i], errmsg)) {
+			for (int j = 0; j < i; j++) {
+				nng_http_client_free(controllers[i].client);
+				free(controllers[i].host);
+			}
+			free(controllers);
+			controllers = NULL;
+			return (false);
+		}
+	}
+	return (true);
+}
+
+static bool
+setup_proxy(worker_config *wc, proxy *p, char **errmsg)
 {
 	int          rv;
 	nng_listener l;
@@ -883,8 +904,9 @@ setup_proxy(worker_config *wc, proxy *p, proxy_config *pc, char **errmsg)
 	if (((rv = nng_rep0_open(&s)) != 0) ||
 	    ((rv = nng_setopt_string(s, NNG_OPT_ZT_HOME, wc->zthome)) != 0) ||
 	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_PING_TIME, 1000)) != 0) ||
-	    ((rv = nng_listen(s, pc->rpcurl, &l, 0)) != 0)) {
-		ERRF(errmsg, "rep(%s): %s", pc->rpcurl, nng_strerror(rv));
+	    ((rv = nng_listen(s, p->config->rpcurl, &l, 0)) != 0)) {
+		ERRF(errmsg, "rep(%s): %s", p->config->rpcurl,
+		    nng_strerror(rv));
 		nng_close(s);
 		nng_aio_free(p->survaio);
 		p->survaio = NULL;
@@ -911,21 +933,22 @@ setup_proxy(worker_config *wc, proxy *p, proxy_config *pc, char **errmsg)
 	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_CONN_TIME, 1000)) != 0) ||
 	    ((rv = nng_setopt_ms(s, NNG_OPT_RECONNMINT, 1)) != 0) ||
 	    ((rv = nng_setopt_ms(s, NNG_OPT_RECONNMAXT, 10)) != 0) ||
-	    ((rv = nng_dial(s, pc->survurl, NULL, NNG_FLAG_NONBLOCK)) != 0)) {
+	    ((rv = nng_dial(s, p->config->survurl, NULL, NNG_FLAG_NONBLOCK)) !=
+	        0)) {
 		ERRF(errmsg, "respondent: %s", nng_strerror(rv));
 		nng_close(p->repsock);
 		nng_close(s);
 		return (false);
 	}
 	p->survsock = s;
-	printf("RESPONDENT dialing to %s\n", pc->survurl);
+	printf("RESPONDENT dialing to %s\n", p->config->survurl);
 
-	p->nworkers = pc->nworkers;
-	if ((p->workers = calloc(p->nworkers, sizeof(worker))) == NULL) {
+	if ((p->workers = calloc(p->config->nworkers, sizeof(worker))) ==
+	    NULL) {
 		ERRF(errmsg, "calloc: %s", strerror(errno));
 		return (false);
 	}
-	for (int i = 0; i < p->nworkers; i++) {
+	for (int i = 0; i < p->config->nworkers; i++) {
 		worker *w = &p->workers[i];
 		w->proxy  = p;
 
@@ -951,7 +974,8 @@ setup_proxies(worker_config *wc, char **errmsg)
 		return (false);
 	}
 	for (int i = 0; i < wc->nproxies; i++) {
-		if (!setup_proxy(wc, &proxies[i], &wc->proxies[i], errmsg)) {
+		proxies[i].config = &wc->proxies[i];
+		if (!setup_proxy(wc, &proxies[i], errmsg)) {
 			for (int j = 0; j < i; j++) {
 				nng_close(proxies[j].survsock);
 				nng_close(proxies[j].repsock);
@@ -975,81 +999,6 @@ load_config(const char *path)
 	// abnormally.
 	if ((cfg = cfgfile_load(path)) == NULL) {
 		exit(1);
-	}
-
-#if 0
-	if ((!get_obj_obj(cfg, "proxies", &arr)) || (!is_obj_array(arr))) {
-		fprintf(stderr, "cannot locate proxies array\n");
-		exit(1);
-	}
-	nproxies = get_arr_len(arr);
-	if ((proxies = calloc(sizeof(proxy), nproxies)) == NULL) {
-		fprintf(stderr, "calloc: %s\n", strerror(errno));
-		exit(1);
-	}
-
-	for (int i = 0; i < nproxies; i++) {
-		proxy *pp = &proxies[i];
-
-		if ((!get_arr_obj(arr, i, &obj)) ||
-		    (!get_obj_string(obj, "survey", &pp->survurl)) ||
-		    (!get_obj_string(obj, "reqrep", &pp->repurl))) {
-			fprintf(stderr, "proxy %d malformed\n", i);
-			exit(1);
-		}
-	}
-#endif
-
-	// Look up the list of controllers.
-	if ((!get_obj_obj(cfg, "controllers", &arr)) || (!is_obj_array(arr))) {
-		fprintf(stderr, "cannot locate controllers array\n");
-		exit(1);
-	}
-	ncontrollers = get_arr_len(arr);
-	if ((controllers = calloc(sizeof(controller), ncontrollers)) == NULL) {
-		fprintf(stderr, "calloc: %s\n", strerror(errno));
-		exit(1);
-	}
-
-	for (int i = 0; i < ncontrollers; i++) {
-		controller *cp = &controllers[i];
-		char *      ct;
-
-		if ((!get_arr_obj(arr, i, &obj)) ||
-		    (!get_obj_string(obj, "address", &cp->addr)) ||
-		    (!get_obj_string(obj, "secret", &cp->secret)) ||
-		    (!get_obj_string(obj, "name", &cp->name))) {
-			fprintf(stderr, "controller %d incomplete\n", i);
-			exit(1);
-		}
-		if (!get_obj_string(obj, "type", &ct)) {
-			// Fall back to default "controller"
-			ct = "controller";
-		}
-
-		if (strcmp(ct, "controller") == 0) {
-			cp->ops = &controller_ops;
-		} else if (strcmp(ct, "central") == 0) {
-			cp->ops = &central_ops;
-		} else {
-			fprintf(stderr, "unknown controller type %s\n", ct);
-			exit(1);
-		}
-
-		if (!valid_name(cp->name)) {
-			fprintf(stderr, "bad name for controller %d: %s\n", i,
-			    cp->name);
-			exit(1);
-		}
-
-		for (int j = 0; j < i; j++) {
-			if (strcmp(cp->name, controllers[j].name) == 0) {
-				fprintf(stderr,
-				    "duplicate controller name %s\n",
-				    cp->name);
-				exit(1);
-			}
-		}
 	}
 
 	if (get_obj_obj(cfg, "networks", &arr)) {
@@ -1092,50 +1041,10 @@ load_config(const char *path)
 			npp       = &np;
 		}
 	}
-
-	// TLS can be missing.
-	if (get_obj_obj(cfg, "tls", &obj)) {
-		int               rv;
-		char *            key;
-		char *            str;
-		bool              insecure;
-		nng_tls_auth_mode amode;
-
-		if ((rv = nng_tls_config_alloc(&tls, NNG_TLS_MODE_CLIENT)) !=
-		    0) {
-			fprintf(stderr, "%s\n", nng_strerror(rv));
-			exit(1);
-		}
-		str = NULL;
-		get_obj_string(obj, "keypass", &str);
-		if ((get_obj_string(obj, "keyfile", &key)) &&
-		    ((rv = nng_tls_config_cert_key_file(tls, key, str)) !=
-		        0)) {
-			fprintf(stderr, "TLS keyfile: %s\n", nng_strerror(rv));
-			exit(1);
-		}
-		if (get_obj_string(obj, "cacert", &str) &&
-		    ((rv = nng_tls_config_ca_file(tls, str)) != 0)) {
-			fprintf(stderr, "TLS cacert: %s\n", nng_strerror(rv));
-			exit(1);
-		}
-		amode = NNG_TLS_AUTH_MODE_REQUIRED;
-		if (get_obj_bool(obj, "insecure", &insecure) && insecure) {
-			amode = NNG_TLS_AUTH_MODE_NONE;
-		}
-		if ((rv = nng_tls_config_auth_mode(tls, amode)) != 0) {
-			fprintf(stderr, "%s\n", nng_strerror(rv));
-			exit(1);
-		}
-	}
-
-	// These might be missing. Note that if they are, they don't
-	// overwrite values.
-	(void) get_obj_string(cfg, "zthome", &zthome);
 }
 
 static bool
-apply_tls(worker_config *wc, char **errmsg)
+setup_tls(worker_config *wc, char **errmsg)
 {
 	nng_tls_config *tc;
 	nng_tls_config *old;
@@ -1176,12 +1085,58 @@ static bool
 apply_config(worker_config *wc, char **errmsg)
 {
 	auth_init(wc);
-	if (!apply_tls(wc, errmsg)) {
+	if ((!setup_tls(wc, errmsg)) || (!setup_proxies(wc, errmsg)) ||
+	    (!setup_controllers(cfg, errmsg))) {
 		return (false);
 	}
-	if (!setup_proxies(wc, errmsg)) {
+	return (true);
+}
+
+typedef struct worker_ops_entry worker_ops_entry;
+struct worker_ops_entry {
+	const char *             name;
+	worker_ops *             ops;
+	struct worker_ops_entry *next;
+};
+
+worker_ops_entry *ops_types;
+
+static worker_ops *
+find_worker_ops(const char *name)
+{
+	worker_ops_entry *ent;
+	// Default to controller.
+	if ((name == NULL) || (*name == '\0')) {
+		name = "controller";
+	}
+	for (ent = ops_types; ent != NULL; ent = ent->next) {
+		if (strcmp(ent->name, name) == 0) {
+			return (ent->ops);
+		}
+	}
+	return (NULL);
+}
+
+bool
+worker_register_ops(const char *name, worker_ops *ops)
+{
+	worker_ops_entry *ent;
+	for (ent = ops_types; ent != NULL; ent = ent->next) {
+		if (strcmp(name, ent->name) == 0) {
+			// already registered
+			return (true);
+		}
+	}
+	if (ops->version != WORKER_OPS_VERSION) {
 		return (false);
 	}
+	if ((ent = malloc(sizeof(*ent))) == NULL) {
+		return (false);
+	}
+	ent->next = ops_types;
+	ent->name = name;
+	ent->ops  = ops;
+	ops_types = ent;
 	return (true);
 }
 
@@ -1344,11 +1299,12 @@ load_config2(const char *path, char **errmsg)
 			free_config(wc);
 			return (NULL);
 		}
-		cp->central = false;
-		if ((get_obj_string(obj, "type", &ct)) &&
-		    (strcmp(ct, "central") == 0)) {
-			// Fall back to default "controller"
-			cp->central = true;
+		cp->type = "controller";
+		get_obj_string(obj, "type", &cp->type);
+		if (find_worker_ops(cp->type) == NULL) {
+			ERRF(errmsg, "controller %d unknown type", i);
+			free_config(wc);
+			return (NULL);
 		}
 
 		if (!valid_name(cp->name)) {
@@ -1477,6 +1433,12 @@ main(int argc, char **argv)
 		}
 	}
 
+	if ((!worker_register_ops("controller", &controller_ops)) ||
+	    (!worker_register_ops("central", &central_ops))) {
+		fprintf(stderr, "Failed to register worker ops\n");
+		exit(1);
+	}
+
 	if ((rv = nng_zt_register()) != 0) {
 		fprintf(stderr, "Failed to register ZT transport: %s\n",
 		    nng_strerror(rv));
@@ -1493,8 +1455,6 @@ main(int argc, char **argv)
 	};
 
 	load_config(path);
-
-	setup_controllers();
 
 	start_proxies(cfg);
 

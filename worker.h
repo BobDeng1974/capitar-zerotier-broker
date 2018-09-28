@@ -79,6 +79,7 @@ typedef void (*worker_http_cb)(worker *, void *, size_t);
 extern void worker_http(worker *, worker_http_cb);
 
 struct worker_ops {
+	int version;
 	void (*get_status)(controller *, worker *);
 	void (*get_networks)(controller *, worker *);
 	void (*get_network)(controller *, worker *, uint64_t);
@@ -88,6 +89,10 @@ struct worker_ops {
 	void (*authorize_member)(controller *, worker *, uint64_t, uint64_t);
 	void (*deauthorize_member)(controller *, worker *, uint64_t, uint64_t);
 };
+
+#define WORKER_OPS_VERSION 0
+
+extern bool worker_register_ops(const char *, worker_ops *);
 
 extern worker_ops controller_ops;
 extern worker_ops central_ops;
@@ -123,7 +128,7 @@ struct controller_config {
 	char *name;
 	char *url;
 	char *secret;
-	bool  central; // false for controller ("type" in JSON)
+	char *type;
 };
 
 struct api_config {

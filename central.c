@@ -434,6 +434,7 @@ central_deauthorize_member(
 }
 
 worker_ops central_ops = {
+	.version            = WORKER_OPS_VERSION,
 	.get_status         = central_get_status,
 	.get_networks       = central_get_networks,
 	.get_network        = central_get_network,
