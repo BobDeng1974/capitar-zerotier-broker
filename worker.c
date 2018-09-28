@@ -113,9 +113,6 @@ struct netperm {
 	netperm *next;
 };
 
-worker *workers  = NULL;
-int     nworkers = 4; // some kind of default
-
 controller *controllers;
 int         ncontrollers;
 
@@ -1135,12 +1132,6 @@ load_config(const char *path)
 	// These might be missing. Note that if they are, they don't
 	// overwrite values.
 	(void) get_obj_string(cfg, "zthome", &zthome);
-	(void) get_obj_int(cfg, "workers", &nworkers);
-
-	if (nworkers < 1) {
-		fprintf(stderr, "workers must be positive\n");
-		exit(1);
-	}
 }
 
 static bool
@@ -1303,7 +1294,7 @@ load_config2(const char *path, char **errmsg)
 		}
 		pp->nworkers = 4;
 		if (get_obj_int(obj, "workers", &pp->nworkers) &&
-		    ((nworkers < 1) || (nworkers > 1024))) {
+		    ((pp->nworkers < 1) || (pp->nworkers > 1024))) {
 			ERRF(errmsg, "proxy %d invalid worker count", i);
 			free_config(wc);
 			return (NULL);
