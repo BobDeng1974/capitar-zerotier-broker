@@ -21,7 +21,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 
 #include "object.h"
 #include "worker.h"
@@ -47,7 +46,9 @@ extern uint64_t    token_roles(const token *);
 extern const user *token_user(const token *);
 extern token *     find_token(const char *, int *);
 extern void        delete_token(token *);
-extern token *     create_token(user *, const char *, time_t, uint64_t);
+extern token *     create_token(user *, const char *, double, uint64_t);
+extern const char *token_id(const token *);
+extern const char *token_desc(const token *);
 
 extern uint64_t    find_role(const char *);
 extern uint64_t    find_role_ext(worker_config *, const char *);

@@ -930,6 +930,48 @@ do_network(nng_aio *aio, object *auth, const char *method, controller *cp,
 	rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
 }
 
+static void
+do_tokens(nng_aio *aio, object *auth, const char *method, controller *cp,
+    object *body)
+{
+	object *params;
+	object *a;
+	char *  s;
+	double  exp;
+
+	if ((params = create_controller_params(cp, auth)) == NULL) {
+		return;
+	}
+	if (strcmp(method, "POST") != 0) {
+		free_obj(params);
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+		return;
+	}
+	if (get_obj_obj(body, "roles", &a)) {
+		object *roles;
+		if (((roles = clone_obj(a)) == NULL) ||
+		    (!add_obj_obj(params, "roles", roles))) {
+			free_obj(params);
+			free_obj(roles);
+			nng_aio_finish(aio, NNG_ENOMEM);
+			return;
+		}
+	}
+	if ((get_obj_string(body, "desc", &s)) &&
+	    (!add_obj_string(params, "desc", s))) {
+		free_obj(params);
+		nng_aio_finish(aio, NNG_ENOMEM);
+		return;
+	}
+	if ((get_obj_number(body, "expire", &exp)) &&
+	    (!add_obj_number(params, "expire", exp))) {
+		free_obj(params);
+		nng_aio_finish(aio, NNG_ENOMEM);
+		return;
+	}
+	do_rpc(aio, cp, METHOD_CREATE_TOKEN, params);
+}
+
 #define PROXY_URI "/api/1.0/proxy"
 #define PROXY_URI_LEN strlen(PROXY_URI)
 
@@ -1069,6 +1111,8 @@ proxy_api(nng_aio *aio)
 	// /api/1.0/proxy/<name>/network/<nwid>/member/<node>/authorize
 	// POST
 	// /api/1.0/proxy/<name>/network/<nwid>/member/<node>/deauthorize
+	// POST /api/1.0/proxy/<name>/token
+	// DELETE /api/1.0/proxy/<name>/token/<tokenid>
 
 	req    = nng_aio_get_input(aio, 0);
 	method = nng_http_req_get_method(req);
@@ -1127,6 +1171,17 @@ proxy_api(nng_aio *aio)
 			return;
 		}
 		rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
+		return;
+	}
+	if (strcmp(uri, "/token") == 0) {
+		char *  data;
+		size_t  len;
+		object *body;
+
+		nng_http_req_get_data(req, (void **) &body, &len);
+		body = parse_obj(body, len);
+		do_tokens(aio, auth, method, cp, body);
+		free_obj(body);
 		return;
 	}
 	rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);

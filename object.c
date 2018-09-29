@@ -476,7 +476,7 @@ obj_save(const char *path, object *obj, char **err)
 		return (false);
 	}
 
-	if (path_rename(tmp, path) != 0) {
+	if (!path_rename(tmp, path)) {
 		errf(err, "rename(%s, %s): failed", tmp, path);
 		path_delete(tmp);
 		return (false);

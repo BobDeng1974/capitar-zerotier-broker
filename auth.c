@@ -311,8 +311,8 @@ parse_token(token *t)
 
 	if ((!get_obj_string(o, "id", &t->id)) ||
 	    (!get_obj_string(o, "user", &s)) ||
-	    (!get_obj_string(o, "desc", &s)) ||
 	    ((t->user = find_user(s)) == NULL) ||
+	    (!get_obj_string(o, "desc", &t->desc)) ||
 	    (!get_obj_uint64(o, "tag", &t->tag)) ||
 	    (!get_obj_obj(o, "roles", &a))) {
 		return (false);
@@ -382,7 +382,7 @@ delete_token(token *t)
 }
 
 token *
-create_token(user *u, const char *desc, time_t expire, uint64_t roles)
+create_token(user *u, const char *desc, double expire, uint64_t roles)
 {
 	token * t;
 	char *  path;
@@ -451,6 +451,18 @@ create_token(user *u, const char *desc, time_t expire, uint64_t roles)
 
 	free(path);
 	return (t);
+}
+
+const char *
+token_id(const token *tok)
+{
+	return (tok->id);
+}
+
+const char *
+token_desc(const token *tok)
+{
+	return (tok->desc);
 }
 
 // Authentication support.  This code is meant for the worker,

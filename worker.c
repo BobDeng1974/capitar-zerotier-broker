@@ -49,6 +49,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #ifndef CONFIG
 #define CONFIG "worker.cfg"
@@ -332,21 +333,22 @@ static void get_network_member(worker *, object *);
 static void delete_network_member(worker *, object *);
 static void authorize_network_member(worker *, object *);
 static void deauthorize_network_member(worker *, object *);
+static void create_auth_token(worker *, object *);
 
 static struct {
 	const char *method;
 	void (*func)(worker *, object *);
-	uint64_t rolemask;
 } jsonrpc_methods[] = {
-	{ METHOD_GET_STATUS, get_status, 0 },
-	{ METHOD_LIST_NETWORKS, get_networks, 0 },
-	{ METHOD_GET_NETWORK, get_network, 0 },
-	{ METHOD_LIST_MEMBERS, get_network_members, 0 },
-	{ METHOD_GET_MEMBER, get_network_member, 0 },
-	{ METHOD_DELETE_MEMBER, delete_network_member, 0 },
-	{ METHOD_AUTH_MEMBER, authorize_network_member, 0 },
-	{ METHOD_DEAUTH_MEMBER, deauthorize_network_member, 0 },
-	{ NULL, NULL, 0 },
+	{ METHOD_GET_STATUS, get_status },
+	{ METHOD_LIST_NETWORKS, get_networks },
+	{ METHOD_GET_NETWORK, get_network },
+	{ METHOD_LIST_MEMBERS, get_network_members },
+	{ METHOD_GET_MEMBER, get_network_member },
+	{ METHOD_DELETE_MEMBER, delete_network_member },
+	{ METHOD_AUTH_MEMBER, authorize_network_member },
+	{ METHOD_DEAUTH_MEMBER, deauthorize_network_member },
+	{ METHOD_CREATE_TOKEN, create_auth_token },
+	{ NULL, NULL },
 };
 
 static void
@@ -450,7 +452,7 @@ get_controller_host(controller *cp)
 }
 
 static bool
-get_auth_param(worker *w, object *params, char **userp, uint64_t *rolesp)
+get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
 {
 	char *  id;
 	char *  pass;
@@ -477,7 +479,7 @@ get_auth_param(worker *w, object *params, char **userp, uint64_t *rolesp)
 			return (false);
 		}
 		if ((userp != NULL) &&
-		    ((*userp = strdup(user_name(token_user(tok)))) == NULL)) {
+		    ((*userp = dup_user(token_user(tok))) == NULL)) {
 			free_token(tok);
 			send_err(w, E_NOMEM, NULL);
 			return (false);
@@ -502,17 +504,14 @@ get_auth_param(worker *w, object *params, char **userp, uint64_t *rolesp)
 		return (false);
 	}
 
-	// If the token has an expire field, check it.
-	if ((userp != NULL) && ((*userp = strdup(user_name(user))) == NULL)) {
-		free_user(user);
-		send_err(w, E_NOMEM, NULL);
-		return (false);
-	}
-
 	if (rolesp != NULL) {
 		*rolesp = (uint64_t) user_roles(user);
 	}
-	free_user(user);
+	if (userp == NULL) {
+		free_user(user);
+	} else {
+		*userp = user;
+	}
 	return (true);
 }
 
@@ -669,6 +668,73 @@ deauthorize_network_member(worker *w, object *params)
 	if (get_member_param(w, params, &cp, &nwid, &member)) {
 		cp->ops->deauthorize_member(cp, w, nwid, member);
 	}
+}
+
+static void
+create_auth_token(worker *w, object *params)
+{
+	uint64_t authroles, reqroles;
+	user *   u;
+	token *  tok;
+	object * a;
+	object * result;
+	char *   desc;
+	double   expire;
+
+	if (!get_auth_param(w, params, &u, &authroles)) {
+		return;
+	}
+	if (get_obj_obj(params, "roles", &a)) {
+		reqroles = 0;
+		for (int i = 0; i < get_arr_len(a); i++) {
+			char *   n;
+			uint64_t val;
+			if (!get_arr_string(a, i, &n)) {
+				free_user(u);
+				send_err(w, E_BADPARAMS, NULL);
+				return;
+			}
+			// Make sure that the requested role is one the
+			// client already has.  This also covers the case
+			// for invalid role names.
+			val = find_role(n);
+			if ((val & authroles) == 0) {
+				free_user(u);
+				send_err(w, E_FORBIDDEN,
+				    "No permission for requested role");
+			}
+			reqroles |= val;
+		}
+	} else {
+		reqroles = authroles;
+	}
+
+	desc = "api token";
+	// If a name is supplied, lets use it.
+	get_obj_string(params, "desc", &desc);
+
+	// Note: there is no limit on the length of token expiration at
+	// this point.  We could add that as a tunable, and set it.
+	// We could also provide a default expiration time here.
+	expire = 0;
+	get_obj_number(params, "expire", &expire);
+
+	if ((tok = create_token(u, desc, expire, reqroles)) == NULL) {
+		send_err(w, E_INTERNAL, "Failed to create auth token");
+		free_user(u);
+		return;
+	}
+	free_user(u);
+
+	if (((result = alloc_obj()) == NULL) ||
+	    (!add_obj_string(result, "id", token_id(tok))) ||
+	    (!add_obj_string(result, "desc", token_desc(tok))) ||
+	    (!add_obj_number(result, "expire", expire))) {
+		send_err(w, E_NOMEM, NULL);
+		delete_token(tok);
+		return;
+	}
+	send_result(w, result);
 }
 
 static void
