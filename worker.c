@@ -548,26 +548,6 @@ get_controller_param(worker *w, object *params, controller **cpp)
 	return (true);
 }
 
-static void
-get_status(worker *w, object *params)
-{
-	controller *cp;
-
-	if (get_controller_param(w, params, &cp)) {
-		cp->ops->get_status(cp, w);
-	}
-}
-
-static void
-get_networks(worker *w, object *params)
-{
-	controller *cp;
-
-	if (get_controller_param(w, params, &cp)) {
-		cp->ops->get_networks(cp, w);
-	}
-}
-
 static bool
 get_network_param(worker *w, object *params, controller **cpp, uint64_t *nwidp)
 {
@@ -592,28 +572,6 @@ get_network_param(worker *w, object *params, controller **cpp, uint64_t *nwidp)
 	return (true);
 }
 
-static void
-get_network(worker *w, object *params)
-{
-	controller *cp;
-	uint64_t    nwid;
-
-	if (get_network_param(w, params, &cp, &nwid)) {
-		cp->ops->get_network(cp, w, nwid);
-	}
-}
-
-static void
-get_network_members(worker *w, object *params)
-{
-	controller *cp;
-	uint64_t    nwid;
-
-	if (get_network_param(w, params, &cp, &nwid)) {
-		cp->ops->get_members(cp, w, nwid);
-	}
-}
-
 static bool
 get_member_param(worker *w, object *params, controller **cpp, uint64_t *nwidp,
     uint64_t *memidp)
@@ -622,7 +580,7 @@ get_member_param(worker *w, object *params, controller **cpp, uint64_t *nwidp,
 	uint64_t    nwid;
 	uint64_t    memid;
 
-	if (!get_network_param(w, params, &cp, &nwid)) {
+	if (get_network_param(w, params, &cp, &nwid)) {
 		return (false);
 	}
 	if (!get_obj_uint64(params, "member", &memid)) {
@@ -636,13 +594,61 @@ get_member_param(worker *w, object *params, controller **cpp, uint64_t *nwidp,
 }
 
 static void
+get_status(worker *w, object *params)
+{
+	controller *cp;
+
+	// NO auth check.  Should we require authentication here?
+
+	if (get_controller_param(w, params, &cp)) {
+		cp->ops->get_status(cp, w);
+	}
+}
+
+static void
+get_networks(worker *w, object *params)
+{
+	controller *cp;
+
+	if (get_auth_param(w, params, NULL, NULL) &&
+	    get_controller_param(w, params, &cp)) {
+		cp->ops->get_networks(cp, w);
+	}
+}
+
+static void
+get_network(worker *w, object *params)
+{
+	controller *cp;
+	uint64_t    nwid;
+
+	if (get_auth_param(w, params, NULL, NULL) &&
+	    get_network_param(w, params, &cp, &nwid)) {
+		cp->ops->get_network(cp, w, nwid);
+	}
+}
+
+static void
+get_network_members(worker *w, object *params)
+{
+	controller *cp;
+	uint64_t    nwid;
+
+	if (get_auth_param(w, params, NULL, NULL) &&
+	    get_network_param(w, params, &cp, &nwid)) {
+		cp->ops->get_members(cp, w, nwid);
+	}
+}
+
+static void
 get_network_member(worker *w, object *params)
 {
 	controller *cp;
 	uint64_t    nwid;
 	uint64_t    member;
 
-	if (get_member_param(w, params, &cp, &nwid, &member)) {
+	if (get_auth_param(w, params, NULL, NULL) &&
+	    get_member_param(w, params, &cp, &nwid, &member)) {
 		cp->ops->get_member(cp, w, nwid, member);
 	}
 }
@@ -667,7 +673,8 @@ authorize_network_member(worker *w, object *params)
 	uint64_t    nwid;
 	uint64_t    member;
 
-	if (get_member_param(w, params, &cp, &nwid, &member)) {
+	if (get_auth_param(w, params, NULL, NULL) &&
+	    get_member_param(w, params, &cp, &nwid, &member)) {
 		cp->ops->authorize_member(cp, w, nwid, member);
 	}
 }
@@ -679,7 +686,8 @@ deauthorize_network_member(worker *w, object *params)
 	uint64_t    nwid;
 	uint64_t    member;
 
-	if (get_member_param(w, params, &cp, &nwid, &member)) {
+	if (get_auth_param(w, params, NULL, NULL) &&
+	    get_member_param(w, params, &cp, &nwid, &member)) {
 		cp->ops->deauthorize_member(cp, w, nwid, member);
 	}
 }
