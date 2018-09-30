@@ -974,6 +974,28 @@ do_tokens(nng_aio *aio, object *auth, const char *method, controller *cp,
 	do_rpc(aio, cp, METHOD_CREATE_TOKEN, params);
 }
 
+static void
+do_token(nng_aio *aio, object *auth, const char *method, controller *cp,
+    const char *id)
+{
+	object *params;
+
+	if ((params = create_controller_params(cp, auth)) == NULL) {
+		return;
+	}
+	if (strcmp(method, "DELETE") == 0) {
+		if (!add_obj_string(params, "token", id)) {
+			free_obj(params);
+			nng_aio_finish(aio, NNG_ENOMEM);
+			return;
+		}
+		do_rpc(aio, cp, METHOD_DELETE_TOKEN, params);
+		return;
+	}
+	free_obj(params);
+	rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+}
+
 #define PROXY_URI "/api/1.0/proxy"
 #define PROXY_URI_LEN strlen(PROXY_URI)
 
@@ -1188,6 +1210,20 @@ proxy_api(nng_aio *aio)
 
 		do_tokens(aio, auth, method, cp, body);
 		free_obj(body);
+		return;
+	}
+	if (strncmp(uri, "/token/", strlen("/token/")) == 0) {
+		uri += strlen("/token/");
+		ep = (char *) uri;
+		while ((*ep != '/') && (*ep != '\0')) {
+			ep++;
+		}
+		// Tokens don't have a subpath for now.
+		if ((*ep != '\0') || (ep == uri)) {
+			rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
+			return;
+		}
+		do_token(aio, auth, method, cp, uri);
 		return;
 	}
 	rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);

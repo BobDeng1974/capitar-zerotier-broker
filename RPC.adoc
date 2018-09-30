@@ -273,7 +273,7 @@ Method:: `delete-auth-token`
 
 Parameters::
 	`auth`::: Current authentication credentials.
-	`id`::: Token to delete.
+	`token`::: Token ID to delete.
 
 Result:::
 	Empty object.

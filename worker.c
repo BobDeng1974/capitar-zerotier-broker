@@ -334,6 +334,7 @@ static void delete_network_member(worker *, object *);
 static void authorize_network_member(worker *, object *);
 static void deauthorize_network_member(worker *, object *);
 static void create_auth_token(worker *, object *);
+static void delete_auth_token(worker *, object *);
 
 static struct {
 	const char *method;
@@ -348,6 +349,7 @@ static struct {
 	{ METHOD_AUTH_MEMBER, authorize_network_member },
 	{ METHOD_DEAUTH_MEMBER, deauthorize_network_member },
 	{ METHOD_CREATE_TOKEN, create_auth_token },
+	{ METHOD_DELETE_TOKEN, delete_auth_token },
 	{ NULL, NULL },
 };
 
@@ -474,7 +476,7 @@ get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
 
 	if (get_obj_string(obj, "token", &id)) {
 		token *tok;
-		if ((tok = find_token(id, &code)) == NULL) {
+		if ((tok = find_token(id, &code, true)) == NULL) {
 			send_err(w, code, NULL); // Invalid token.
 			return (false);
 		}
@@ -734,6 +736,41 @@ create_auth_token(worker *w, object *params)
 		delete_token(tok);
 		return;
 	}
+	send_result(w, result);
+}
+
+static void
+delete_auth_token(worker *w, object *params)
+{
+	uint64_t roles;
+	user *   u;
+	token *  tok;
+	object * result;
+	char *   id;
+	int      code;
+
+	if (!get_auth_param(w, params, &u, &roles)) {
+		return;
+	}
+	if (!get_obj_string(params, "token", &id)) {
+		send_err(w, E_BADPARAMS, NULL);
+	}
+
+	// We don't allow users to delete tokens they don't own!
+	if (((tok = find_token(id, &code, false)) == NULL) ||
+	    (!token_belongs(tok, u))) {
+		free_token(tok);
+		free_user(u);
+		send_err(w, 404, "No such token");
+		return;
+	}
+
+	free_user(u);
+	if ((result = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+	delete_token(tok);
 	send_result(w, result);
 }
 

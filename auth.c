@@ -298,7 +298,7 @@ token_user(const token *tok)
 	return (tok->user);
 }
 
-bool
+static bool
 parse_token(token *t)
 {
 	char *  s;
@@ -336,7 +336,7 @@ parse_token(token *t)
 }
 
 token *
-find_token(const char *id, int *code)
+find_token(const char *id, int *code, bool validate)
 {
 	char * path;
 	token *t;
@@ -351,15 +351,27 @@ find_token(const char *id, int *code)
 		*code = E_AUTHTOKEN;
 		return (NULL);
 	}
-	if (((t = calloc(1, sizeof(token))) == NULL) ||
-	    ((t->json = obj_load(path, NULL)) == NULL) || (!parse_token(t)) ||
-	    (strcmp(t->id, id) != 0)) {
+	if ((t = calloc(1, sizeof(token))) == NULL) {
+		free(path);
+		*code = E_NOMEM;
+		return (NULL);
+	}
+	if ((t->json = obj_load(path, NULL)) == NULL) {
+		*code = E_AUTHTOKEN;
 		free(path);
 		free_token(t);
 		return (NULL);
 	}
 	free(path);
-	if ((t->expire != 0) && (t->expire < time(NULL))) {
+	if ((!parse_token(t)) || (strcmp(t->id, id) != 0)) {
+		// This is a bad token, so purge it.  This happens if
+		// the user does not match, for example.
+		*code = E_AUTHTOKEN;
+		delete_token(t);
+		return (NULL);
+	}
+
+	if (validate && ((t->expire != 0) && (t->expire < time(NULL)))) {
 		*code = E_AUTHEXPIRE;
 		free_token(t);
 		return (NULL);
@@ -463,6 +475,15 @@ const char *
 token_desc(const token *tok)
 {
 	return (tok->desc);
+}
+
+bool
+token_belongs(const token *tok, const user *u)
+{
+	if ((strcmp(tok->user->name, u->name) == 0) && (tok->tag == u->tag)) {
+		return (true);
+	}
+	return (false);
 }
 
 // Authentication support.  This code is meant for the worker,

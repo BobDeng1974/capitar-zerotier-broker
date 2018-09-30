@@ -44,11 +44,12 @@ extern void  delete_user(user *);
 extern void        free_token(token *);
 extern uint64_t    token_roles(const token *);
 extern const user *token_user(const token *);
-extern token *     find_token(const char *, int *);
+extern token *     find_token(const char *, int *, bool);
 extern void        delete_token(token *);
 extern token *     create_token(user *, const char *, double, uint64_t);
 extern const char *token_id(const token *);
 extern const char *token_desc(const token *);
+extern bool        token_belongs(const token *, const user *);
 
 extern uint64_t    find_role(const char *);
 extern uint64_t    find_role_ext(worker_config *, const char *);
