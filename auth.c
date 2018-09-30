@@ -570,6 +570,24 @@ role_name(uint64_t role)
 	return (NULL);
 }
 
+bool
+check_api_role(const char *method, uint64_t roles)
+{
+	// XXX: We need to add API authorization checks.
+	(void) method;
+	(void) roles;
+	return (true);
+}
+
+bool
+check_nwid_role(uint64_t nwid, uint64_t roles)
+{
+	// XXX: We need to add NWID authorization checks.
+	(void) nwid;
+	(void) roles;
+	return (true);
+}
+
 void
 auth_init(worker_config *cfg)
 {

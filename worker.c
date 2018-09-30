@@ -85,6 +85,7 @@ struct worker {
 	nng_http_client *client;
 	uint64_t         id; // request ID of pending request
 	worker_http_cb   http_cb;
+	const char *     method; // RPC method called
 };
 
 struct controller {
@@ -358,6 +359,7 @@ jsonrpc(worker *w, object *reqobj, const char *meth, object *parm)
 {
 	for (int i = 0; jsonrpc_methods[i].method != NULL; i++) {
 		if (strcmp(jsonrpc_methods[i].method, meth) == 0) {
+			w->method = meth; // save for auth checks
 			jsonrpc_methods[i].func(w, parm);
 			free_obj(reqobj);
 			return;
@@ -480,6 +482,11 @@ get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
 			send_err(w, code, NULL); // Invalid token.
 			return (false);
 		}
+		if (!check_api_role(w->method, token_roles(tok))) {
+			free_token(tok);
+			send_err(w, E_FORBIDDEN, "Permission denied");
+			return (false);
+		}
 		if ((userp != NULL) &&
 		    ((*userp = dup_user(token_user(tok))) == NULL)) {
 			free_token(tok);
@@ -503,6 +510,11 @@ get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
 	get_obj_string(obj, "otp", &otp);
 	if ((user = auth_user(id, pass, otp, &code)) == NULL) {
 		send_err(w, code, NULL);
+		return (false);
+	}
+	if (!check_api_role(w->method, user_roles(user))) {
+		free_user(user);
+		send_err(w, E_FORBIDDEN, "Permission denied");
 		return (false);
 	}
 

@@ -54,5 +54,7 @@ extern bool        token_belongs(const token *, const user *);
 extern uint64_t    find_role(const char *);
 extern uint64_t    find_role_ext(worker_config *, const char *);
 extern const char *role_name(uint64_t);
+extern bool        check_api_role(const char *, uint64_t);
+extern bool        check_nwid_role(uint64_t, uint64_t);
 
 #endif
