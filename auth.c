@@ -276,6 +276,76 @@ delete_user(user *u)
 	free_user(u);
 }
 
+bool
+user_tokens(const user *u, token ***tokensp, int *ntokensp)
+{
+	token **    tokens;
+	void *      dirh;
+	int         nalloc;
+	int         ntokens;
+	char        id[128];
+	const char *fname;
+	int         code;
+
+	nalloc  = 0;
+	ntokens = 0;
+	tokens  = NULL;
+
+	if ((dirh = path_opendir(wc->tokendir)) == NULL) {
+		if (dirh == NULL) {
+			// Treat as if no tokens;
+			*ntokensp = 0;
+			*tokensp  = NULL;
+			return (true);
+		}
+	}
+
+	while ((fname = path_readdir(dirh)) != NULL) {
+		size_t l;
+		token *tok;
+		snprintf(id, sizeof(id), "%s", fname);
+		if (((l = strlen(id)) < 4) &&
+		    (strcmp(&id[l - 4], ".tok") != 0)) {
+			continue;
+		}
+		id[l - 4] = 0;
+		if ((tok = find_token(id, &code, false)) == NULL) {
+			continue;
+		}
+		if (!token_belongs(tok, u)) {
+			free_token(tok);
+			continue;
+		}
+		while (nalloc <= ntokens) {
+			token **newtoks;
+			// Most users won't have more than several tokens
+			// around.
+			nalloc  = nalloc ? (nalloc * 2) : 8;
+			newtoks = realloc(tokens, nalloc * sizeof(token *));
+			if (newtoks == NULL) {
+				free(tokens);
+				path_closedir(dirh);
+				return (false);
+			}
+			tokens = newtoks;
+		}
+		tokens[ntokens++] = tok;
+	}
+	path_closedir(dirh);
+	*ntokensp = ntokens;
+	*tokensp  = tokens;
+	return (true);
+}
+
+void
+free_tokens(token **tokens, int ntokens)
+{
+	for (int i = 0; i < ntokens; i++) {
+		free_token(tokens[i]);
+	}
+	free(tokens);
+}
+
 void
 free_token(token *tok)
 {

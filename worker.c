@@ -336,6 +336,7 @@ static void authorize_network_member(worker *, object *);
 static void deauthorize_network_member(worker *, object *);
 static void create_auth_token(worker *, object *);
 static void delete_auth_token(worker *, object *);
+static void get_auth_tokens(worker *, object *);
 
 static struct {
 	const char *method;
@@ -351,6 +352,7 @@ static struct {
 	{ METHOD_DEAUTH_MEMBER, deauthorize_network_member },
 	{ METHOD_CREATE_TOKEN, create_auth_token },
 	{ METHOD_DELETE_TOKEN, delete_auth_token },
+	{ METHOD_GET_TOKENS, get_auth_tokens },
 	{ NULL, NULL },
 };
 
@@ -774,6 +776,7 @@ delete_auth_token(worker *w, object *params)
 	}
 	if (!get_obj_string(params, "token", &id)) {
 		send_err(w, E_BADPARAMS, NULL);
+		return;
 	}
 
 	// We don't allow users to delete tokens they don't own!
@@ -791,6 +794,41 @@ delete_auth_token(worker *w, object *params)
 		return;
 	}
 	delete_token(tok);
+	send_result(w, result);
+}
+
+static void
+get_auth_tokens(worker *w, object *params)
+{
+	user *  u;
+	token **toks;
+	int     ntoks;
+	object *result;
+
+	if (!get_auth_param(w, params, &u, NULL)) {
+		return;
+	}
+	if (!user_tokens(u, &toks, &ntoks)) {
+		free_user(u);
+		send_err(w, E_NOMEM, NULL); // generally
+		return;
+	}
+	free_user(u);
+	if ((result = alloc_arr()) == NULL) {
+		free_tokens(toks, ntoks);
+		send_err(w, E_NOMEM, NULL); // generally
+		return;
+	}
+	for (int i = 0; i < ntoks; i++) {
+		if (!add_arr_string(result, token_id(toks[i]))) {
+			free_tokens(toks, ntoks);
+			free_obj(result);
+			send_err(w, E_NOMEM, NULL);
+			return;
+		}
+	}
+	free_tokens(toks, ntoks);
+
 	send_result(w, result);
 }
 

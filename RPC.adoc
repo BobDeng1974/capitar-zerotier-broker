@@ -132,6 +132,7 @@ This obtains the list of networks from the controller.
 Method:: `get-networks`
 
 Parameters::
+	`auth`::: Current authentication credentials.
 	`controller`:::  Controller ID (hexstring, 40-bit).
 
 Result::
@@ -145,6 +146,7 @@ This obtains the details of a given network from the controller.
 Method:: `get-network`
 
 Parameters::
+	`auth`::: Current authentication credentials.
 	`controller`:::
 		Controller name.
 	`network`:::
@@ -168,6 +170,7 @@ This obtains an array of members of the network.
 Method:: `get-network-members`
 
 Parameters::
+	`auth`::: Current authentication credentials.
 	`controller`:::
 		Controller name.
 	`network`:::
@@ -184,6 +187,7 @@ This obtains a single network member.
 Method:: `get-network-member`
 
 Parameters::
+	`auth`::: Current authentication credentials.
 	`controller`:::
 		Controller name.
 	`network`:::
@@ -206,6 +210,7 @@ This deletes a single network member.
 Method:: `delete-network-member`
 
 Parameters::
+	`auth`::: Current authentication credentials.
 	`controller`:::
 		Controller name.
 	`network`:::
@@ -223,6 +228,7 @@ This authorizes a single network member.
 Method:: `authorize-network-member`
 
 Parameters::
+	`auth`::: Current authentication credentials.
 	`controller`:::
 		Controller name.
 	`network`:::
@@ -240,6 +246,7 @@ This deauthorizes a single network member.
 Method:: `deauthorize-network-member`
 
 Parameters::
+	`auth`::: Current authentication credentials.
 	`controller`:::
 		Controller name.
 	`network`:::
@@ -250,6 +257,19 @@ Parameters::
 Result::
 	Empty object.
 
+
+=== List Authentication Tokens
+
+This returns a list of all the user's authentication tokens.
+
+Method:: `get-auth-tokens`
+
+Parameters::
+	`auth`::: Current authentication credentials.
+
+Result::
+	Array of strings, each of which is a token ID corresponding to
+	a token owned by the named user.
 
 === Create Authentication Token
 

@@ -50,6 +50,8 @@ extern token *     create_token(user *, const char *, double, uint64_t);
 extern const char *token_id(const token *);
 extern const char *token_desc(const token *);
 extern bool        token_belongs(const token *, const user *);
+extern bool        user_tokens(const user *, token ***, int *);
+extern void        free_tokens(token **, int);
 
 extern uint64_t    find_role(const char *);
 extern uint64_t    find_role_ext(worker_config *, const char *);

@@ -224,6 +224,24 @@ Result::
 	`expire`::: The actual expiration time.
 	`desc`::: Description of the token.
 
+=== List Authentication Tokens
+
+This returns a list of all the user's authentication tokens.
+
+URI:: `/proxy/$controller/token`
+
+Method:: `GET`
+
+URI Parameters::
+	`$controller`::: This is the name (or label) of the controller to access.
+
+Body Parameters::
+	None.
+
+Result::
+	Array of strings, each of which is a token ID corresponding to
+	a token owned by the named user.
+
 === Delete Authentication Token
 
 This delete an authentication token.

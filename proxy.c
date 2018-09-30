@@ -943,9 +943,18 @@ do_tokens(nng_aio *aio, object *auth, const char *method, controller *cp,
 	if ((params = create_controller_params(cp, auth)) == NULL) {
 		return;
 	}
+	if (strcmp(method, "GET") == 0) {
+		do_rpc(aio, cp, METHOD_GET_TOKENS, params);
+		return;
+	}
 	if (strcmp(method, "POST") != 0) {
 		free_obj(params);
 		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+		return;
+	}
+
+	if (body == NULL) {
+		rpcerr(aio, NNG_HTTP_STATUS_BAD_REQUEST, "Bad JSON");
 		return;
 	}
 
@@ -1203,10 +1212,7 @@ proxy_api(nng_aio *aio)
 		object *body;
 
 		nng_http_req_get_data(req, (void **) &data, &len);
-		if ((body = parse_obj(data, len)) == NULL) {
-			rpcerr(aio, NNG_HTTP_STATUS_BAD_REQUEST, "Bad JSON");
-			return;
-		}
+		body = parse_obj(data, len);
 
 		do_tokens(aio, auth, method, cp, body);
 		free_obj(body);
