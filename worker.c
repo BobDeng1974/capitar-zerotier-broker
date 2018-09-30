@@ -1069,61 +1069,6 @@ setup_proxies(worker_config *wc, char **errmsg)
 	return (true);
 }
 
-static void
-load_config(const char *path)
-{
-	object *cfg;
-	object *obj;
-	object *arr;
-
-	// The configuration will leak, but we only ever exit
-	// abnormally.
-	if ((cfg = cfgfile_load(path)) == NULL) {
-		exit(1);
-	}
-
-	if (get_obj_obj(cfg, "networks", &arr)) {
-		netperm **npp = &netperms;
-		netperm * np;
-		char *    s;
-		char *    ep;
-		bool      allow;
-		uint64_t  nwid;
-
-		for (int i = 0; i < get_arr_len(arr); i++) {
-			if (!get_arr_string(arr, i, &s)) {
-				fprintf(stderr, "network %d malformed\n", i);
-				exit(1);
-			}
-			if (*s == '+') {
-				s++;
-				allow = true;
-			} else if (*s == '-') {
-				s++;
-				allow = false;
-			} else {
-				allow = true;
-			}
-			if (strcmp(s, "all")) {
-				nwid = 0;
-			} else if (((nwid = strtoull(s, &ep, 16)) == 0) ||
-			    (*ep != '\0')) {
-				fprintf(stderr, "network %d malformed\n", i);
-				exit(1);
-			}
-			if ((np = malloc(sizeof(netperm))) == NULL) {
-				fprintf(stderr, "out of memory\n");
-				exit(1);
-			}
-			np->nwid  = nwid;
-			np->allow = allow;
-			np->next  = NULL;
-			*npp      = np;
-			npp       = &np;
-		}
-	}
-}
-
 static bool
 setup_tls(worker_config *wc, char **errmsg)
 {
@@ -1236,7 +1181,7 @@ free_config(worker_config *wc)
 }
 
 static worker_config *
-load_config2(const char *path, char **errmsg)
+load_config(const char *path, char **errmsg)
 {
 	object *       obj;
 	object *       arr;
@@ -1525,7 +1470,7 @@ main(int argc, char **argv)
 		    nng_strerror(rv));
 	}
 
-	if ((cfg = load_config2(path, &err)) == NULL) {
+	if ((cfg = load_config(path, &err)) == NULL) {
 		fprintf(stderr, "Failed to load config: %s\n", err);
 		exit(1);
 	}
@@ -1534,8 +1479,6 @@ main(int argc, char **argv)
 		fprintf(stderr, "Failed to apply config: %s\n", err);
 		exit(1);
 	};
-
-	load_config(path);
 
 	start_proxies(cfg);
 

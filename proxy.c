@@ -414,7 +414,7 @@ autherr(nng_aio *aio, const char *realm, const char *msg, int code)
 	case E_AUTHTOKEN:
 		snprintf(auth, sizeof(auth),
 		    "Bearer realm=\"%s\", error=\"invalid_token\", "
-		    "error_description =\"%s\"",
+		    "error_description=\"%s\"",
 		    realm, msg);
 		break;
 	case E_AUTHOTP:
@@ -603,6 +603,7 @@ rpc_cb(void *arg)
 				switch (code) {
 				case E_AUTHREQD:
 				case E_AUTHTOKEN:
+				case E_AUTHEXPIRE:
 				case E_AUTHFAIL:
 				case E_AUTHOTP:
 					autherr(httpaio, realm, rsn, code);
@@ -947,6 +948,7 @@ do_tokens(nng_aio *aio, object *auth, const char *method, controller *cp,
 		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
 		return;
 	}
+
 	if (get_obj_obj(body, "roles", &a)) {
 		object *roles;
 		if (((roles = clone_obj(a)) == NULL) ||
@@ -1178,8 +1180,12 @@ proxy_api(nng_aio *aio)
 		size_t  len;
 		object *body;
 
-		nng_http_req_get_data(req, (void **) &body, &len);
-		body = parse_obj(body, len);
+		nng_http_req_get_data(req, (void **) &data, &len);
+		if ((body = parse_obj(data, len)) == NULL) {
+			rpcerr(aio, NNG_HTTP_STATUS_BAD_REQUEST, "Bad JSON");
+			return;
+		}
+
 		do_tokens(aio, auth, method, cp, body);
 		free_obj(body);
 		return;
@@ -1197,10 +1203,12 @@ serve_http(void)
 
 	// Note that we set the method to NULL, as we want to receive
 	// all methods, not just GET.  This means we are obliged to
-	// inspect the method.
+	// inspect the method.  We only accept up to 200K, because
+	// there is no reason to ever receive a larger object than that.
 	if (((rv = nng_url_parse(&url, httpurl)) != 0) ||
 	    ((rv = nng_http_server_hold(&server, url)) != 0) ||
 	    ((rv = nng_http_handler_alloc(&h, PROXY_URI, proxy_api)) != 0) ||
+	    ((rv = nng_http_handler_collect_body(h, true, 204800)) != 0) ||
 	    ((rv = nng_http_handler_set_method(h, NULL)) != 0) ||
 	    ((rv = nng_http_handler_set_tree(h)) != 0) ||
 	    ((rv = nng_http_server_add_handler(server, h)) != 0)) {
