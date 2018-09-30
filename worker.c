@@ -336,6 +336,7 @@ static void authorize_network_member(worker *, object *);
 static void deauthorize_network_member(worker *, object *);
 static void create_auth_token(worker *, object *);
 static void delete_auth_token(worker *, object *);
+static void get_auth_token(worker *, object *);
 static void get_auth_tokens(worker *, object *);
 
 static struct {
@@ -352,6 +353,7 @@ static struct {
 	{ METHOD_DEAUTH_MEMBER, deauthorize_network_member },
 	{ METHOD_CREATE_TOKEN, create_auth_token },
 	{ METHOD_DELETE_TOKEN, delete_auth_token },
+	{ METHOD_GET_TOKEN, get_auth_token },
 	{ METHOD_GET_TOKENS, get_auth_tokens },
 	{ NULL, NULL },
 };
@@ -697,7 +699,7 @@ deauthorize_network_member(worker *w, object *params)
 static void
 create_auth_token(worker *w, object *params)
 {
-	uint64_t authroles, reqroles;
+	uint64_t authroles, reqroles, mask;
 	user *   u;
 	token *  tok;
 	object * a;
@@ -741,7 +743,7 @@ create_auth_token(worker *w, object *params)
 	// this point.  We could add that as a tunable, and set it.
 	// We could also provide a default expiration time here.
 	expire = 0;
-	get_obj_number(params, "expire", &expire);
+	get_obj_number(params, "expires", &expire);
 
 	if ((tok = create_token(u, desc, expire, reqroles)) == NULL) {
 		send_err(w, E_INTERNAL, "Failed to create auth token");
@@ -750,10 +752,112 @@ create_auth_token(worker *w, object *params)
 	}
 	free_user(u);
 
+	if ((a = alloc_arr()) == NULL) {
+		free_token(tok);
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+
+	mask     = 1;
+	reqroles = token_roles(tok);
+	for (int i = 0; i < 64; i++, mask <<= 1) {
+		const char *name;
+		if ((reqroles & mask) == 0) {
+			continue;
+		}
+		if ((name = role_name(mask)) == NULL) {
+			continue;
+		}
+		if (!add_arr_string(a, name)) {
+			free_token(tok);
+			free_obj(a);
+			send_err(w, E_NOMEM, NULL);
+			return;
+		}
+	}
+
 	if (((result = alloc_obj()) == NULL) ||
 	    (!add_obj_string(result, "id", token_id(tok))) ||
 	    (!add_obj_string(result, "desc", token_desc(tok))) ||
-	    (!add_obj_number(result, "expire", expire))) {
+	    (!add_obj_number(result, "created", token_created(tok))) ||
+	    (!add_obj_number(result, "expires", token_expires(tok))) ||
+	    (!add_obj_obj(result, "roles", a))) {
+		send_err(w, E_NOMEM, NULL);
+		free_obj(result);
+		free_obj(a);
+		delete_token(tok);
+		return;
+	}
+	send_result(w, result);
+}
+
+static void
+get_auth_token(worker *w, object *params)
+{
+	uint64_t roles;
+	uint64_t mask;
+	user *   u;
+	token *  tok;
+	object * a;
+	object * result;
+	char *   desc;
+	double   expire;
+	char *   id;
+	int      code;
+
+	if (!get_auth_param(w, params, &u, NULL)) {
+		return;
+	}
+	if (!get_obj_string(params, "token", &id)) {
+		free_user(u);
+		send_err(w, E_BADPARAMS, NULL);
+		return;
+	}
+
+	if (((tok = find_token(id, &code, false)) == NULL) ||
+	    (!token_belongs(tok, u))) {
+		free_token(tok);
+		free_user(u);
+		send_err(w, 404, "No such token");
+		return;
+	}
+	free_user(u);
+
+	if ((a = alloc_arr()) == NULL) {
+		free_token(tok);
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+
+	mask  = 1;
+	roles = token_roles(tok);
+	for (int i = 0; i < 64; i++, mask <<= 1) {
+		const char *name;
+		if ((roles & mask) == 0) {
+			continue;
+		}
+		if ((name = role_name(mask)) == NULL) {
+			continue;
+		}
+		if (!add_arr_string(a, name)) {
+			free_token(tok);
+			free_obj(a);
+			send_err(w, E_NOMEM, NULL);
+			return;
+		}
+	}
+
+	// Should we expose the token's user?  It is our own name, so for
+	// now we aren't doing it.
+	if (((result = alloc_obj()) == NULL) ||
+	    (!add_obj_string(result, "id", token_id(tok))) ||
+	    (!add_obj_string(result, "desc", token_desc(tok))) ||
+	    (!add_obj_number(result, "expires", token_expires(tok))) ||
+	    (!add_obj_number(result, "created", token_created(tok))) ||
+	    (!add_obj_obj(result, "roles", a))) {
+		free_obj(a);
+		free_obj(result);
+		free_token(tok);
 		send_err(w, E_NOMEM, NULL);
 		delete_token(tok);
 		return;
@@ -775,6 +879,7 @@ delete_auth_token(worker *w, object *params)
 		return;
 	}
 	if (!get_obj_string(params, "token", &id)) {
+		free_user(u);
 		send_err(w, E_BADPARAMS, NULL);
 		return;
 	}

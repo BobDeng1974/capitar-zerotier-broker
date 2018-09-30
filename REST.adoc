@@ -214,15 +214,19 @@ URI Parameters::
 
 Body Parameters::
 	`roles`::: Array of strings of roles to grant to the token.
-	This may elided, in which case all authorized roles will be granted.
-	`expire`::: A time (number) in UNIX seconds when the token should expire.  The generated token may expire sooner at
+	This may elided, in which case all authorized roles for the
+	current session will be granted.
+	`expires`::: A time (number) in UNIX seconds when the token should
+	expire.  The generated token may expire sooner at
 	the server's discretion.
 	`desc`::: A description for the token.
 
 Result::
 	`id`::: Generated token ID.  Use this with a Bearer authorization.
-	`expire`::: The actual expiration time.
+	`expires`::: The actual expiration time.
+	`created`::: Creation time, in UNIX seconds.
 	`desc`::: Description of the token.
+	`roles`::: Array of strings for actual assigned roles.
 
 === List Authentication Tokens
 
@@ -242,9 +246,31 @@ Result::
 	Array of strings, each of which is a token ID corresponding to
 	a token owned by the named user.
 
+=== Get Authentication Token
+
+This gets an authentication token for inspection.
+
+URI:: `/proxy/$controller/token/$id`
+
+Method:: `GET`
+
+URI Parameters::
+	`$controller`::: This is the name (or label) of the controller to access.
+	`$id`::: The authentication token to retrieve.
+
+Body Parameters::
+	None.
+
+Result::
+	`id`::: Generated token ID.  Use this with a Bearer authorization.
+	`expires`::: The actual expiration time.
+	`created`::: Creation time, in UNIX seconds.
+	`desc`::: Description of the token.
+	`roles`::: Array of strings for actual assigned roles.
+
 === Delete Authentication Token
 
-This delete an authentication token.
+This deletes an authentication token.
 
 URI:: `/proxy/$controller/token/$id`
 

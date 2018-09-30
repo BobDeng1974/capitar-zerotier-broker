@@ -974,12 +974,13 @@ do_tokens(nng_aio *aio, object *auth, const char *method, controller *cp,
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
-	if ((get_obj_number(body, "expire", &exp)) &&
-	    (!add_obj_number(params, "expire", exp))) {
+	if ((get_obj_number(body, "expires", &exp)) &&
+	    (!add_obj_number(params, "expires", exp))) {
 		free_obj(params);
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
+
 	do_rpc(aio, cp, METHOD_CREATE_TOKEN, params);
 }
 
@@ -990,6 +991,15 @@ do_token(nng_aio *aio, object *auth, const char *method, controller *cp,
 	object *params;
 
 	if ((params = create_controller_params(cp, auth)) == NULL) {
+		return;
+	}
+	if (strcmp(method, "GET") == 0) {
+		if (!add_obj_string(params, "token", id)) {
+			free_obj(params);
+			nng_aio_finish(aio, NNG_ENOMEM);
+			return;
+		}
+		do_rpc(aio, cp, METHOD_GET_TOKEN, params);
 		return;
 	}
 	if (strcmp(method, "DELETE") == 0) {

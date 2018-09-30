@@ -200,10 +200,10 @@ display in UIs when listing tokens; this makes it easy to identify which
 token should be deleted for example.
 `tag`:: This tag must match the tag for the user.  (Token files that have
 tags which don't match that of their named user are subject to deletion.)
-`expire`:: A time in UNIX seconds when the token should expire.  If zero,
+`expires`:: A time in UNIX seconds when the token should expire.  If zero,
 then the token does not expire.  (This is a number.)
-`roles`:: An array of roles for this token.  This field is optional, but
-if present then the token can only be used for the named roles, which
-may *only* include the roles available for the named user.
-If not present, then the token will grant *all* of the roles that the
-user has.
+`created`:: Time in UNIX seconds when the token was created.
+`roles`:: An array of roles for this token.
+The token can only be used for the named roles, which
+may *only* include the roles available for the named user, and will be
+a strict subset of the roles in effect at the time the token was created.

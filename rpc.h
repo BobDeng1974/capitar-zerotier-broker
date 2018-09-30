@@ -49,6 +49,7 @@ enum rpc_errors {
 #define METHOD_DEAUTH_MEMBER	"deauthorize-network-member"
 #define	METHOD_CREATE_TOKEN	"create-auth-token"
 #define	METHOD_DELETE_TOKEN	"delete-auth-token"
+#define METHOD_GET_TOKEN	"get-token"
 #define METHOD_GET_TOKENS	"get-tokens"
 //clang-format on
 

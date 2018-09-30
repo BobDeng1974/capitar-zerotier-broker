@@ -50,6 +50,8 @@ extern token *     create_token(user *, const char *, double, uint64_t);
 extern const char *token_id(const token *);
 extern const char *token_desc(const token *);
 extern bool        token_belongs(const token *, const user *);
+extern double      token_created(const token *);
+extern double      token_expires(const token *);
 extern bool        user_tokens(const user *, token ***, int *);
 extern void        free_tokens(token **, int);
 

@@ -49,6 +49,7 @@ struct token {
 	uint64_t tag; // check to make sure user tag matches
 	uint64_t roles;
 	double   expire;
+	double   created;
 };
 
 struct user {
@@ -392,6 +393,7 @@ parse_token(token *t)
 			t->roles |= find_role(s);
 		}
 	}
+	get_obj_number(o, "create", &t->created);
 	get_obj_number(o, "expire", &t->expire);
 	// Mask off any roles the user doesn't have.
 	t->roles &= t->user->roles;
@@ -493,6 +495,7 @@ create_token(user *u, const char *desc, double expire, uint64_t roles)
 	    (!add_obj_string(t->json, "user", u->name)) ||
 	    (!add_obj_string(t->json, "desc", desc)) ||
 	    (!add_obj_uint64(t->json, "tag", u->tag)) ||
+	    (!add_obj_number(t->json, "create", (double) time(NULL))) ||
 	    (!add_obj_number(t->json, "expire", expire))) {
 		free_token(t);
 		return (NULL);
@@ -545,6 +548,18 @@ const char *
 token_desc(const token *tok)
 {
 	return (tok->desc);
+}
+
+double
+token_expires(const token *tok)
+{
+	return (tok->expire);
+}
+
+double
+token_created(const token *tok)
+{
+	return (tok->created);
 }
 
 bool

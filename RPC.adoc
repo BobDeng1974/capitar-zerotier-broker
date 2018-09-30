@@ -285,7 +285,27 @@ Parameters::
 Result:::
 	`id`::: Token ID.  Use this as the `token` member.
 	`desc`::: Supplied description, or generated one if not supplied.
-	`expire`::: Expiration time (UNIX seconds).
+	`expires`::: Expiration time (UNIX seconds).
+	`created`::: Creation time (UNIX seconds).
+	`roles`::: Array of roles actually assigned.
+
+=== Get Authentication Token
+
+This gets an authentication token for inspection.
+
+Method:: `get-auth-token`
+
+Parameters::
+	`auth`::: Current authentication credentials.
+	`token`::: Token ID to delete.
+
+Result::
+	`id`::: Generated token ID.  Use this with a Bearer authorization.
+	`expires`::: The actual expiration time.
+	`created`::: Creation time, in UNIX seconds.
+	`desc`::: Description of the token.
+	`roles`::: Array of strings for actual assigned roles.
+
 
 === Delete Authentication Token
 
