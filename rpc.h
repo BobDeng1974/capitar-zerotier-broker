@@ -51,6 +51,7 @@ enum rpc_errors {
 #define	METHOD_DELETE_TOKEN	"delete-auth-token"
 #define METHOD_GET_TOKEN	"get-token"
 #define METHOD_GET_TOKENS	"get-tokens"
+#define METHOD_SET_PASSWD	"set-password"
 //clang-format on
 
 #endif // RPC_H

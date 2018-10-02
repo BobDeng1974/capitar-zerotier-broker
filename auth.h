@@ -40,6 +40,7 @@ extern user *      dup_user(const user *);
 extern user *      find_user(const char *);
 extern user *auth_user(const char *name, const char *, const char *, int *);
 extern void  delete_user(user *);
+extern bool  set_password(user *, const char *);
 
 extern void        free_token(token *);
 extern uint64_t    token_roles(const token *);

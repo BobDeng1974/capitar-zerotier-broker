@@ -63,6 +63,36 @@ struct user {
 	otpwd *  otpwds;
 };
 
+static char *
+hash_password(const char *pass)
+{
+	mbedtls_sha1_context ctx;
+	char *               result;
+	unsigned char        hash[20];
+	char *               ptr;
+
+	// The salt is "1:<8 random hex digits>:".  The 1: means
+	// we are using SHA1.  4 billion is enough salts for us.
+	// "1:%08x:" is 11 bytes (not including terminator).
+	if ((result = malloc(11 + 40 + 1)) == NULL) {
+		return (NULL);
+	}
+	snprintf(result, 12, "1:%08x:", nng_random());
+
+	mbedtls_sha1_init(&ctx);
+	mbedtls_sha1_update_ret(&ctx, (void *) result, 11);
+	mbedtls_sha1_update_ret(&ctx, (void *) pass, strlen(pass));
+	mbedtls_sha1_finish_ret(&ctx, hash);
+	mbedtls_sha1_free(&ctx);
+
+	ptr = result + strlen(result);
+	for (int i = 0; i < 20; i++) {
+		snprintf(ptr, 3, "%02x", hash[i]);
+		ptr += 2;
+	}
+	return (result);
+}
+
 static bool
 check_password(const char *pass, const char *hash)
 {
@@ -221,6 +251,43 @@ find_user(const char *name)
 	free(path);
 
 	return (u);
+}
+
+bool
+set_password(user *u, const char *pass)
+{
+	char *  enc;
+	char *  enc2;
+	char *  path;
+	object *obj;
+
+	if ((enc = hash_password(pass)) == NULL) {
+		return (false);
+	}
+	if (((obj = clone_obj(u->json)) == NULL) ||
+	    (!add_obj_string(obj, "passwd", enc)) ||
+	    (!get_obj_string(obj, "passwd", &enc2))) {
+		free(enc);
+		free_obj(obj);
+		return (false);
+	}
+	free(enc);
+	if ((path = path_join(wc->userdir, u->name, ".usr")) == NULL) {
+		free(enc2);
+		free_obj(obj);
+		return (false);
+	}
+
+	if (!obj_save(path, obj, NULL)) {
+		free(path);
+		free_obj(obj);
+		return (false);
+	}
+
+	free(path);
+	free_obj(u->json);
+	u->json = obj;
+	return (true);
 }
 
 static bool
@@ -595,36 +662,6 @@ token_belongs(const token *tok, const user *u)
 // CPU, so the resulting string should still be treated with the
 // same care as the original password.  Hashing it is just designed
 // to guard against accidental casual exposure to the administrator.
-
-static char *
-hash_password(const char *pass)
-{
-	mbedtls_sha1_context ctx;
-	char *               result;
-	unsigned char        hash[20];
-	char *               ptr;
-
-	// The salt is "1:<8 random hex digits>:".  The 1: means
-	// we are using SHA1.  4 billion is enough salts for us.
-	// "1:%08x:" is 11 bytes (not including terminator).
-	if ((result = malloc(11 + 40 + 1)) == NULL) {
-		return (NULL);
-	}
-	snprintf(result, 12, "1:%08x:", nng_random());
-
-	mbedtls_sha1_init(&ctx);
-	mbedtls_sha1_update_ret(&ctx, (void *) result, 11);
-	mbedtls_sha1_update_ret(&ctx, (void *) pass, strlen(pass));
-	mbedtls_sha1_finish_ret(&ctx, hash);
-	mbedtls_sha1_free(&ctx);
-
-	ptr = result + strlen(result);
-	for (int i = 0; i < 20; i++) {
-		snprintf(ptr, 3, "%02x", hash[i]);
-		ptr += 2;
-	}
-	return (result);
-}
 
 // Returns the bit associated with a role name.
 uint64_t

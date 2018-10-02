@@ -317,3 +317,16 @@ Parameters::
 
 Result:::
 	Empty object.
+
+=== Set Own Password
+
+This changes the current user's password.
+
+Method:: `set-password`
+
+Parameters::
+	`auth`::: Current authentication credentials.
+	`password`::: New password.
+
+Result::
+	Empty object.

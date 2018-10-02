@@ -340,6 +340,7 @@ static void create_auth_token(worker *, object *);
 static void delete_auth_token(worker *, object *);
 static void get_auth_token(worker *, object *);
 static void get_auth_tokens(worker *, object *);
+static void set_own_password(worker *, object *);
 
 static struct {
 	const char *method;
@@ -357,6 +358,7 @@ static struct {
 	{ METHOD_DELETE_TOKEN, delete_auth_token },
 	{ METHOD_GET_TOKEN, get_auth_token },
 	{ METHOD_GET_TOKENS, get_auth_tokens },
+	{ METHOD_SET_PASSWD, set_own_password },
 	{ NULL, NULL },
 };
 
@@ -942,6 +944,35 @@ get_auth_tokens(worker *w, object *params)
 	}
 	free_tokens(toks, ntoks);
 
+	send_result(w, result);
+}
+
+static void
+set_own_password(worker *w, object *params)
+{
+	user *  u;
+	char *  pass;
+	object *result;
+
+	if (!get_auth_param(w, params, &u, NULL)) {
+		return;
+	}
+	if (!get_obj_string(params, "password", &pass)) {
+		send_err(w, E_BADPARAMS, NULL);
+		return;
+	}
+	if ((result = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+		free_user(u);
+		return;
+	}
+	if (!set_password(u, pass)) {
+		free_user(u);
+		free_obj(result);
+		send_err(w, E_NOMEM, NULL); // generally
+		return;
+	}
+	free_user(u);
 	send_result(w, result);
 }
 

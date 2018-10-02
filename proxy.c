@@ -1015,6 +1015,36 @@ do_token(nng_aio *aio, object *auth, const char *method, controller *cp,
 	rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
 }
 
+static void
+do_self_password(nng_aio *aio, object *auth, const char *method,
+    controller *cp, object *body)
+{
+	const char *id;
+	char *      pass;
+	object *    params;
+	if ((params = create_controller_params(cp, auth)) == NULL) {
+		return;
+	}
+	if (strcmp(method, "POST") != 0) {
+		free_obj(params);
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+		return;
+	}
+	if (body == NULL) {
+		rpcerr(aio, NNG_HTTP_STATUS_BAD_REQUEST, "Bad JSON");
+		return;
+	}
+	if (!get_obj_string(body, "password", &pass)) {
+		rpcerr(aio, NNG_HTTP_STATUS_BAD_REQUEST, "Password missing");
+		return;
+	}
+	if (!add_obj_string(params, "password", pass)) {
+		rpcerr(aio, NNG_HTTP_STATUS_INTERNAL_SERVER_ERROR, NULL);
+		return;
+	}
+	do_rpc(aio, cp, METHOD_SET_PASSWD, params);
+}
+
 #define PROXY_URI "/api/1.0/proxy"
 #define PROXY_URI_LEN strlen(PROXY_URI)
 
@@ -1240,6 +1270,17 @@ proxy_api(nng_aio *aio)
 			return;
 		}
 		do_token(aio, auth, method, cp, uri);
+		return;
+	}
+	if (strcmp(uri, "/password") == 0) {
+		char *  data;
+		size_t  len;
+		object *body;
+		nng_http_req_get_data(req, (void **) &data, &len);
+		body = parse_obj(data, len);
+
+		do_self_password(aio, auth, method, cp, body);
+		free_obj(body);
 		return;
 	}
 	rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);

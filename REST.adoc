@@ -285,3 +285,18 @@ Body Parameters::
 
 Result::
 	Empty object.
+
+=== Set Own Password
+
+This changes the current user's password.
+
+URI:: `/proxy/$controller/password`
+
+URI Parameters::
+	`$controller`::: This is the name (or label) of the controller to access.
+
+Body Parameters::
+	`password`::: New password.
+
+Result::
+	Empty object.

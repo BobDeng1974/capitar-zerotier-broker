@@ -194,8 +194,13 @@ is_obj_object(object *o)
 bool
 add_obj_int(object *o, const char *name, int val)
 {
+	cJSON *t = cJSON_GetObjectItemCaseSensitive(&o->json, name);
 	if ((cJSON_AddNumberToObject(&o->json, name, val)) == NULL) {
 		return (false);
+	}
+	if (t != NULL) {
+		cJSON_DetachItemViaPointer(&o->json, t);
+		cJSON_free(t);
 	}
 	return (true);
 }
@@ -203,8 +208,13 @@ add_obj_int(object *o, const char *name, int val)
 bool
 add_obj_string(object *o, const char *name, const char *s)
 {
+	cJSON *t = cJSON_GetObjectItemCaseSensitive(&o->json, name);
 	if ((cJSON_AddStringToObject(&o->json, name, s)) == NULL) {
 		return (false);
+	}
+	if (t != NULL) {
+		cJSON_DetachItemViaPointer(&o->json, t);
+		cJSON_free(t);
 	}
 	return (true);
 }
@@ -212,8 +222,13 @@ add_obj_string(object *o, const char *name, const char *s)
 bool
 add_obj_bool(object *o, const char *name, bool b)
 {
+	cJSON *t = cJSON_GetObjectItemCaseSensitive(&o->json, name);
 	if (cJSON_AddBoolToObject(&o->json, name, b) == NULL) {
 		return (false);
+	}
+	if (t != NULL) {
+		cJSON_DetachItemViaPointer(&o->json, t);
+		cJSON_free(t);
 	}
 	return (true);
 }
@@ -221,11 +236,15 @@ add_obj_bool(object *o, const char *name, bool b)
 bool
 add_obj_uint64(object *o, const char *name, uint64_t val)
 {
-	char str[32];
-
+	char   str[32];
+	cJSON *t = cJSON_GetObjectItemCaseSensitive(&o->json, name);
 	(void) snprintf(str, sizeof(str), "%llx", (unsigned long long) val);
 	if ((cJSON_AddStringToObject(&o->json, name, str)) == NULL) {
 		return (false);
+	}
+	if (t != NULL) {
+		cJSON_DetachItemViaPointer(&o->json, t);
+		cJSON_free(t);
 	}
 	return (true);
 }
@@ -233,8 +252,13 @@ add_obj_uint64(object *o, const char *name, uint64_t val)
 bool
 add_obj_number(object *o, const char *name, double val)
 {
+	cJSON *t = cJSON_GetObjectItemCaseSensitive(&o->json, name);
 	if (cJSON_AddNumberToObject(&o->json, name, val) == NULL) {
 		return (false);
+	}
+	if (t != NULL) {
+		cJSON_DetachItemViaPointer(&o->json, t);
+		cJSON_free(t);
 	}
 	return (true);
 }
@@ -242,10 +266,16 @@ add_obj_number(object *o, const char *name, double val)
 bool
 add_obj_obj(object *o, const char *name, object *val)
 {
+	cJSON *t;
 	if (!cJSON_IsObject(&o->json)) {
 		return (false);
 	}
+	t = cJSON_GetObjectItemCaseSensitive(&o->json, name);
 	cJSON_AddItemToObjectCS(&o->json, name, &val->json);
+	if (t != NULL) {
+		cJSON_DetachItemViaPointer(&o->json, t);
+		cJSON_free(t);
+	}
 	return (true);
 }
 
