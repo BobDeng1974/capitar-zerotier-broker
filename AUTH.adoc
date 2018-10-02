@@ -101,6 +101,14 @@ Ultimately, roles and their meanings are chosen by the adminstrator.
 
 Permission denied status is returned via 403 Forbidden, per HTTP/1.1.
 
+NOTE: We should explore the idea of creating user "`groups`", so
+that users can be a member of a group, and inherit the roles associated
+with the group.  This would allow for much easier management of user
+permissions, since an 'admin' group could then grant multiple permissions.
+This would facilitate more fine grained permission models, by minimizing
+the number of attributes (roles) that have to be manually assigned to
+a single user.
+
 == RPC Details
 
 For authenticating to the worker, we will use the 401 Unauthorized code

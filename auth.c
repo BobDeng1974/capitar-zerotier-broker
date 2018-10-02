@@ -658,18 +658,55 @@ role_name(uint64_t role)
 bool
 check_api_role(const char *method, uint64_t roles)
 {
-	// XXX: We need to add API authorization checks.
-	(void) method;
-	(void) roles;
+	uint64_t allow = 0;
+	uint64_t deny  = 0;
+
+	for (int i = 0; i < wc->napis; i++) {
+		if (strcmp(wc->apis[i].method, method) == 0) {
+			allow = wc->apis[i].allow;
+			deny  = wc->apis[i].deny;
+			break;
+		}
+		if (strcmp(wc->apis[i].method, "*") == 0) {
+			// wild card match, but keep searching
+			allow = wc->apis[i].allow;
+			deny  = wc->apis[i].deny;
+		}
+	}
+	if ((roles & allow) != 0) {
+		return (true);
+	}
+	if ((roles & deny) != 0) {
+		return (false);
+	}
+	// default is permissive
 	return (true);
 }
 
 bool
 check_nwid_role(uint64_t nwid, uint64_t roles)
 {
-	// XXX: We need to add NWID authorization checks.
-	(void) nwid;
-	(void) roles;
+	uint64_t allow = 0;
+	uint64_t deny  = 0;
+
+	for (int i = 0; i < wc->nnets; i++) {
+		if (wc->nets[i].nwid == nwid) {
+			allow = wc->nets[i].allow;
+			deny  = wc->nets[i].deny;
+			break;
+		}
+		if (wc->nets[i].nwid == 0) {
+			allow = wc->nets[i].allow;
+			deny  = wc->nets[i].deny;
+		}
+	}
+	if ((roles & allow) != 0) {
+		return (true);
+	}
+	if ((roles & deny) != 0) {
+		return (false);
+	}
+	// default is permissive
 	return (true);
 }
 

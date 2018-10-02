@@ -102,7 +102,8 @@ struct proxy_config {
 	char *   survurl;
 	char *   rpcurl;
 	int      nworkers;
-	uint64_t roles;
+	uint64_t role_add;
+	uint64_t role_del;
 };
 
 struct controller_config {
@@ -122,9 +123,6 @@ struct net_config {
 	uint64_t nwid;
 	uint64_t allow; // mask of allowed roles
 	uint64_t deny;  // mask of denied roles
-	                // alternatively:
-	                // int nperms;
-	                // struct { bool allow; uint64_t role };
 };
 
 // A worker_config has the JSON tree associated with it and references

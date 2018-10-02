@@ -86,6 +86,8 @@ struct worker {
 	uint64_t         id; // request ID of pending request
 	worker_http_cb   http_cb;
 	const char *     method; // RPC method called
+	uint64_t         user_roles;
+	uint64_t         eff_roles; // roles as modified by proxy changes
 };
 
 struct controller {
@@ -516,7 +518,13 @@ get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
 		send_err(w, code, NULL);
 		return (false);
 	}
-	if (!check_api_role(w->method, user_roles(user))) {
+	w->eff_roles = w->user_roles = user_roles(user);
+	w->eff_roles |= w->proxy->config->role_add;
+	w->eff_roles &= ~w->proxy->config->role_del;
+
+	if (!check_api_role(w->method, w->eff_roles)) {
+		w->eff_roles  = 0;
+		w->user_roles = 0;
 		free_user(user);
 		send_err(w, E_FORBIDDEN, "Permission denied");
 		return (false);
@@ -1380,6 +1388,27 @@ free_config(worker_config *wc)
 	}
 }
 
+static bool
+parse_roles(worker_config *wc, object *arr, uint64_t *maskp, char **errmsg)
+{
+	uint64_t m = 0;
+	uint64_t v;
+	char *   n;
+	for (int i = 0; i < get_arr_len(arr); i++) {
+		if (!get_arr_string(arr, i, &n)) {
+			ERRF(errmsg, "bad role array item at index %d", i);
+			return (false);
+		}
+		if ((v = find_role_ext(wc, n)) == 0) {
+			ERRF(errmsg, "unknown role %s", n);
+			return (false);
+		}
+		m |= v;
+	}
+	*maskp = m;
+	return (true);
+}
+
 static worker_config *
 load_config(const char *path, char **errmsg)
 {
@@ -1463,7 +1492,7 @@ load_config(const char *path, char **errmsg)
 	}
 
 	for (int i = 0; i < wc->nproxies; i++) {
-		object *      arr2;
+		object *      rmod;
 		proxy_config *pp = &wc->proxies[i];
 
 		if ((!get_arr_obj(arr, i, &obj)) ||
@@ -1482,18 +1511,145 @@ load_config(const char *path, char **errmsg)
 		}
 
 		// load in roles for proxy
-		pp->roles = 0;
-		if (get_obj_obj(obj, "roles", &arr2)) {
-			for (int j = 0; j < get_arr_len(arr2); j++) {
-				char *   s;
-				uint64_t mask;
-				if ((!get_arr_string(arr2, j, &s)) ||
-				    ((mask = find_role_ext(wc, s)) == 0)) {
-					ERRF(errmsg, "proxy %d bad role", i);
+		pp->role_add = 0;
+		pp->role_del = 0;
+		if (get_obj_obj(obj, "rolemod", &rmod)) {
+			object *roles;
+			if ((get_obj_obj(rmod, "add", &roles)) &&
+			    (!parse_roles(wc, roles, &pp->role_add, errmsg))) {
+				free_config(wc);
+				return (NULL);
+			}
+			if ((get_obj_obj(rmod, "del", &roles)) &&
+			    (!parse_roles(wc, roles, &pp->role_del, errmsg))) {
+				free_config(wc);
+				return (NULL);
+			}
+		}
+	}
+
+	wc->napis = 0;
+	if (get_obj_obj(wc->json, "api", &arr)) {
+		char *key;
+		int   i;
+		for (key = next_obj_key(arr, NULL); key != NULL;
+		     key = next_obj_key(arr, key)) {
+			wc->napis++;
+		}
+		if ((wc->apis = calloc(sizeof(api_config), wc->napis)) ==
+		    NULL) {
+			ERRF(errmsg, "calloc: %s", strerror(errno));
+			free_config(wc);
+			return (NULL);
+		}
+		i = 0;
+		for (key = next_obj_key(arr, NULL); key != NULL;
+		     key = next_obj_key(arr, key)) {
+			object *ao;
+			object *roles;
+			bool    valid;
+
+			if (!get_obj_obj(arr, key, &ao)) {
+				ERRF(errmsg, "api for %s invalid", key);
+				free_config(wc);
+				return (NULL);
+			}
+			wc->apis[i].method = key;
+			wc->apis[i].allow  = 0;
+			wc->apis[i].deny   = 0;
+			if ((get_obj_obj(ao, "allow", &roles)) &&
+			    (!parse_roles(
+			        wc, roles, &wc->apis[i].allow, errmsg))) {
+				free_config(wc);
+				return (NULL);
+			}
+			if ((get_obj_obj(ao, "deny", &roles)) &&
+			    (!parse_roles(
+			        wc, roles, &wc->apis[i].deny, errmsg))) {
+				free_config(wc);
+				return (NULL);
+			}
+			for (int j = 0; j < i; j++) {
+				if (strcmp(wc->apis[j].method, key) == 0) {
+					ERRF(errmsg, "duplicate api %s", key);
 					free_config(wc);
 					return (NULL);
 				}
-				pp->roles |= mask;
+			}
+			valid = false;
+			for (int j = 0; jsonrpc_methods[j].method; j++) {
+				if (strcmp(jsonrpc_methods[j].method, key) ==
+				    0) {
+					valid = true;
+					break;
+				}
+			}
+			if (!valid) {
+				ERRF(errmsg, "unknown method name %s", key);
+				free_config(wc);
+				return (NULL);
+			}
+		}
+	}
+
+	wc->nnets = 0;
+	if (get_obj_obj(wc->json, "network", &arr)) {
+		char *   key;
+		int      i;
+		uint64_t nwid;
+		for (key = next_obj_key(arr, NULL); key != NULL;
+		     key = next_obj_key(arr, key)) {
+			wc->napis++;
+		}
+		if ((wc->nets = calloc(sizeof(net_config), wc->nnets)) ==
+		    NULL) {
+			ERRF(errmsg, "calloc: %s", strerror(errno));
+			free_config(wc);
+			return (NULL);
+		}
+
+		i = 0;
+		for (key = next_obj_key(arr, NULL); key != NULL;
+		     key = next_obj_key(arr, key)) {
+			object *ao;
+			object *roles;
+			char *  ep;
+
+			if (strcmp(key, "*") == 0) {
+				wc->nets[i].nwid = 0;
+			} else if (((wc->nets[i].nwid =
+			                    strtoull(key, &ep, 16)) == 0) ||
+			    (ep == key) || (*ep != '\0')) {
+				ERRF(errmsg, "invalid network id %d", i);
+				free_config(wc);
+				return (NULL);
+			}
+
+			for (int j = 0; j < i; j++) {
+				if (wc->nets[j].nwid == wc->nets[i].nwid) {
+					ERRF(errmsg, "duplicate nwid %s", key);
+					free_config(wc);
+					return (NULL);
+				}
+			}
+			if (!get_obj_obj(arr, key, &ao)) {
+				ERRF(errmsg, "api for %s invalid", key);
+				free_config(wc);
+				return (NULL);
+			}
+			wc->nets[i].allow = 0;
+			wc->nets[i].deny  = 0;
+			if ((get_obj_obj(ao, "allow", &roles)) &&
+			    (!parse_roles(
+			        wc, roles, &wc->nets[i].allow, errmsg))) {
+				free_config(wc);
+				return (NULL);
+			}
+			if ((get_obj_obj(ao, "deny", &roles)) &&
+			    (!parse_roles(
+			        wc, roles, &wc->nets[i].deny, errmsg))) {
+				free_config(wc);
+				return (NULL);
 			}
 		}
 	}
@@ -1548,51 +1704,6 @@ load_config(const char *path, char **errmsg)
 			}
 		}
 	}
-
-#if 0
-	// WE need to review the filtering of the API and network
-	// configuration objects.
-	if (get_obj_obj(cfg, "networks", &arr)) {
-		netperm **npp = &netperms;
-		netperm * np;
-		char *    s;
-		char *    ep;
-		bool      allow;
-		uint64_t  nwid;
-
-		for (int i = 0; i < get_arr_len(arr); i++) {
-			if (!get_arr_string(arr, i, &s)) {
-				fprintf(stderr, "network %d malformed\n", i);
-				exit(1);
-			}
-			if (*s == '+') {
-				s++;
-				allow = true;
-			} else if (*s == '-') {
-				s++;
-				allow = false;
-			} else {
-				allow = true;
-			}
-			if (strcmp(s, "all")) {
-				nwid = 0;
-			} else if (((nwid = strtoull(s, &ep, 16)) == 0) ||
-			    (*ep != '\0')) {
-				fprintf(stderr, "network %d malformed\n", i);
-				exit(1);
-			}
-			if ((np = malloc(sizeof(netperm))) == NULL) {
-				fprintf(stderr, "out of memory\n");
-				exit(1);
-			}
-			np->nwid  = nwid;
-			np->allow = allow;
-			np->next  = NULL;
-			*npp      = np;
-			npp       = &np;
-		}
-	}
-#endif
 
 	// TLS can be missing.
 	if (get_obj_obj(wc->json, "tls", &obj)) {
