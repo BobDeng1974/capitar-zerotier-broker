@@ -1287,7 +1287,7 @@ parse_roles(worker_config *wc, object *arr, uint64_t *maskp, char **errmsg)
 			ERRF(errmsg, "bad role array item at index %d", i);
 			return (false);
 		}
-		if ((v = find_role_ext(wc, n)) == 0) {
+		if ((!check_role_name_configured(wc, n))) {
 			ERRF(errmsg, "unknown role %s", n);
 			return (false);
 		}

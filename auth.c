@@ -663,6 +663,17 @@ token_belongs(const token *tok, const user *u)
 // same care as the original password.  Hashing it is just designed
 // to guard against accidental casual exposure to the administrator.
 
+bool
+check_role_name_configured(worker_config *c, const char *role)
+{
+	for (int i = 0; i < c->nroles; i++) {
+		if (strcmp(c->roles[i].name, role) == 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
 // Returns the bit associated with a role name.
 uint64_t
 find_role_ext(worker_config *c, const char *role)
