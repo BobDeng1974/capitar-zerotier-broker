@@ -328,14 +328,15 @@ send_result(worker *w, object *o)
 	send_resp(w, "result", o);
 }
 
-static void get_status(worker *, object *);
-static void get_networks(worker *, object *);
-static void get_network(worker *, object *);
-static void get_network_members(worker *, object *);
-static void get_network_member(worker *, object *);
-static void delete_network_member(worker *, object *);
-static void authorize_network_member(worker *, object *);
-static void deauthorize_network_member(worker *, object *);
+extern void get_status(worker *, object *);
+extern void get_networks(worker *, object *);
+extern void get_network(worker *, object *);
+extern void get_network_members(worker *, object *);
+extern void get_network_member(worker *, object *);
+extern void delete_network_member(worker *, object *);
+extern void authorize_network_member(worker *, object *);
+extern void deauthorize_network_member(worker *, object *);
+
 static void create_auth_token(worker *, object *);
 static void delete_auth_token(worker *, object *);
 static void get_auth_token(worker *, object *);
@@ -421,16 +422,16 @@ samestr(const char *s1, const char *s2)
 	return (true);
 }
 
-static controller *
+controller *
 find_controller(worker *w, const char *name)
 {
-	for (int i = 0; i < cfg->ncontrollers; i++) {
-		if (strcmp(controllers[i].config->name, name) == 0) {
-			w->client = controllers[i].client;
-			return (&controllers[i]);
-		}
-	}
-	return (NULL);
+        for (int i = 0; i < cfg->ncontrollers; i++) {
+                if (strcmp(controllers[i].config->name, name) == 0) {
+                        w->client = controllers[i].client;
+                        return (&controllers[i]);
+                }
+        }
+        return (NULL);
 }
 
 static bool
@@ -463,7 +464,26 @@ get_controller_host(controller *cp)
 	return (cp->host);
 }
 
-static bool
+bool
+get_controller_param(worker *w, object *params, controller **cpp)
+{
+        char *      name;
+        controller *cp;
+
+        if (!get_obj_string(params, "controller", &name)) {
+                send_err(w, E_BADPARAMS, "controller parameter required");
+                return (false);
+        }
+        if ((cp = find_controller(w, name)) == NULL) {
+                send_err(w, E_NOCTRLR, NULL);
+                return (false);
+        }
+
+        *cpp = cp;
+        return (true);
+}
+
+bool
 get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
 {
 	char *  id;
@@ -541,169 +561,6 @@ get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
 		*userp = user;
 	}
 	return (true);
-}
-
-static bool
-get_controller_param(worker *w, object *params, controller **cpp)
-{
-	char *      name;
-	controller *cp;
-
-	if (!get_obj_string(params, "controller", &name)) {
-		send_err(w, E_BADPARAMS, "controller parameter required");
-		return (false);
-	}
-	if ((cp = find_controller(w, name)) == NULL) {
-		send_err(w, E_NOCTRLR, NULL);
-		return (false);
-	}
-
-	*cpp = cp;
-	return (true);
-}
-
-static bool
-get_network_param(worker *w, object *params, controller **cpp, uint64_t *nwidp)
-{
-	controller *cp;
-	uint64_t    nwid;
-
-	if (!get_controller_param(w, params, &cp)) {
-		return (false);
-	}
-	if (!get_obj_uint64(params, "network", &nwid)) {
-		send_err(w, E_BADPARAMS, "network parameter required");
-		return (false);
-	}
-	if (!nwid_allowed(nwid)) {
-		// Security: Treat network denied as if it does not exist.
-		send_err(w, 404, "no such network");
-		return (false);
-	}
-
-	*cpp   = cp;
-	*nwidp = nwid;
-	return (true);
-}
-
-static bool
-get_member_param(worker *w, object *params, controller **cpp, uint64_t *nwidp,
-    uint64_t *memidp)
-{
-	controller *cp;
-	uint64_t    nwid;
-	uint64_t    memid;
-
-	if (get_network_param(w, params, &cp, &nwid)) {
-		return (false);
-	}
-	if (!get_obj_uint64(params, "member", &memid)) {
-		send_err(w, E_BADPARAMS, "member parameter required");
-		return (false);
-	}
-	*cpp    = cp;
-	*nwidp  = nwid;
-	*memidp = memid;
-	return (true);
-}
-
-static void
-get_status(worker *w, object *params)
-{
-	controller *cp;
-
-	// NO auth check.  Should we require authentication here?
-
-	if (get_controller_param(w, params, &cp)) {
-		cp->ops->get_status(cp, w);
-	}
-}
-
-static void
-get_networks(worker *w, object *params)
-{
-	controller *cp;
-
-	if (get_auth_param(w, params, NULL, NULL) &&
-	    get_controller_param(w, params, &cp)) {
-		cp->ops->get_networks(cp, w);
-	}
-}
-
-static void
-get_network(worker *w, object *params)
-{
-	controller *cp;
-	uint64_t    nwid;
-
-	if (get_auth_param(w, params, NULL, NULL) &&
-	    get_network_param(w, params, &cp, &nwid)) {
-		cp->ops->get_network(cp, w, nwid);
-	}
-}
-
-static void
-get_network_members(worker *w, object *params)
-{
-	controller *cp;
-	uint64_t    nwid;
-
-	if (get_auth_param(w, params, NULL, NULL) &&
-	    get_network_param(w, params, &cp, &nwid)) {
-		cp->ops->get_members(cp, w, nwid);
-	}
-}
-
-static void
-get_network_member(worker *w, object *params)
-{
-	controller *cp;
-	uint64_t    nwid;
-	uint64_t    member;
-
-	if (get_auth_param(w, params, NULL, NULL) &&
-	    get_member_param(w, params, &cp, &nwid, &member)) {
-		cp->ops->get_member(cp, w, nwid, member);
-	}
-}
-
-static void
-delete_network_member(worker *w, object *params)
-{
-	controller *cp;
-	uint64_t    nwid;
-	uint64_t    member;
-
-	if (get_auth_param(w, params, NULL, NULL) &&
-	    get_member_param(w, params, &cp, &nwid, &member)) {
-		cp->ops->delete_member(cp, w, nwid, member);
-	}
-}
-
-static void
-authorize_network_member(worker *w, object *params)
-{
-	controller *cp;
-	uint64_t    nwid;
-	uint64_t    member;
-
-	if (get_auth_param(w, params, NULL, NULL) &&
-	    get_member_param(w, params, &cp, &nwid, &member)) {
-		cp->ops->authorize_member(cp, w, nwid, member);
-	}
-}
-
-static void
-deauthorize_network_member(worker *w, object *params)
-{
-	controller *cp;
-	uint64_t    nwid;
-	uint64_t    member;
-
-	if (get_auth_param(w, params, NULL, NULL) &&
-	    get_member_param(w, params, &cp, &nwid, &member)) {
-		cp->ops->deauthorize_member(cp, w, nwid, member);
-	}
 }
 
 static void
@@ -1370,9 +1227,9 @@ static worker_ops *
 find_worker_ops(const char *name)
 {
 	worker_ops_entry *ent;
-	// Default to controller.
+	// Default to controller_zt1.
 	if ((name == NULL) || (*name == '\0')) {
-		name = "controller";
+		name = "controller_zt1";
 	}
 	for (ent = ops_types; ent != NULL; ent = ent->next) {
 		if (strcmp(ent->name, name) == 0) {
@@ -1801,8 +1658,8 @@ main(int argc, char **argv)
 		}
 	}
 
-	if ((!worker_register_ops("controller", &controller_ops)) ||
-	    (!worker_register_ops("central", &central_ops))) {
+	if ((!worker_register_ops("controller_zt1", &controller_zt1_ops)) ||
+	    (!worker_register_ops("controller_ztcentral", &controller_ztcentral_ops))) {
 		fprintf(stderr, "Failed to register worker ops\n");
 		exit(1);
 	}

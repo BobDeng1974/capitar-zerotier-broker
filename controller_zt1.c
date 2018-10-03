@@ -28,10 +28,9 @@
 #include "worker.h"
 
 static bool
-central_init_req(controller *cp, worker *w, const char *fmt, ...)
+controller_init_req(controller *cp, worker *w, const char *fmt, ...)
 {
 	char          uri[256];
-	char          token[256];
 	nng_http_req *req;
 	va_list       ap;
 
@@ -42,13 +41,11 @@ central_init_req(controller *cp, worker *w, const char *fmt, ...)
 	vsnprintf(uri, sizeof(uri), fmt, ap);
 	va_end(ap);
 
-	snprintf(token, sizeof(token), "Bearer %s", get_controller_secret(cp));
-
 	if ((nng_http_req_set_uri(req, uri) != 0) ||
 	    (nng_http_req_set_header(req, "Host", get_controller_host(cp)) !=
 	        0) ||
-	    (nng_http_req_set_header(req, "Authorization", token) != 0) ||
-	    (nng_http_req_set_data(req, NULL, 0) != 0)) {
+	    (nng_http_req_set_header(
+	         req, "X-ZT1-Auth", get_controller_secret(cp)) != 0)) {
 		send_err(w, E_NOMEM, NULL);
 		return (false);
 	}
@@ -56,13 +53,13 @@ central_init_req(controller *cp, worker *w, const char *fmt, ...)
 }
 
 static void
-central_get_status_cb(worker *w, void *body, size_t len)
+controller_get_status_cb(worker *w, void *body, size_t len)
 {
 	object *obj;
 	bool    b;
 
 	if (((obj = parse_obj(body, len)) == NULL) ||
-	    (!get_obj_bool(obj, "online", &b)) || (!b)) {
+	    (!get_obj_bool(obj, "controller", &b)) || (!b)) {
 		free_obj(obj);
 		send_err(w, E_BADJSON, NULL);
 		return;
@@ -70,8 +67,8 @@ central_get_status_cb(worker *w, void *body, size_t len)
 	free_obj(obj);
 	if (((obj = alloc_obj()) == NULL) ||
 	    (!add_obj_string(obj, "version", RPC_VERSION)) ||
-	    (!add_obj_bool(obj, "controller", false)) ||
-	    (!add_obj_bool(obj, "central", true))) {
+	    (!add_obj_bool(obj, "controller_zt1", true)) ||
+	    (!add_obj_bool(obj, "controller_ztcentral", false))) {
 		free_obj(obj);
 		send_err(w, E_NOMEM, NULL);
 		return;
@@ -81,16 +78,16 @@ central_get_status_cb(worker *w, void *body, size_t len)
 }
 
 static void
-central_get_status(controller *cp, worker *w)
+controller_get_status(controller *cp, worker *w)
 {
-	if (!central_init_req(cp, w, "/api/status")) {
+	if (!controller_init_req(cp, w, "/controller")) {
 		return;
 	}
-	worker_http(w, central_get_status_cb);
+	worker_http(w, controller_get_status_cb);
 }
 
 static void
-central_get_networks_cb(worker *w, void *body, size_t len)
+controller_get_networks_cb(worker *w, void *body, size_t len)
 {
 	object *arr;
 	object *arr2;
@@ -106,12 +103,10 @@ central_get_networks_cb(worker *w, void *body, size_t len)
 	}
 
 	for (int i = 0; i < get_arr_len(arr); i++) {
-		object * obj;
 		char *   s;
 		char *   ep;
 		uint64_t nwid;
-		if ((!get_arr_obj(arr, i, &obj)) ||
-		    (!get_obj_string(obj, "id", &s)) ||
+		if ((!get_arr_string(arr, i, &s)) ||
 		    ((nwid = strtoull(s, &ep, 16)) == 0) || (*ep != '\0')) {
 			free_obj(arr);
 			free_obj(arr2);
@@ -133,19 +128,18 @@ central_get_networks_cb(worker *w, void *body, size_t len)
 }
 
 static void
-central_get_networks(controller *cp, worker *w)
+controller_get_networks(controller *cp, worker *w)
 {
-	if (!central_init_req(cp, w, "/api/network")) {
+	if (!controller_init_req(cp, w, "/controller/network")) {
 		return;
 	}
 
-	worker_http(w, central_get_networks_cb);
+	worker_http(w, controller_get_networks_cb);
 }
 
 static void
-central_get_network_cb(worker *w, void *body, size_t len)
+controller_get_network_cb(worker *w, void *body, size_t len)
 {
-	object *obj0;
 	object *obj1;
 	object *obj2;
 	object *obj3;
@@ -159,8 +153,7 @@ central_get_network_cb(worker *w, void *body, size_t len)
 	object *v6am   = NULL;
 	object *routes = NULL;
 
-	if (((obj0 = parse_obj(body, len)) == NULL) ||
-	    (!get_obj_obj(obj0, "config", &obj1)) ||
+	if (((obj1 = parse_obj(body, len)) == NULL) ||
 	    (!get_obj_string(obj1, "id", &id)) ||
 	    (!get_obj_string(obj1, "name", &name)) ||
 	    (!get_obj_number(obj1, "creationTime", &crtime)) ||
@@ -173,7 +166,7 @@ central_get_network_cb(worker *w, void *body, size_t len)
 	    (!get_obj_obj(obj1, "v6AssignMode", &obj3)) ||
 	    ((v6am = clone_obj(obj3)) == NULL) ||
 	    (!get_obj_bool(obj1, "private", &prv))) {
-		free_obj(obj0);
+		free_obj(obj1);
 		free_obj(routes);
 		free_obj(v4am);
 		free_obj(v6am);
@@ -200,11 +193,11 @@ central_get_network_cb(worker *w, void *body, size_t len)
 		goto err;
 	}
 
-	free_obj(obj0);
 	send_result(w, obj2);
+	free_obj(obj1);
 	return;
 err:
-	free_obj(obj0);
+	free_obj(obj1);
 	free_obj(obj2);
 	free_obj(routes);
 	free_obj(v4am);
@@ -213,67 +206,60 @@ err:
 }
 
 static void
-central_get_network(controller *cp, worker *w, uint64_t nwid)
+controller_get_network(controller *cp, worker *w, uint64_t nwid)
 {
-	if (!central_init_req(cp, w, "/api/network/%016llx", nwid)) {
+	if (!controller_init_req(cp, w, "/controller/network/%016llx", nwid)) {
 		return;
 	}
 
-	worker_http(w, central_get_network_cb);
+	worker_http(w, controller_get_network_cb);
 }
 
 static void
-central_get_members_cb(worker *w, void *body, size_t len)
+controller_get_members_cb(worker *w, void *body, size_t len)
 {
-	object *arr1;
-	object *arr2;
+	object *obj;
+	object *arr;
+	char *  name;
 
-	if ((arr1 = parse_obj(body, len)) == NULL) {
+	if ((obj = parse_obj(body, len)) == NULL) {
 		send_err(w, E_BADJSON, NULL);
 		return;
 	}
 
-	if ((arr2 = alloc_arr()) == NULL) {
-		free_obj(arr1);
+	if ((arr = alloc_arr()) == NULL) {
+		free_obj(obj);
 		send_err(w, E_NOMEM, NULL);
 		return;
 	}
-	for (int i = 0; i < get_arr_len(arr1); i++) {
-		object *obj;
-		char *  s;
-		if ((!get_arr_obj(arr1, i, &obj)) ||
-		    (!get_obj_string(obj, "nodeId", &s))) {
-			free_obj(arr2);
-			free_obj(arr1);
-			send_err(w, E_BADJSON, NULL);
-			return;
-		}
-		if (!add_arr_string(arr2, s)) {
-			free_obj(arr2);
-			free_obj(arr1);
+	name = NULL;
+	while ((name = next_obj_key(obj, name)) != NULL) {
+		if (!add_arr_string(arr, name)) {
+			free_obj(arr);
+			free_obj(obj);
 			send_err(w, E_NOMEM, NULL);
 			return;
 		}
 	}
-	free_obj(arr1);
+	free_obj(obj);
 
-	send_result(w, arr2);
+	send_result(w, arr);
 }
 
 static void
-central_get_members(controller *cp, worker *w, uint64_t nwid)
+controller_get_members(controller *cp, worker *w, uint64_t nwid)
 {
-	if (!central_init_req(cp, w, "/api/network/%016llx/member", nwid)) {
+	if (!controller_init_req(
+	        cp, w, "/controller/network/%016llx/member", nwid)) {
 		return;
 	}
 
-	worker_http(w, central_get_members_cb);
+	worker_http(w, controller_get_members_cb);
 }
 
 static void
-central_get_member_cb(worker *w, void *body, size_t len)
+controller_get_member_cb(worker *w, void *body, size_t len)
 {
-	object *obj0;
 	object *obj1;
 	object *obj2;
 	object *obj3;
@@ -285,8 +271,7 @@ central_get_member_cb(worker *w, void *body, size_t len)
 	int     rev;
 	object *ipassign = NULL;
 
-	if (((obj0 = parse_obj(body, len)) == NULL) ||
-	    (!get_obj_obj(obj0, "config", &obj1)) ||
+	if (((obj1 = parse_obj(body, len)) == NULL) ||
 	    (!get_obj_string(obj1, "id", &id)) ||
 	    (!get_obj_string(obj1, "nwid", &nwid)) ||
 	    (!get_obj_bool(obj1, "authorized", &auth)) ||
@@ -294,7 +279,7 @@ central_get_member_cb(worker *w, void *body, size_t len)
 	    (!get_obj_obj(obj1, "ipAssignments", &obj3)) ||
 	    ((ipassign = clone_obj(obj3)) == NULL) ||
 	    (!get_obj_bool(obj1, "activeBridge", &bridge))) {
-		free_obj(obj0);
+		free_obj(obj1);
 		free_obj(ipassign);
 		send_err(w, E_BADJSON, NULL);
 		return;
@@ -307,140 +292,161 @@ central_get_member_cb(worker *w, void *body, size_t len)
 	    (!add_obj_bool(obj2, "activeBridge", bridge)) ||
 	    (!add_obj_int(obj2, "revision", rev)) ||
 	    (!add_obj_obj(obj2, "ipAssignments", ipassign))) {
-		free_obj(obj0);
+		free_obj(obj1);
 		free_obj(obj2);
 		free_obj(ipassign);
 		send_err(w, E_NOMEM, NULL);
 		return;
 	}
-
 	send_result(w, obj2);
-	free_obj(obj0);
+	free_obj(obj1);
 }
 
 static void
-central_get_member(controller *cp, worker *w, uint64_t nwid, uint64_t node)
+controller_get_member(controller *cp, worker *w, uint64_t nwid, uint64_t node)
 {
-	if (!central_init_req(
-	        cp, w, "/api/network/%016llx/member/%010llx", nwid, node)) {
+	if (!controller_init_req(cp, w,
+	        "/controller/network/%016llx/member/%010llx", nwid, node)) {
 		return;
 	}
 
-	worker_http(w, central_get_member_cb);
+	worker_http(w, controller_get_member_cb);
 }
 
 static void
-central_delete_member(controller *cp, worker *w, uint64_t nwid, uint64_t node)
+controller_delete_member_cb(worker *w, void *body, size_t len)
 {
-	// Feel free to fix this when/if Central adds DELETE support.
+	object *obj;
 
-	send_err(w, E_INTERNAL, "Central does not support DELETE of members");
+	// Delete has no body text.
+	// NB: As of this writing, the controller responds with a 200
+	// error code, and does not actually delete the member.  We are
+	// going to pretend it worked for now, and when the upstream bug
+	// is fixed this code will Just Work.  Short of performing another
+	// GET to see if it worked, there isn't much else we can do anyway.
+	if ((obj = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+	} else {
+		send_result(w, obj);
+	}
 }
 
 static void
-central_authorize_member_cb(worker *w, void *body, size_t len)
+controller_delete_member(
+    controller *cp, worker *w, uint64_t nwid, uint64_t node)
 {
-	object *obj1;
-	object *obj2;
+	nng_http_req *req;
+
+	if (!controller_init_req(cp, w,
+	        "/controller/network/%016llx/member/%010llx", nwid, node)) {
+		return;
+	}
+	req = worker_http_req(w);
+	if (nng_http_req_set_method(req, "DELETE") != 0) {
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+	worker_http(w, controller_delete_member_cb);
+}
+
+static void
+controller_authorize_member_cb(worker *w, void *body, size_t len)
+{
+	object *obj;
 	bool    auth;
 
-	if (((obj1 = parse_obj(body, len)) == NULL) ||
-	    (!get_obj_obj(obj1, "config", &obj2)) ||
-	    (!get_obj_bool(obj2, "authorized", &auth))) {
-		free_obj(obj1);
+	if (((obj = parse_obj(body, len)) == NULL) ||
+	    (!get_obj_bool(obj, "authorized", &auth))) {
+		free_obj(obj);
 		send_err(w, E_BADJSON, NULL);
 		return;
 	}
-	free_obj(obj1);
+	free_obj(obj);
 	if (!auth) {
 		send_err(w, E_INTERNAL, "Member not authorized");
 		return;
 	}
 
-	if ((obj1 = alloc_obj()) == NULL) {
+	if ((obj = alloc_obj()) == NULL) {
 		send_err(w, E_NOMEM, NULL);
 	} else {
-		send_result(w, obj1);
+		send_result(w, obj);
 	}
 }
 
 static void
-central_authorize_member(
+controller_authorize_member(
     controller *cp, worker *w, uint64_t nwid, uint64_t node)
 {
 	nng_http_req *req;
-	char *        body = "{ \"config\": { \"authorized\": true }}";
+	char *        body = "{ \"authorized\": true }";
 
-	if (!central_init_req(
-	        cp, w, "/api/network/%016llx/member/%010llx", nwid, node)) {
+	if (!controller_init_req(cp, w,
+	        "/controller/network/%016llx/member/%010llx", nwid, node)) {
 		return;
 	}
-
 	req = worker_http_req(w);
 	if ((nng_http_req_set_method(req, "POST") != 0) ||
 	    (nng_http_req_copy_data(req, body, strlen(body)) != 0)) {
 		send_err(w, E_NOMEM, NULL);
 		return;
 	}
-	worker_http(w, central_authorize_member_cb);
+	worker_http(w, controller_authorize_member_cb);
 }
 
 static void
-central_deauthorize_member_cb(worker *w, void *body, size_t len)
+controller_deauthorize_member_cb(worker *w, void *body, size_t len)
 {
-	object *obj1;
-	object *obj2;
+	object *obj;
 	bool    auth;
 
-	if (((obj1 = parse_obj(body, len)) == NULL) ||
-	    (!get_obj_obj(obj1, "config", &obj2)) ||
-	    (!get_obj_bool(obj2, "authorized", &auth))) {
-		free_obj(obj1);
+	if (((obj = parse_obj(body, len)) == NULL) ||
+	    (!get_obj_bool(obj, "authorized", &auth))) {
+		free_obj(obj);
 		send_err(w, E_BADJSON, NULL);
 		return;
 	}
-	free_obj(obj1);
+	free_obj(obj);
 	if (auth) {
 		send_err(w, E_INTERNAL, "Member still authorized");
 		return;
 	}
 
-	if ((obj1 = alloc_obj()) == NULL) {
+	if ((obj = alloc_obj()) == NULL) {
 		send_err(w, E_NOMEM, NULL);
 	} else {
-		send_result(w, obj1);
+		send_result(w, obj);
 	}
 }
 
 static void
-central_deauthorize_member(
+controller_deauthorize_member(
     controller *cp, worker *w, uint64_t nwid, uint64_t node)
 {
 	nng_http_req *req;
-	char *        body = "{ \"config\": { \"authorized\": false }}";
+	char *        body = "{ \"authorized\": false }";
 
-	if (!central_init_req(
-	        cp, w, "/api/network/%016llx/member/%010llx", nwid, node)) {
+	if (!controller_init_req(cp, w,
+	        "/controller/network/%016llx/member/%010llx", nwid, node)) {
 		return;
 	}
-
 	req = worker_http_req(w);
 	if ((nng_http_req_set_method(req, "POST") != 0) ||
 	    (nng_http_req_copy_data(req, body, strlen(body)) != 0)) {
 		send_err(w, E_NOMEM, NULL);
 		return;
 	}
-	worker_http(w, central_deauthorize_member_cb);
+	worker_http(w, controller_deauthorize_member_cb);
 }
 
-worker_ops central_ops = {
+worker_ops controller_zt1_ops = {
 	.version            = WORKER_OPS_VERSION,
-	.get_status         = central_get_status,
-	.get_networks       = central_get_networks,
-	.get_network        = central_get_network,
-	.get_members        = central_get_members,
-	.get_member         = central_get_member,
-	.delete_member      = central_delete_member,
-	.authorize_member   = central_authorize_member,
-	.deauthorize_member = central_deauthorize_member,
+	.get_status         = controller_get_status,
+	.get_networks       = controller_get_networks,
+	.get_network        = controller_get_network,
+	.get_members        = controller_get_members,
+	.get_member         = controller_get_member,
+	.delete_member      = controller_delete_member,
+	.authorize_member   = controller_authorize_member,
+	.deauthorize_member = controller_deauthorize_member,
 };
