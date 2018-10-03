@@ -1568,7 +1568,7 @@ load_config(const char *path, char **errmsg)
 			free_config(wc);
 			return (NULL);
 		}
-		cp->type = "controller";
+		cp->type = "controller_zt1";
 		get_obj_string(obj, "type", &cp->type);
 		if (find_worker_ops(cp->type) == NULL) {
 			ERRF(errmsg, "controller %d unknown type", i);
