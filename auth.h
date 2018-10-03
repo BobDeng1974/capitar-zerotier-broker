@@ -58,6 +58,7 @@ extern void        free_tokens(token **, int);
 
 extern uint64_t    find_role(const char *);
 extern uint64_t    find_role_ext(worker_config *, const char *);
+extern bool check_role_name_configured(worker_config *c, const char *role)
 extern const char *role_name(uint64_t);
 extern bool        check_api_role(const char *, uint64_t);
 extern bool        check_nwid_role(uint64_t, uint64_t);
