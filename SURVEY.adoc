@@ -13,16 +13,7 @@ DNS or some other mechanism.)
 The proxy sends a blank survey (we don't care about the payload) to each
 worker (one broadcast) at periodic (configurable?) intervals.
 
-The workers respond with a survey response that takes the form (all
-values are in network/big-endian order.
-
-```
-[ version - must be zero ] -- 8 bits
-[ ZT port                ] -- 24 bits zerotier transport port for REP
-[ number of controllers  ] -- 32 bits
-[ controller node id...  ] -- 64-bit controller node id, repeated for each
-...
-```
+The workers respond with a JSON object that has these members:
 
 port:: int, the ZeroTier REQ/REP port
 controllers:: array of controllers, where each is a string

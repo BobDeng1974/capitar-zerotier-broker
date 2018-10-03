@@ -28,6 +28,10 @@
 typedef struct object object;
 typedef struct array  array;
 
+// load and save JSON to external files
+extern object *obj_load(const char *, char **);
+extern bool    obj_save(const char *, object *, char **);
+
 extern object *alloc_arr(void);
 extern object *alloc_obj(void);
 extern void    free_obj(object *);

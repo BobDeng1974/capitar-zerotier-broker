@@ -20,25 +20,15 @@
 #include <nng/supplemental/http/http.h>
 
 #include "object.h"
-
-// RPC VERSION number.  Remember to bump according to SemVer.
-#ifndef RPC_VERSION
-#define RPC_VERSION "1.0"
-#endif
-
-enum worker_errors {
-	E_BADREQUEST = -32600, // Invalid Request
-	E_BADMETHOD  = -32601, // Method not found
-	E_BADPARAMS  = -32602, // Invalid params
-	E_INTERNAL   = -32000, // Internal error (see message)
-	E_NOMEM      = -32001, // Out of memory
-	E_BADJSON    = -32002, // Bad JSON from backend
-	E_NOCTRLR    = -32003, // Specified controller does not exist
-};
+#include "rpc.h"
 
 typedef struct worker_ops worker_ops;
 typedef struct worker     worker;
 typedef struct controller controller;
+
+// when authenticating a user using username/password, we return the actual
+// user structure.  As we only do this for auth methods, we want the
+// user structure.
 
 extern const char *get_controller_host(controller *);
 extern const char *get_controller_secret(controller *);
@@ -70,6 +60,7 @@ typedef void (*worker_http_cb)(worker *, void *, size_t);
 extern void worker_http(worker *, worker_http_cb);
 
 struct worker_ops {
+	int version;
 	void (*get_status)(controller *, worker *);
 	void (*get_networks)(controller *, worker *);
 	void (*get_network)(controller *, worker *, uint64_t);
@@ -80,7 +71,78 @@ struct worker_ops {
 	void (*deauthorize_member)(controller *, worker *, uint64_t, uint64_t);
 };
 
+#define WORKER_OPS_VERSION 0
+
+extern bool worker_register_ops(const char *, worker_ops *);
+
 extern worker_ops controller_ops;
 extern worker_ops central_ops;
+
+typedef struct proxy_config      proxy_config;
+typedef struct controller_config controller_config;
+typedef struct worker_config     worker_config;
+typedef struct tls_config        tls_config;
+typedef struct net_config        net_config;
+typedef struct api_config        api_config;
+typedef struct role_config       role_config;
+
+struct tls_config {
+	char *keypass;
+	char *keyfile;
+	char *cacert;
+	bool  insecure;
+};
+
+struct role_config {
+	char *   name;
+	uint64_t mask;
+};
+
+struct proxy_config {
+	char *   survurl;
+	char *   rpcurl;
+	int      nworkers;
+	uint64_t role_add;
+	uint64_t role_del;
+};
+
+struct controller_config {
+	char *name;
+	char *url;
+	char *secret;
+	char *type;
+};
+
+struct api_config {
+	char *   method;
+	uint64_t allow; // mask of allowed roles
+	uint64_t deny;  // mask of denied roles
+};
+
+struct net_config {
+	uint64_t nwid;
+	uint64_t allow; // mask of allowed roles
+	uint64_t deny;  // mask of denied roles
+};
+
+// A worker_config has the JSON tree associated with it and references
+// that.  The configuration is destroyed at the same time the tree is.
+struct worker_config {
+	object *           json;         // JSON for the entire tree
+	tls_config         tls;          // TLS settings
+	int                nproxies;     // Number of proxies
+	proxy_config *     proxies;      // Proxy structures
+	int                ncontrollers; // Number of controllers
+	controller_config *controllers;  // Controller structures
+	int                nroles;
+	role_config *      roles;
+	int                napis;
+	api_config *       apis;
+	int                nnets;
+	net_config *       nets;
+	char *             zthome;
+	char *             userdir;
+	char *             tokendir;
+};
 
 #endif // WORKER_H

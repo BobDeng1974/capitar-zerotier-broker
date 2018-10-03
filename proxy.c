@@ -46,6 +46,9 @@
 #include <nng/supplemental/util/platform.h>
 #include <nng/transport/zerotier/zerotier.h>
 
+#include <mbedtls/base64.h>
+
+#include <ctype.h>
 #include <errno.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -55,6 +58,7 @@
 
 #include "cfgfile.h"
 #include "object.h"
+#include "rpc.h"
 
 #ifndef CONFIG
 #define CONFIG "proxy.cfg"
@@ -368,6 +372,72 @@ rpcerr(nng_aio *aio, uint16_t code, const char *msg)
 	nng_aio_finish(aio, 0);
 }
 
+static void
+autherr(nng_aio *aio, const char *realm, const char *msg, int code)
+{
+	nng_http_res *res = NULL;
+	char          auth[1024];
+	char          doc[256];
+	int           rv;
+
+	snprintf(doc, sizeof(doc), "{ \"status\": %d, \"message\": \"%s\" }",
+	    NNG_HTTP_STATUS_UNAUTHORIZED, msg);
+
+	// Authentication errors require us to send 401 and a WWW-Authenticate
+	// header.  We only advertise the "basic" realm.
+	// Clients may send *either* a Bearer token, or basic (or basic + otp)
+	// credentials.  If a one time password is required, then that
+	// requires a
+
+	if ((rv = nng_http_res_alloc(&res)) != 0) {
+		nng_aio_finish(aio, rv);
+		return;
+	}
+	if (((rv = nng_http_res_set_status(
+	          res, NNG_HTTP_STATUS_UNAUTHORIZED)) != 0) ||
+	    ((rv = nng_http_res_set_reason(res, msg)) != 0) ||
+	    ((rv = nng_http_res_set_header(
+	          res, "Content-Type", "application/json")) != 0) ||
+	    ((rv = nng_http_res_copy_data(res, doc, strlen(doc))) != 0)) {
+
+		nng_http_res_free(res);
+		nng_aio_finish(aio, rv);
+	}
+
+	switch (code) {
+	case E_AUTHREQD:
+	case E_AUTHFAIL:
+	default:
+		snprintf(auth, sizeof(auth), "Basic realm=\"%s\"", realm);
+		break;
+	case E_AUTHEXPIRE:
+	case E_AUTHTOKEN:
+		snprintf(auth, sizeof(auth),
+		    "Bearer realm=\"%s\", error=\"invalid_token\", "
+		    "error_description=\"%s\"",
+		    realm, msg);
+		break;
+	case E_AUTHOTP:
+		// OTP extension. This indicates that a one time password
+		// should be supplied with the Basic authentication.
+		// We pick this up via a second HTTP Authorization header,
+		// which will look like "Authorization: OTP <pin>"
+		snprintf(auth, sizeof(auth),
+		    "Basic realm=\"%s\", X-ZTC-OTP realm=\"%s\"", realm,
+		    realm);
+		break;
+	}
+	if ((rv = nng_http_res_set_header(res, "WWW-Authenticate", auth)) !=
+	    0) {
+		nng_http_res_free(res);
+		nng_aio_finish(aio, rv);
+		return;
+	}
+
+	nng_aio_set_output(aio, 0, res);
+	nng_aio_finish(aio, 0);
+}
+
 static nng_mtx *   reaplock = NULL;
 static nng_cv *    reapcv   = NULL;
 static nng_thread *reapthr  = NULL;
@@ -449,6 +519,7 @@ getctx(controller *cp, void (*cb)(void *))
 		freectx(ctx);
 		return (NULL);
 	}
+	ctx->cp = cp;
 	return (ctx);
 }
 
@@ -476,6 +547,7 @@ rpc_cb(void *arg)
 	object *      obj;
 	object *      tobj;
 	char *        str;
+	char *        realm;
 	nng_http_res *res;
 	int           rv;
 
@@ -511,7 +583,8 @@ rpc_cb(void *arg)
 		msg = nng_aio_get_msg(ctx->reqaio);
 		nng_aio_set_msg(ctx->reqaio, NULL);
 
-		obj = parse_obj(nng_msg_body(msg), nng_msg_len(msg));
+		obj   = parse_obj(nng_msg_body(msg), nng_msg_len(msg));
+		realm = ctx->cp->name;
 		freectx(ctx);
 		rv  = NNG_EPROTO;
 		res = NULL;
@@ -522,17 +595,29 @@ rpc_cb(void *arg)
 		}
 
 		if (get_obj_obj(obj, "error", &tobj)) {
-			char *rsn;
-			int   code = 500;
+			int   code;
+			char *rsn = "unknown error";
+
+			get_obj_string(tobj, "message", &rsn);
 			if (get_obj_int(tobj, "code", &code)) {
-				if ((code < 100) || (code > 599)) {
-					code = 500;
+				switch (code) {
+				case E_AUTHREQD:
+				case E_AUTHTOKEN:
+				case E_AUTHEXPIRE:
+				case E_AUTHFAIL:
+				case E_AUTHOTP:
+					autherr(httpaio, realm, rsn, code);
+					break;
+				default:
+					if ((code < 100) || (code > 599)) {
+						code = 500;
+					}
+					rpcerr(httpaio, code, rsn);
+					break;
 				}
+			} else {
+				rpcerr(httpaio, 500, rsn);
 			}
-			if (!get_obj_string(tobj, "message", &rsn)) {
-				rsn = "unknown error";
-			}
-			rpcerr(httpaio, code, rsn);
 			free_obj(obj);
 			break;
 		}
@@ -616,7 +701,7 @@ do_rpc(nng_aio *aio, controller *cp, const char *rpcmeth, object *params)
 }
 
 static object *
-create_controller_params(controller *cp)
+create_controller_params(controller *cp, object *auth)
 {
 	object *params;
 
@@ -625,167 +710,182 @@ create_controller_params(controller *cp)
 		free_obj(params);
 		return (NULL);
 	}
+	if (!add_obj_obj(params, "auth", auth)) {
+		free_obj(auth);
+		free_obj(params);
+		return (NULL);
+	}
 	return (params);
 }
 
 static void
-do_status(nng_aio *aio, const char *method, controller *cp)
+do_status(nng_aio *aio, object *auth, const char *method, controller *cp)
 {
 	object *params;
 	if (strcmp(method, "GET") != 0) {
 		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
 		return;
 	}
-	if ((params = create_controller_params(cp)) == NULL) {
+	if ((params = create_controller_params(cp, auth)) == NULL) {
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
 
-	do_rpc(aio, cp, "get-status", params);
+	do_rpc(aio, cp, METHOD_GET_STATUS, params);
 }
 
 static void
-do_networks(nng_aio *aio, const char *method, controller *cp)
+do_networks(nng_aio *aio, object *auth, const char *method, controller *cp)
 {
 	object *params;
 	if (strcmp(method, "GET") != 0) {
+		free_obj(auth);
 		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
 		return;
 	}
-	if ((params = create_controller_params(cp)) == NULL) {
+	if ((params = create_controller_params(cp, auth)) == NULL) {
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
 
-	do_rpc(aio, cp, "get-networks", params);
+	do_rpc(aio, cp, METHOD_LIST_NETWORKS, params);
 }
 
 static void
-do_get_network(nng_aio *aio, controller *cp, uint64_t nwid)
+do_get_network(nng_aio *aio, object *auth, controller *cp, uint64_t nwid)
 {
 	object *params;
 
-	if (((params = create_controller_params(cp)) == NULL) ||
+	if (((params = create_controller_params(cp, auth)) == NULL) ||
 	    (!add_obj_uint64(params, "network", nwid))) {
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
-	do_rpc(aio, cp, "get-network", params);
+	do_rpc(aio, cp, METHOD_GET_NETWORK, params);
 }
 
 static void
-do_get_network_members(nng_aio *aio, controller *cp, uint64_t nwid)
+do_get_network_members(
+    nng_aio *aio, object *auth, controller *cp, uint64_t nwid)
 {
 	object *params;
 
-	if (((params = create_controller_params(cp)) == NULL) ||
+	if (((params = create_controller_params(cp, auth)) == NULL) ||
 	    (!add_obj_uint64(params, "network", nwid))) {
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
-	do_rpc(aio, cp, "get-network-members", params);
+	do_rpc(aio, cp, METHOD_LIST_MEMBERS, params);
 }
 
 static void
-do_get_member(nng_aio *aio, controller *cp, uint64_t nwid, uint64_t nodeid)
+do_get_member(
+    nng_aio *aio, object *auth, controller *cp, uint64_t nwid, uint64_t nodeid)
 {
 	object *params;
 
-	if (((params = create_controller_params(cp)) == NULL) ||
+	if (((params = create_controller_params(cp, auth)) == NULL) ||
+	    (!add_obj_uint64(params, "network", nwid)) ||
+	    (!add_obj_uint64(params, "member", nodeid))) {
+		nng_aio_finish(aio, NNG_ENOMEM);
+		free_obj(auth);
+		return;
+	}
+	do_rpc(aio, cp, METHOD_GET_MEMBER, params);
+}
+
+static void
+do_delete_member(
+    nng_aio *aio, object *auth, controller *cp, uint64_t nwid, uint64_t nodeid)
+{
+	object *params;
+
+	if (((params = create_controller_params(cp, auth)) == NULL) ||
 	    (!add_obj_uint64(params, "network", nwid)) ||
 	    (!add_obj_uint64(params, "member", nodeid))) {
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
-	do_rpc(aio, cp, "get-network-member", params);
-}
-
-static void
-do_delete_member(nng_aio *aio, controller *cp, uint64_t nwid, uint64_t nodeid)
-{
-	object *params;
-
-	if (((params = create_controller_params(cp)) == NULL) ||
-	    (!add_obj_uint64(params, "network", nwid)) ||
-	    (!add_obj_uint64(params, "member", nodeid))) {
-		nng_aio_finish(aio, NNG_ENOMEM);
-		return;
-	}
-	do_rpc(aio, cp, "delete-network-member", params);
+	do_rpc(aio, cp, METHOD_DELETE_MEMBER, params);
 }
 
 static void
 do_authorize_member(
-    nng_aio *aio, controller *cp, uint64_t nwid, uint64_t nodeid)
+    nng_aio *aio, object *auth, controller *cp, uint64_t nwid, uint64_t nodeid)
 {
 	object *params;
 
-	if (((params = create_controller_params(cp)) == NULL) ||
+	if (((params = create_controller_params(cp, auth)) == NULL) ||
 	    (!add_obj_uint64(params, "network", nwid)) ||
 	    (!add_obj_uint64(params, "member", nodeid))) {
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
-	do_rpc(aio, cp, "authorize-network-member", params);
+	do_rpc(aio, cp, METHOD_AUTH_MEMBER, params);
 }
 
 static void
 do_deauthorize_member(
-    nng_aio *aio, controller *cp, uint64_t nwid, uint64_t nodeid)
+    nng_aio *aio, object *auth, controller *cp, uint64_t nwid, uint64_t nodeid)
 {
 	object *params;
 
-	if (((params = create_controller_params(cp)) == NULL) ||
+	if (((params = create_controller_params(cp, auth)) == NULL) ||
 	    (!add_obj_uint64(params, "network", nwid)) ||
 	    (!add_obj_uint64(params, "member", nodeid))) {
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
-	do_rpc(aio, cp, "deauthorize-network-member", params);
+	do_rpc(aio, cp, METHOD_DEAUTH_MEMBER, params);
 }
 
 static void
-do_network_member(nng_aio *aio, const char *method, controller *cp,
-    uint64_t nwid, uint64_t nodeid, const char *uri)
+do_network_member(nng_aio *aio, object *auth, const char *method,
+    controller *cp, uint64_t nwid, uint64_t nodeid, const char *uri)
 {
 	if (strcmp(uri, "") == 0) {
 		if (strcmp(method, "GET") == 0) {
-			do_get_member(aio, cp, nwid, nodeid);
+			do_get_member(aio, auth, cp, nwid, nodeid);
 			return;
 		}
 		if (strcmp(method, "DELETE") == 0) {
-			do_delete_member(aio, cp, nwid, nodeid);
+			do_delete_member(aio, auth, cp, nwid, nodeid);
 			return;
 		}
-		// In the future we could support POST for creating members.
-		// This is useful for ensuring that the member exists.  Having
-		// said that, I believe that /authorize or /deauthorize will
-		// create the member if it does not already exist.
+		// In the future we could support POST for creating
+		// members. This is useful for ensuring that the member
+		// exists.  Having said that, I believe that /authorize
+		// or /deauthorize will create the member if it does
+		// not already exist.
+		free_obj(auth);
 		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
 		return;
 	}
 	if (strcmp(uri, "/authorize") == 0) {
 		if (strcmp(method, "POST") == 0) {
-			do_authorize_member(aio, cp, nwid, nodeid);
+			do_authorize_member(aio, auth, cp, nwid, nodeid);
 			return;
 		}
+		free_obj(auth);
 		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
 		return;
 	}
 	if (strcmp(uri, "/deauthorize") == 0) {
 		if (strcmp(method, "POST") == 0) {
-			do_deauthorize_member(aio, cp, nwid, nodeid);
+			do_deauthorize_member(aio, auth, cp, nwid, nodeid);
 			return;
 		}
+		free_obj(auth);
 		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
 		return;
 	}
+	free_obj(auth);
 	rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
 }
 
 static void
-do_network(nng_aio *aio, const char *method, controller *cp, uint64_t nwid,
-    const char *uri)
+do_network(nng_aio *aio, object *auth, const char *method, controller *cp,
+    uint64_t nwid, const char *uri)
 {
 	// The subcommand can be:
 	//
@@ -796,17 +896,19 @@ do_network(nng_aio *aio, const char *method, controller *cp, uint64_t nwid,
 
 	if (strcmp(uri, "") == 0) {
 		if (strcmp(method, "GET") == 0) {
-			do_get_network(aio, cp, nwid);
+			do_get_network(aio, auth, cp, nwid);
 			return;
 		}
+		free_obj(auth);
 		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
 		return;
 	}
 	if (strcmp(uri, "/member") == 0) {
 		if (strcmp(method, "GET") == 0) {
-			do_get_network_members(aio, cp, nwid);
+			do_get_network_members(aio, auth, cp, nwid);
 			return;
 		}
+		free_obj(auth);
 		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
 		return;
 	}
@@ -817,17 +919,249 @@ do_network(nng_aio *aio, const char *method, controller *cp, uint64_t nwid,
 		uri += strlen("/member/");
 		nodeid = strtoull(uri, &ep, 16);
 		if ((ep != uri) && ((*ep == '\0') || (*ep == '/'))) {
-			do_network_member(aio, method, cp, nwid, nodeid, ep);
+			do_network_member(
+			    aio, auth, method, cp, nwid, nodeid, ep);
 			return;
 		}
+		free_obj(auth);
 		rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
 		return;
 	}
+	free_obj(auth);
 	rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
+}
+
+static void
+do_tokens(nng_aio *aio, object *auth, const char *method, controller *cp,
+    object *body)
+{
+	object *params;
+	object *a;
+	char *  s;
+	double  exp;
+
+	if ((params = create_controller_params(cp, auth)) == NULL) {
+		return;
+	}
+	if (strcmp(method, "GET") == 0) {
+		do_rpc(aio, cp, METHOD_GET_TOKENS, params);
+		return;
+	}
+	if (strcmp(method, "POST") != 0) {
+		free_obj(params);
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+		return;
+	}
+
+	if (body == NULL) {
+		rpcerr(aio, NNG_HTTP_STATUS_BAD_REQUEST, "Bad JSON");
+		return;
+	}
+
+	if (get_obj_obj(body, "roles", &a)) {
+		object *roles;
+		if (((roles = clone_obj(a)) == NULL) ||
+		    (!add_obj_obj(params, "roles", roles))) {
+			free_obj(params);
+			free_obj(roles);
+			nng_aio_finish(aio, NNG_ENOMEM);
+			return;
+		}
+	}
+	if ((get_obj_string(body, "desc", &s)) &&
+	    (!add_obj_string(params, "desc", s))) {
+		free_obj(params);
+		nng_aio_finish(aio, NNG_ENOMEM);
+		return;
+	}
+	if ((get_obj_number(body, "expires", &exp)) &&
+	    (!add_obj_number(params, "expires", exp))) {
+		free_obj(params);
+		nng_aio_finish(aio, NNG_ENOMEM);
+		return;
+	}
+
+	do_rpc(aio, cp, METHOD_CREATE_TOKEN, params);
+}
+
+static void
+do_token(nng_aio *aio, object *auth, const char *method, controller *cp,
+    const char *id)
+{
+	object *params;
+
+	if ((params = create_controller_params(cp, auth)) == NULL) {
+		return;
+	}
+	if (strcmp(method, "GET") == 0) {
+		if (!add_obj_string(params, "token", id)) {
+			free_obj(params);
+			nng_aio_finish(aio, NNG_ENOMEM);
+			return;
+		}
+		do_rpc(aio, cp, METHOD_GET_TOKEN, params);
+		return;
+	}
+	if (strcmp(method, "DELETE") == 0) {
+		if (!add_obj_string(params, "token", id)) {
+			free_obj(params);
+			nng_aio_finish(aio, NNG_ENOMEM);
+			return;
+		}
+		do_rpc(aio, cp, METHOD_DELETE_TOKEN, params);
+		return;
+	}
+	free_obj(params);
+	rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+}
+
+static void
+do_self_password(nng_aio *aio, object *auth, const char *method,
+    controller *cp, object *body)
+{
+	const char *id;
+	char *      pass;
+	object *    params;
+	if ((params = create_controller_params(cp, auth)) == NULL) {
+		return;
+	}
+	if (strcmp(method, "POST") != 0) {
+		free_obj(params);
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+		return;
+	}
+	if (body == NULL) {
+		rpcerr(aio, NNG_HTTP_STATUS_BAD_REQUEST, "Bad JSON");
+		return;
+	}
+	if (!get_obj_string(body, "password", &pass)) {
+		rpcerr(aio, NNG_HTTP_STATUS_BAD_REQUEST, "Password missing");
+		return;
+	}
+	if (!add_obj_string(params, "password", pass)) {
+		rpcerr(aio, NNG_HTTP_STATUS_INTERNAL_SERVER_ERROR, NULL);
+		return;
+	}
+	do_rpc(aio, cp, METHOD_SET_PASSWD, params);
 }
 
 #define PROXY_URI "/api/1.0/proxy"
 #define PROXY_URI_LEN strlen(PROXY_URI)
+
+char *
+tokenize(char *s, char **np)
+{
+	char *n;
+	while (isspace(*s)) {
+		s++;
+	}
+	n = s;
+	if (*s == '\0') {
+		*np = n;
+		return (NULL);
+	}
+	while ((!isspace(*n)) && (*n != '\0')) {
+		n++;
+	}
+	if (isspace(*n)) {
+		*n++ = '\0';
+	}
+	*np = n;
+	return (s);
+}
+
+static bool
+parse_auth(nng_http_req *req, object **op)
+{
+	object *    o;
+	const char *h;
+	char        buf[256];
+	char *      mode;
+	char *      cred;
+	char *      next;
+
+	if ((o = alloc_obj()) == NULL) {
+		return (false);
+	}
+
+	// If an X-ZTC-OTP header is present, copy it.
+	if ((h = nng_http_req_get_header(req, "X-ZTC-OTP")) != NULL) {
+		if (!add_obj_string(o, "otp", h)) {
+			free_obj(o);
+			return (false);
+		}
+	}
+
+	// We permit setting an X-ZTC-Token to pass credentials for tokens.
+	// This allows to bypass the Bearer method, which is preferred.
+	if ((h = nng_http_req_get_header(req, "X-ZTC-Token")) != NULL) {
+		if (!add_obj_string(o, "token", h)) {
+			free_obj(o);
+			return (false);
+		}
+		*op = o;
+		return (true);
+	}
+
+	if ((h = nng_http_req_get_header(req, "Authorization")) == NULL) {
+		*op = o;
+		return (true);
+	}
+	snprintf(buf, sizeof(buf), "%s", h);
+	mode = tokenize(buf, &next);
+	if (mode == 0) {
+		*op = o;
+		return (true);
+	}
+
+	// Bearer authentication
+	if (strcmp(mode, "Bearer") == 0) {
+		if ((cred = tokenize(next, &next)) == NULL) {
+			// Create an invalid token.
+			cred = "";
+		}
+		if (!add_obj_string(o, "token", cred)) {
+			free_obj(o);
+			return (false);
+		}
+		*op = o;
+		return (true);
+	}
+
+	if (strcmp(mode, "Basic") == 0) {
+		char   userpass[256];
+		char * colon;
+		size_t len;
+		if ((cred = tokenize(next, &next)) == NULL) {
+			*op = o;
+			return (true);
+		}
+		if (mbedtls_base64_decode((void *) userpass, sizeof(userpass),
+		        &len, (void *) cred, strlen(cred)) != 0) {
+			// Indicative of bogus cred, pass empty.
+			*op = o;
+			return (true);
+		}
+		userpass[len] = '\0';
+		if ((colon = strchr(userpass, ':')) == NULL) {
+			// Invalid auth header.
+			*op = o;
+			return (true);
+		}
+		*colon++ = '\0';
+		if ((!add_obj_string(o, "user", userpass)) ||
+		    (!add_obj_string(o, "pass", colon))) {
+			free_obj(o);
+			return (false);
+		}
+		*op = o;
+		return (true);
+	}
+
+	// Other auth headers, just pass empty auth object.
+	*op = o;
+	return (true);
+}
 
 static void
 proxy_api(nng_aio *aio)
@@ -838,6 +1172,7 @@ proxy_api(nng_aio *aio)
 	const char *  name;
 	char *        ep;
 	controller *  cp;
+	object *      auth;
 
 	// Our API is:
 	// GET /api/1.0/proxy/<name>/status
@@ -845,8 +1180,12 @@ proxy_api(nng_aio *aio)
 	// GET /api/1.0/proxy/<name>/network/<nwid>/member
 	// GET /api/1.0/proxy/<name>/network/<nwid>/member/<node>
 	// DELETE /api/1.0/proxy/<name>/network/<nwid>/member/<node>
-	// POST /api/1.0/proxy/<name>/network/<nwid>/member/<node>/authorize
-	// POST /api/1.0/proxy/<name>/network/<nwid>/member/<node>/deauthorize
+	// POST
+	// /api/1.0/proxy/<name>/network/<nwid>/member/<node>/authorize
+	// POST
+	// /api/1.0/proxy/<name>/network/<nwid>/member/<node>/deauthorize
+	// POST /api/1.0/proxy/<name>/token
+	// DELETE /api/1.0/proxy/<name>/token/<tokenid>
 
 	req    = nng_aio_get_input(aio, 0);
 	method = nng_http_req_get_method(req);
@@ -874,19 +1213,25 @@ proxy_api(nng_aio *aio)
 		return;
 	}
 
+	if (!parse_auth(req, &auth)) {
+		nng_aio_finish(aio, NNG_ENOMEM);
+		return;
+	}
+
 	// Make it simpler for now.  The server framework will filter
 	// responses as neccessary.
 	if (strcmp(method, "HEAD") == 0) {
 		method = "GET";
 	}
 
-	// For now we are very picky, and do not support a trailing "/".
+	// For now we are very picky, and do not support a trailing
+	// "/".
 	if (strcmp(uri, "/status") == 0) {
-		do_status(aio, method, cp);
+		do_status(aio, auth, method, cp);
 		return;
 	}
 	if (strcmp(uri, "/network") == 0) {
-		do_networks(aio, method, cp);
+		do_networks(aio, auth, method, cp);
 		return;
 	}
 	if (strncmp(uri, "/network/", strlen("/network/")) == 0) {
@@ -895,10 +1240,47 @@ proxy_api(nng_aio *aio)
 		uri += strlen("/network/");
 		nwid = strtoull(uri, &ep, 16);
 		if ((*ep == '/') || (*ep == '\0')) {
-			do_network(aio, method, cp, nwid, ep);
+			do_network(aio, auth, method, cp, nwid, ep);
 			return;
 		}
 		rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
+		return;
+	}
+	if (strcmp(uri, "/token") == 0) {
+		char *  data;
+		size_t  len;
+		object *body;
+
+		nng_http_req_get_data(req, (void **) &data, &len);
+		body = parse_obj(data, len);
+
+		do_tokens(aio, auth, method, cp, body);
+		free_obj(body);
+		return;
+	}
+	if (strncmp(uri, "/token/", strlen("/token/")) == 0) {
+		uri += strlen("/token/");
+		ep = (char *) uri;
+		while ((*ep != '/') && (*ep != '\0')) {
+			ep++;
+		}
+		// Tokens don't have a subpath for now.
+		if ((*ep != '\0') || (ep == uri)) {
+			rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
+			return;
+		}
+		do_token(aio, auth, method, cp, uri);
+		return;
+	}
+	if (strcmp(uri, "/password") == 0) {
+		char *  data;
+		size_t  len;
+		object *body;
+		nng_http_req_get_data(req, (void **) &data, &len);
+		body = parse_obj(data, len);
+
+		do_self_password(aio, auth, method, cp, body);
+		free_obj(body);
 		return;
 	}
 	rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
@@ -913,11 +1295,13 @@ serve_http(void)
 	int               rv;
 
 	// Note that we set the method to NULL, as we want to receive
-	// all methods, not just GET.  This means we are obliged to inspect
-	// the method.
+	// all methods, not just GET.  This means we are obliged to
+	// inspect the method.  We only accept up to 200K, because
+	// there is no reason to ever receive a larger object than that.
 	if (((rv = nng_url_parse(&url, httpurl)) != 0) ||
 	    ((rv = nng_http_server_hold(&server, url)) != 0) ||
 	    ((rv = nng_http_handler_alloc(&h, PROXY_URI, proxy_api)) != 0) ||
+	    ((rv = nng_http_handler_collect_body(h, true, 204800)) != 0) ||
 	    ((rv = nng_http_handler_set_method(h, NULL)) != 0) ||
 	    ((rv = nng_http_handler_set_tree(h)) != 0) ||
 	    ((rv = nng_http_server_add_handler(server, h)) != 0)) {
@@ -951,12 +1335,14 @@ load_config(const char *path)
 	object *proxy;
 	object *tobj;
 
-	// The configuration will leak, but we only ever exit abnormally.
+	// The configuration will leak, but we only ever exit
+	// abnormally.
 	if ((cfg = cfgfile_load(path)) == NULL) {
 		exit(1);
 	}
 
-	// Locate the definition for both our controller, and the proxy.
+	// Locate the definition for both our controller, and the
+	// proxy.
 	if ((!get_obj_obj(cfg, "proxy", &proxy)) ||
 	    (!get_obj_string(proxy, "survey", &survurl)) ||
 	    (!get_obj_string(proxy, "http", &httpurl))) {
@@ -1008,7 +1394,7 @@ load_config(const char *path)
 
 	// This can be missing, but if it is, then we are an ephemeral
 	// proxy server.  This is generally not desirable.
-	(void) get_obj_string(proxy, "zthome", &zthome);
+	(void) get_obj_string(cfg, "zthome", &zthome);
 }
 
 int

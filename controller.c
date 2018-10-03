@@ -440,6 +440,7 @@ controller_deauthorize_member(
 }
 
 worker_ops controller_ops = {
+	.version            = WORKER_OPS_VERSION,
 	.get_status         = controller_get_status,
 	.get_networks       = controller_get_networks,
 	.get_network        = controller_get_network,

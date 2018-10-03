@@ -52,6 +52,48 @@ characters, of arbitrary length.  It is recommended that names adhere to
 the rules for naming identifiers in C, or other common programming or scripting
 languages.  (Specifcally forbidden are whitespace and most punctuation characters.)
 
+=== Authentication
+
+We support three different types of authentication (although at
+this time only two are actually implemented.)
+
+Within each RPC method, we will pass an `auth` object, which contains
+the details for each of these.
+
+For token based authentication, we can pass a bearer token using a
+`token` member.  For this method, we don't need to pass any more
+members, so it's just something like:
+
+```
+{ "auth": { "token": "<value>" }}
+```
+
+For user / password authentication we pass member fields of
+`user` and `pass`, which are unsurprisingly the username and
+password.
+
+The third authentication method is just a refinement of the
+above user / password authentication, and works the same, except
+that a single one time password is added via a `otp` member.
+(This must always be supplied with the member's actual password to
+ensure that 2 factor authentication is used.  The one-time-password
+is usually a 6-digit PIN coming from an Oath style TOTP or HOTP
+generator.  Again this isn't implemented yet.)
+
+In response to authentication errors, the code may reply with any
+of these:
+
+4010:: Authentication required (no authentication was supplied)
+4011:: Authetication failed (well formed, but bad username, password)
+4012:: Authentication requires a one-time-password.
+4013:: Bearer token supplied is invalid (`token`).
+4014:: Bearer token supplied has expired (`token`).
+
+Generally, any of these will be accepted, except that when 2 factor
+authentication is configured, then the `otp` value must be supplied.
+If it is missing then 4012 will be sent.  Clients can use this to
+discover the need for the user to submit a OTP using Google authenticator or somesuch.
+
 == Method Definitions
 
 The following individual methods are defined.
@@ -90,6 +132,7 @@ This obtains the list of networks from the controller.
 Method:: `get-networks`
 
 Parameters::
+	`auth`::: Current authentication credentials.
 	`controller`:::  Controller ID (hexstring, 40-bit).
 
 Result::
@@ -103,6 +146,7 @@ This obtains the details of a given network from the controller.
 Method:: `get-network`
 
 Parameters::
+	`auth`::: Current authentication credentials.
 	`controller`:::
 		Controller name.
 	`network`:::
@@ -126,6 +170,7 @@ This obtains an array of members of the network.
 Method:: `get-network-members`
 
 Parameters::
+	`auth`::: Current authentication credentials.
 	`controller`:::
 		Controller name.
 	`network`:::
@@ -142,6 +187,7 @@ This obtains a single network member.
 Method:: `get-network-member`
 
 Parameters::
+	`auth`::: Current authentication credentials.
 	`controller`:::
 		Controller name.
 	`network`:::
@@ -164,6 +210,7 @@ This deletes a single network member.
 Method:: `delete-network-member`
 
 Parameters::
+	`auth`::: Current authentication credentials.
 	`controller`:::
 		Controller name.
 	`network`:::
@@ -181,6 +228,7 @@ This authorizes a single network member.
 Method:: `authorize-network-member`
 
 Parameters::
+	`auth`::: Current authentication credentials.
 	`controller`:::
 		Controller name.
 	`network`:::
@@ -198,12 +246,87 @@ This deauthorizes a single network member.
 Method:: `deauthorize-network-member`
 
 Parameters::
+	`auth`::: Current authentication credentials.
 	`controller`:::
 		Controller name.
 	`network`:::
 		Network ID (hexstring, 64-bit).
 	`member`:::
 		Member node ID (hexstring, 40-bit).
+
+Result::
+	Empty object.
+
+
+=== List Authentication Tokens
+
+This returns a list of all the user's authentication tokens.
+
+Method:: `get-auth-tokens`
+
+Parameters::
+	`auth`::: Current authentication credentials.
+
+Result::
+	Array of strings, each of which is a token ID corresponding to
+	a token owned by the named user.
+
+=== Create Authentication Token
+
+Method:: `create-auth-token`
+
+Parameters::
+	`auth`::: Current authentication credentials.
+	`desc`::: Description for token (string).
+	`expire`::: Optional expiration time (UNIX seconds) as number.  Can be 0 to mean no expiration.  (The service may elect a sooner expiration time.)
+	`roles`::: Array of strings, each of which corresponds to a role that the user has.  If not supplied, the roles are
+	inherited from the current authentication credentials.
+
+Result:::
+	`id`::: Token ID.  Use this as the `token` member.
+	`desc`::: Supplied description, or generated one if not supplied.
+	`expires`::: Expiration time (UNIX seconds).
+	`created`::: Creation time (UNIX seconds).
+	`roles`::: Array of roles actually assigned.
+
+=== Get Authentication Token
+
+This gets an authentication token for inspection.
+
+Method:: `get-auth-token`
+
+Parameters::
+	`auth`::: Current authentication credentials.
+	`token`::: Token ID to delete.
+
+Result::
+	`id`::: Generated token ID.  Use this with a Bearer authorization.
+	`expires`::: The actual expiration time.
+	`created`::: Creation time, in UNIX seconds.
+	`desc`::: Description of the token.
+	`roles`::: Array of strings for actual assigned roles.
+
+
+=== Delete Authentication Token
+
+Method:: `delete-auth-token`
+
+Parameters::
+	`auth`::: Current authentication credentials.
+	`token`::: Token ID to delete.
+
+Result:::
+	Empty object.
+
+=== Set Own Password
+
+This changes the current user's password.
+
+Method:: `set-password`
+
+Parameters::
+	`auth`::: Current authentication credentials.
+	`password`::: New password.
 
 Result::
 	Empty object.

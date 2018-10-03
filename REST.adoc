@@ -10,11 +10,41 @@ All REST endpoints under this are assumed to conform to the API documented here.
 
 All content exchanged over this protocol is in the form of JSON objects.
 
+== Authentication
+
+Authentication for controllers is unique to each controller, with
+realm names based on the supplied controller name.
+Hence, the `realm` returned in a `WWW-Authenticate:` response
+401 header will be different depending which controller is being
+addressed.
+
+=== Basic Authentication
+
+Normal HTTP Basic Authentication can be used, unless the user
+has a two-factor device (one-time-password generator) configured.
+
+=== Two-Factor Authentication
+
+Two-factor authentication is based on OAth (not implemented yet),
+and works just like HTTP Basic Authentication, except that an additional header, `X-ZTC-OTP` must be supplied.  This header
+must contain the value of a one-time-password (typically a 6, 7, 8,
+or 9 digit number) generated from the second factor.
+The `Authorization:` header must still contain the user's Basic
+authentication.
+
+=== API Token Authentication
+
+API tokens can be created (see API below) and used.  These may be
+supplied as either "`Bearer`" tokens using the Bearer form of
+`Authorization:` header, or they may be supplied in a seperate
+`X-ZTC-Token:` header.
+
 == API Endpoints
 
 The following individual API endpoints and methods are defined.  We have
 elided the `/api/1.0` prefix in the documentation below, but each URI
 must include that prefix.
+
 
 === Controller Status
 
@@ -166,6 +196,107 @@ URI Parameters::
 
 Body Parameters::
 	Empty object.
+
+Result::
+	Empty object.
+
+
+=== Create Authentication Token
+
+This creates an authentication token.
+
+URI:: `/proxy/$controller/token`
+
+Method:: `POST`
+
+URI Parameters::
+	`$controller`::: This is the name (or label) of the controller to access.
+
+Body Parameters::
+	`roles`::: Array of strings of roles to grant to the token.
+	This may elided, in which case all authorized roles for the
+	current session will be granted.
+	`expires`::: A time (number) in UNIX seconds when the token should
+	expire.  The generated token may expire sooner at
+	the server's discretion.
+	`desc`::: A description for the token.
+
+Result::
+	`id`::: Generated token ID.  Use this with a Bearer authorization.
+	`expires`::: The actual expiration time.
+	`created`::: Creation time, in UNIX seconds.
+	`desc`::: Description of the token.
+	`roles`::: Array of strings for actual assigned roles.
+
+=== List Authentication Tokens
+
+This returns a list of all the user's authentication tokens.
+
+URI:: `/proxy/$controller/token`
+
+Method:: `GET`
+
+URI Parameters::
+	`$controller`::: This is the name (or label) of the controller to access.
+
+Body Parameters::
+	None.
+
+Result::
+	Array of strings, each of which is a token ID corresponding to
+	a token owned by the named user.
+
+=== Get Authentication Token
+
+This gets an authentication token for inspection.
+
+URI:: `/proxy/$controller/token/$id`
+
+Method:: `GET`
+
+URI Parameters::
+	`$controller`::: This is the name (or label) of the controller to access.
+	`$id`::: The authentication token to retrieve.
+
+Body Parameters::
+	None.
+
+Result::
+	`id`::: Generated token ID.  Use this with a Bearer authorization.
+	`expires`::: The actual expiration time.
+	`created`::: Creation time, in UNIX seconds.
+	`desc`::: Description of the token.
+	`roles`::: Array of strings for actual assigned roles.
+
+=== Delete Authentication Token
+
+This deletes an authentication token.
+
+URI:: `/proxy/$controller/token/$id`
+
+Method:: `POST`
+
+URI Parameters::
+	`$controller`::: This is the name (or label) of the controller to access.
+	`$id`::: The authentication token to delete.
+
+Body Parameters::
+	None.
+
+Result::
+	Empty object.
+
+=== Set Own Password
+
+This changes the current user's password.
+
+URI:: `/proxy/$controller/password`
+
+URI Parameters::
+	`$controller`::: This is the name (or label) of the controller to access.
+
+Body Parameters::
+	`password`::: New password.
 
 Result::
 	Empty object.

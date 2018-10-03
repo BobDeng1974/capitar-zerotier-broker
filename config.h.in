@@ -14,25 +14,14 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#include <stdio.h>
-#include <stdlib.h>
+#ifndef CONFIG_H
+#define CONFIG_H
 
-#include "cfgfile.h"
-#include "object.h"
+#define PATH_SEP "${PATH_SEP}"
+#cmakedefine HAVE_ASPRINTF
+#cmakedefine HAVE_ACCESS
+#cmakedefine HAVE_OPENDIR
+#cmakedefine HAVE_RENAME
+#cmakedefine HAVE_UNLINK
 
-object *
-cfgfile_load(const char *path)
-{
-	object *tree;
-	char *  emsg;
-
-	if ((tree = obj_load(path, &emsg)) == NULL) {
-		if (emsg == NULL) {
-			fprintf(stderr, "Out of memory\n");
-		} else {
-			fprintf(stderr, "%s\n", emsg);
-			free(emsg);
-		}
-	}
-	return (tree);
-}
+#endif // CONFIG_H

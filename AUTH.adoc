@@ -12,25 +12,34 @@ contain a "`secret`" value, corresponding either to an API token at
 Central, or to the local secret used by the controller.  This is not
 discussed further here.
 
-Finally, and what we need to consider, is how do end-user/administrators authenticate to the worker, so that the worker knows it can or should perform
+Finally, and what we need to consider, is how do end-user/administrators
+authenticate to the worker, so that the worker knows it can or should perform
 the action on the user's behalf?
 
 == Principles
 
 . The proxy should be stateless, and have no idea about end-user credentials
-. The proxy and the network between the proxy and the workers, is considered to be authenticated and confidential (i.e. we need not worry about man-in-the-middle attacks.
-. Users may have different permissions, for different networks or for different methods.
-. We desire to enable the use of one-time passwords e.g. via OATH.  (Not to be confused with OAuth).
+. The proxy and the network between the proxy and the workers, is considered to
+be authenticated and confidential (i.e. we need not worry about
+man-in-the-middle attacks.
+. Users may have different permissions, for different networks or for different
+methods.
+. We desire to enable the use of one-time passwords e.g. via OATH.
+(Not to be confused with OAuth).
 . We should support the use of API tokens (bearer tokens) for longer term uses.
 . If API tokens are possible, they must be manageable.
-. Whatever we do here needs to be extensible for the future (e.g. adding further roles, time limits, etc.)
-. The channel between the end-user/application and the proxy is encrypted via TLS, which we trust (so we can use Basic auth).
+. Whatever we do here needs to be extensible for the future (e.g. adding
+further roles, time limits, etc.)
+. The channel between the end-user/application and the proxy is encrypted via
+TLS, which we trust (so we can use Basic auth).
 . The end-user's authentication is between the end-user and the worker.
-. Consequently, the same end user may have different credentials for different workers.
+. Consequently, the same end user may have different credentials for different
+workers.
 
 == Basic Authentication
 
-The most basic authentication, this method uses HTTP basic auth, with a username and password.  If nothing else is configured, this must be available.
+The most basic authentication, this method uses HTTP basic auth, with a
+username and password.  If nothing else is configured, this must be available.
 
 Requests to authenticate will be passed from the worker to the proxy as a 401
 status, which will carry a little more detail in the `error` object (such
@@ -47,22 +56,29 @@ creation page).
 It is not our intent to follow the full OAuth 2.0 flow with redirects, at
 this time.  (That can be done later if time and needs dictate.)
 
-API tokens are presented to the proxy via a "`Bearer`" style of HTTP authentication.
+API tokens are presented to the proxy via a "`Bearer`" style of HTTP
+authentication.  Alternatively they may be presented via a custom
+header.  See <<REST.adoc#>> for details.
 
-API tokens also have a "`lifetime`".  This can be infinite (meaning that the
-tokens never expire), a fixed date (e.g. token expires after 2 weeks).
-(We can also use a shorter, ephemeral session based token.  It's not
-immediately clear that this is warranted.)
+API tokens also have an optional expiration.
 
-During normal use of the primary API, only API tokens would be used.
+During normal use of the primary API, only API tokens should be used.
+(API tokens allocated once, and then discarded at the end, or with
+a short lifetime.)
 
 == One Time Passwords
 
-// This section needs some thought.  It's not clear to me how to pass
-// the OTP.  Probably via another header.
 For One Time Passwords, when appropriate, the same HTTP Basic Authentication
-is used, but the password used is a one-time password.  A different realm
-is provided so that client software knows to use the one time password.
+is used, but the supplemented with a one-time password presented in
+a custom header.  See <<REST.adoc#>> for more details.
+
+Because One Time Passwords are awkward to send with every request, applications
+are going to want to use the OTP to allocate an API token, and then to
+use that.
+
+(NB: We *could* restrict which portions of the API require the OTP.  Right now
+we require it for any password based authentication if a password is used
+in lieu of a token.  Of course, none of this implemented yet.)
 
 == Roles
 
@@ -81,16 +97,28 @@ In order to make it easy to pass around the list of authenticated
 roles, and mask them, we limit the total number of roles to 64, so we
 can use uint64_t to hold them as a bitmask.
 
+Ultimately, roles and their meanings are chosen by the adminstrator.
+
+Permission denied status is returned via 403 Forbidden, per HTTP/1.1.
+
+NOTE: We should explore the idea of creating user "`groups`", so
+that users can be a member of a group, and inherit the roles associated
+with the group.  This would allow for much easier management of user
+permissions, since an 'admin' group could then grant multiple permissions.
+This would facilitate more fine grained permission models, by minimizing
+the number of attributes (roles) that have to be manually assigned to
+a single user.
+
 == RPC Details
 
 For authenticating to the worker, we will use the 401 Unauthorized code
-as an error code, and we provide a custom "auth" parameter to carry
-current parameters.
+as an error code, following standard HTTP/1.1 practices.
 
 === RPC Auth Parameter
 
 For an API token, the token is self describing (long random string which
-is a filename, probably a SHA signature):
+is a filename).  The file contains the details of the user and roles
+for the token.
 
 ```
 { "auth": { "token": "757575757557575757" } }
@@ -99,7 +127,7 @@ is a filename, probably a SHA signature):
 For an initial password exchange:
 
 ```
-{ "auth": { "username": "garrett", "password": "maryhadalittlelamb" }}
+{ "auth": { "user": "garrett", "pass": "maryhadalittlelamb" }}
 ```
 
 We might wind up needing a one-time password.  In that case we might
@@ -107,17 +135,12 @@ have more structure, something like this:
 
 ```
 { "auth": {
-	"username": "garrett",
-	"password": "maryhadalittlelamb",
-	"token": "Google Authenticator",
+	"user": "garrett",
+	"pass": "maryhadalittlelamb",
 	"otp": "abcdef"
 	}
 }
 ```
-
-This example lists a "`token`" name, which is used to distinguish
-which token the password is supplied for (in case multiple tokens
-exist for the user), as well as the six character one-time-password.
 
 Note that OTP must always be used with the user's normal password as
 well.  (Otherwise we lack the 2FA assurance).
@@ -126,106 +149,69 @@ The intention is that password and otp authentication are only used
 to provision API tokens.  The otp mechanism will be required if
 any otp is configured.
 
-=== RPC Auth Error
-
-As we are using JSON-RPCv2, when more authentication is needed the
-RPC server will return an `error` object with the error code set
-to one of our implementation specific error codes:
-
-4010:: Authentication was well-formed, but failed (wrong password, etc.)
-4011:: An API token should be supplied.
-4012:: A username and password should be supplied (basic auth).
-4013:: A username, password, and OTP are required.
-4014-4019:: Reserved for future authentication uses.
-
-
-== RPC Methods
-
-=== Get a Token
-
-get-token:: gets a token
-
-This method will require OTP if OTP is configured, or username/password
-otherwise.
-
-==== Parameters
-
-lifetime:: time in seconds until token expires.  Default value tunable.
-roles:: array of named "`roles`".  Only currently authenticated roles can be named.  If ommitted roles will be everything user has auth for.
-
-==== Result
-
-token:: string
-expires:: msec from epoch.  if not present or zero, never expires (informational only)
-
-=== Delete a Token
-
-delete-token:: deletes token
-
-May delete own token, otherwise needs "auth" role.
-
-==== Parameters
-
-token:: token to delete
-
-==== Result
-
-Empty object.
-
-=== New OTP
-
-new-otp::
-
-Creates a new one time password
-
-==== Parameters
-
-TBD.  (Type, etc.?  Name?)
-
-==== Result
-
-otpauth:// url?  would include
-TYPE:: totp
-LABEL:: name?
-SECRET:: blah
-ISSUER:: worker identity?
+Errors from the RPC are allocated for various types of authentication
+errors. See the <<RPC.adoc#>> document for details.
 
 == Backing Store on Workers
 
-The worker shall maintain a list of user credentials as JSON files.
-Each user shall have a file, named with the user name, which will contain a hash of the user's password, a list of "`roles`" that the user has (which act as permissions), and a possible set of One Time Passwords.  It might also
-contain other data.  For example, a file
-`garrett.json` for user named `garrett` might contain:
+The database of users and tokens are stored in directories by the
+worker.  These are configurable as `userdir` and `tokendir`, and
+may be the same directory if desired.
 
-[json]
-```
-{
-	"username": "garrett",
-	"password": "ab47fe28572023",
-	"roles": [ "admin", "staff" ],
-	"tokens": [
-		{
-			"token": "Google Authenticator",
-			"secret": "91929394969a",
-			"type": "totp",
-			"digits": 6,
-			"period": 30
-		}
-	],
-	"lastlogin": 1537907232495
-}
-```
+Users are stored in files named by the user, suffixed by `.usr`.
+For example, `garrett` is stored in a file called `garrett.usr`.
 
-The `lastlogin` field above would correspond to a last login time, and
-isn't specified here.  There might be other fields, to be added by additional
-authentication or auditing systems later.
+Tokens are stored in files named with the token id, suffixed by `.tok`.
 
-The `tokens` field above corresponds to a list of time-based one-time-password
-generators. It's likely that we will only support one of these at a time,
-but having a list here makes it possible to support more (e.g. if a user
-has both a phone and smart watch with different credentials).
+As a corollary, there are restrictions on usernames and token IDs,
+since these need to be files.  We require that they not start with
+a ., consist of legal filenames, and must be of reasonable length.
+(Specific details are in the code.)
 
-=== API Token Storage
+Roles are part of the master configuration file for the worker, as is
+the configuration of what those permissions mean.
 
-API tokens are stored in a subdirectory of their own, and are simply
-files (JSON again) where the file name is the token itself.
+=== User Files
+
+User files are interpreted as a single JSON object.
+The following fields are defined and should always be present:
+
+`name`:: User name.  This must match the filename, without the `.usr` suffix.
+`passwd`:: Password.  This can be an empty string for no password, a string
+starting with "0:" followed by a clear-text password, or "1:" followed
+by a special salted SHA1 hash.  The salted form is used when changing
+passwords or when using the API to create users, and protects against
+in advertent password exposure to administrators.  The hashing algorithm
+is not designed to thwart a determined attempt to crack the password,
+so these files should still be access controlled.
+`tag`:: This is a unique tag, and should be a random string.  This tag
+will be used in token files as well, and prevents stale tokens from
+accidentally being reassigned to users. (I.e. if a user is deleted and
+recreated with the same name, the old token files should be invalid.)
+`roles`: An array of role names.  These are the permissions that the user
+can use.
+`locked`: Boolean, if true the user cannot login or use any of their API tokens.
+`otpwds`: This is an array of one-time-password generators. The members are
+structures -- documentation TBD.
+
+Other fields may be added, and will be ignored if not understood.
+
+=== Token Files
+
+Token files are also single JSON objects.
+They have the following fields:
+
+`id`:: Token ID.  This must match the token file name (without the `.tok` suffix).
+`user`:: User name corresponding to the token.
+`desc`:: A user supplied description for the token -- the intended use is for
+display in UIs when listing tokens; this makes it easy to identify which
+token should be deleted for example.
+`tag`:: This tag must match the tag for the user.  (Token files that have
+tags which don't match that of their named user are subject to deletion.)
+`expires`:: A time in UNIX seconds when the token should expire.  If zero,
+then the token does not expire.  (This is a number.)
+`created`:: Time in UNIX seconds when the token was created.
+`roles`:: An array of roles for this token.
+The token can only be used for the named roles, which
+may *only* include the roles available for the named user, and will be
+a strict subset of the roles in effect at the time the token was created.
