@@ -433,7 +433,7 @@ central_deauthorize_member(
 	worker_http(w, central_deauthorize_member_cb);
 }
 
-worker_ops central_ops = {
+worker_ops controller_ztcentral_ops = {
 	.version            = WORKER_OPS_VERSION,
 	.get_status         = central_get_status,
 	.get_networks       = central_get_networks,

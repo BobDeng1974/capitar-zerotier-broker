@@ -25,6 +25,7 @@
 typedef struct worker_ops worker_ops;
 typedef struct worker     worker;
 typedef struct controller controller;
+typedef struct user       user;
 
 // when authenticating a user using username/password, we return the actual
 // user structure.  As we only do this for auth methods, we want the
@@ -75,8 +76,8 @@ struct worker_ops {
 
 extern bool worker_register_ops(const char *, worker_ops *);
 
-extern worker_ops controller_ops;
-extern worker_ops central_ops;
+extern worker_ops controller_zt1_ops;
+extern worker_ops controller_ztcentral_ops;
 
 typedef struct proxy_config      proxy_config;
 typedef struct controller_config controller_config;
@@ -144,5 +145,11 @@ struct worker_config {
 	char *             userdir;
 	char *             tokendir;
 };
+
+extern bool
+get_controller_param(worker *w, object *params, controller **cpp);
+
+extern bool
+get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp);
 
 #endif // WORKER_H
