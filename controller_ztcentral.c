@@ -71,7 +71,7 @@ central_get_status_cb(worker *w, void *body, size_t len)
 	if (((obj = alloc_obj()) == NULL) ||
 	    (!add_obj_string(obj, "version", RPC_VERSION)) ||
 	    (!add_obj_bool(obj, "controller", false)) ||
-	    (!add_obj_bool(obj, "ztcentral", true))) {
+	    (!add_obj_bool(obj, "central", true))) {
 		free_obj(obj);
 		send_err(w, E_NOMEM, NULL);
 		return;
