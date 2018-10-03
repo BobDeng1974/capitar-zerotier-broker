@@ -15,16 +15,6 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // controller methods
-//
-// The worker registers an NNG listener on at a predefined ZeroTier
-// address, which acts as a REP server, where it receives requests.
-// These requests are forwarded to an HTTP REST server (the local
-// controller) - usually running on localhost port 9993.
-//
-// The worker *also* attempts to set up a responder socket using
-// an outgoing dialer to the proxy.  This proxy provides the ZeroTier
-// local network address, where proxy can reach us.  This is a TCP
-// address.
 
 #include <stdarg.h>
 #include <stdbool.h>
