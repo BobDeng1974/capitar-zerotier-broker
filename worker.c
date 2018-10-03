@@ -1363,7 +1363,6 @@ load_config(const char *path, char **errmsg)
 	} else {
 		wc->nroles = 0;
 	}
-	printf("wc->nroles: %d\n", wc->nroles);
 	if ((!get_obj_obj(wc->json, "proxies", &arr)) ||
 	    (!is_obj_array(arr))) {
 		ERRF(errmsg, "missing proxies array");
