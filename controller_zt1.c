@@ -67,8 +67,8 @@ controller_get_status_cb(worker *w, void *body, size_t len)
 	free_obj(obj);
 	if (((obj = alloc_obj()) == NULL) ||
 	    (!add_obj_string(obj, "version", RPC_VERSION)) ||
-	    (!add_obj_bool(obj, "controller_zt1", true)) ||
-	    (!add_obj_bool(obj, "controller_ztcentral", false))) {
+	    (!add_obj_bool(obj, "controller", true)) ||
+	    (!add_obj_bool(obj, "central", false))) {
 		free_obj(obj);
 		send_err(w, E_NOMEM, NULL);
 		return;
