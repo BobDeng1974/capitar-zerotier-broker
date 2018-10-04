@@ -1079,7 +1079,8 @@ setup_proxy(worker_config *wc, proxy *p, char **errmsg)
 
 	memset(&s, 0, sizeof(s));
 	if (((rv = nng_rep0_open(&s)) != 0) ||
-	    ((rv = nng_setopt_string(s, NNG_OPT_ZT_HOME, wc->zthome)) != 0) ||
+	    (((wc->zthome != NULL) &&
+	      (rv = nng_setopt_string(s, NNG_OPT_ZT_HOME, wc->zthome)) != 0)) ||
 	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_PING_TIME, 1000)) != 0) ||
 	    ((rv = nng_listen(s, p->config->rpcurl, &l, 0)) != 0)) {
 		ERRF(errmsg, "rep(%s): %s", p->config->rpcurl,
@@ -1105,7 +1106,8 @@ setup_proxy(worker_config *wc, proxy *p, char **errmsg)
 	memset(&s, 0, sizeof(s));
 	if (((rv = nng_aio_alloc(&p->survaio, survey_cb, p)) != 0) ||
 	    ((rv = nng_respondent0_open(&s)) != 0) ||
-	    ((rv = nng_setopt_string(s, NNG_OPT_ZT_HOME, wc->zthome)) != 0) ||
+	    (((wc->zthome != NULL) &&
+	      (rv = nng_setopt_string(s, NNG_OPT_ZT_HOME, wc->zthome)) != 0)) ||
 	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_PING_TIME, 1000)) != 0) ||
 	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_CONN_TIME, 1000)) != 0) ||
 	    ((rv = nng_setopt_ms(s, NNG_OPT_RECONNMINT, 1)) != 0) ||
