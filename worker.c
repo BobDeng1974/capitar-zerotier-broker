@@ -1488,7 +1488,7 @@ load_config(const char *path, char **errmsg)
 		uint64_t nwid;
 		for (key = next_obj_key(arr, NULL); key != NULL;
 		     key = next_obj_key(arr, key)) {
-			wc->napis++;
+			wc->nnets++;
 		}
 		if ((wc->nets = calloc(sizeof(net_config), wc->nnets)) ==
 		    NULL) {
