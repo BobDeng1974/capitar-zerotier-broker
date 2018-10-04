@@ -1431,13 +1431,14 @@ load_config(const char *path, char **errmsg)
 			free_config(wc);
 			return (NULL);
 		}
-		i = 0;
+		i = -1;
 		for (key = next_obj_key(arr, NULL); key != NULL;
 		     key = next_obj_key(arr, key)) {
 			object *ao;
 			object *roles;
 			bool    valid;
 
+			i++;
 			if (!get_obj_obj(arr, key, &ao)) {
 				ERRF(errmsg, "api for %s invalid", key);
 				free_config(wc);
