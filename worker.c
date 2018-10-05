@@ -535,7 +535,9 @@ get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
 	otp = NULL;
 	if ((!get_obj_string(obj, "user", &id)) ||
 	    (!get_obj_string(obj, "pass", &pass))) {
-		printf("E_AUTHFAIL\n");
+		if (debug > 1) {
+			printf("E_AUTHFAIL obj: %s\n", print_obj(obj));
+		}
 		send_err(w, E_AUTHFAIL, NULL);
 		return (false);
 	}
