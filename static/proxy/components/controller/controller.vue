@@ -1,9 +1,10 @@
 <template>
 <div>
 
-  <b-jumbotron header="Controller" lead="Query networks" >
+<b-jumbotron header="Controller" lead="Query networks" >
+  <div class="col-6">
     <b-input-group prepend="Controller Name">
-      <b-form-input class="col-4"
+      <b-form-input 
                     type="text"
                     v-model="controller"
                     placeholder="Enter controller name"
@@ -13,19 +14,36 @@
         <b-btn variant="success"
                v-on:click="getNetworks"
         >Get Networks</b-btn>
-        <b-btn variant="info">Get Status</b-btn>
+        <b-btn variant="info"
+               v-on:click="getControllerStatus"
+        >Get Status</b-btn>
       </b-input-group-append>
     </b-input-group>
-  </b-jumbotron>
+    <b-list-group v-if="controller_status" >
+      <b-list-group-item v-if="controller_status.central" >
+            Zerotier Central</b-list-group-item>
+      <b-list-group-item v-if="controller_status.controller" >
+            Zerotier One
+      </b-list-group-item>
+      <b-list-group-item>
+            Version: {{ controller_status.version }}
+      </b-list-group-item>
+    </b-list-group>
+  </div>
+  <b-alert class="col-6" :show="need_controller_name">Please enter controller name</b-alert>
+</b-jumbotron>
+
 
   <section v-if="errored">
+    <i v-if="error"> {{ error }} </i>
     <p>We're sorry, we're not able to retrieve this
        information at the moment, please try back later</p>
   </section>
 
   <section v-else>
-    <div v-if="loading"> Loading... </div>
-
+    <div v-if="loading">
+      <b-alert class="col-6" show > Searching ... </b-alert>
+    </div>
     <div v-else-if="networks && networks.length > 0">
 
       <network
@@ -37,7 +55,12 @@
 
     </div>
 
-    <div v-else-if="networks"> No networks found ... </div>
+    <div v-else-if="no_such_controller">
+        <b-alert class="col-6" show> No such controller found ... </b-alert>
+    </div>
+    <div v-else-if="networks">
+        <b-alert class="col-6" show> No networks found ... </b-alert>
+    </div>
 
   </section>
 
@@ -52,17 +75,50 @@ module.exports = {
       info: null,
       loading: false,
       errored: false,
+      error: null,
+      need_controller_name: false,
+      no_such_controller: false,
+      controller_status: null,
       controller: "",
       networks: null
     }
   },
   props: ["controller"],
   methods: {
-    getNetworks (event) {
-      if (this.controller == null) {
-        alert("Please enter name")
+    clear() {
+      this.need_controller_name = false
+      this.no_such_controller = false
+      controller_status: null,
+      this.error = null
+    },
+    getControllerStatus (event) {
+      if ((this.controller == null) || (this.controller == "")) {
+        this.need_controller_name = true
         return
       }
+      this.clear()
+      axios
+        .get("/api/1.0/proxy/" + this.controller + "/status")
+        .then(response => {
+          this.controller_status = response.data
+        })
+        .catch(error => {
+          if ((error.response) && (error.response.status == 404)) {
+            this.no_such_controller = true
+          }
+          else {
+            console.log(error)
+            this.errored = true
+          }
+        })
+        .finally(() => this.loading = false)
+    },
+    getNetworks (event) {
+      if ((this.controller == null) || (this.controller == "")) {
+        this.need_controller_name = true
+        return
+      }
+      this.clear()
       this.loading = true
       axios
         .get("/api/1.0/proxy/" + this.controller + "/network")
@@ -70,8 +126,13 @@ module.exports = {
           this.networks = response.data
         })
         .catch(error => {
-          console.log(error)
-          this.errored = true
+          if ((error.response) && (error.response.status == 404)) {
+            this.no_such_controller = true
+          }
+          else {
+            console.log(error)
+            this.errored = true
+          }
         })
         .finally(() => this.loading = false)
     }
