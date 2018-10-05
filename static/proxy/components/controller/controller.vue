@@ -26,7 +26,7 @@
   <section v-else>
     <div v-if="loading"> Loading... </div>
 
-    <div v-else-if="networks">
+    <div v-else-if="networks && networks.length > 0">
 
       <network
         v-for="nwid, index in networks"
@@ -36,6 +36,8 @@
       </network>
 
     </div>
+
+    <div v-else-if="networks"> No networks found ... </div>
 
   </section>
 
