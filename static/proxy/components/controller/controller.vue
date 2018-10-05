@@ -7,9 +7,10 @@
                     type="text"
                     v-model="controller"
                     placeholder="Enter controller name"
+                    v-on:keyup.enter.native="getNetworks"
       ></b-form-input>
       <b-input-group-append>
-        <b-btn variant="outline-success"
+        <b-btn variant="success"
                v-on:click="getNetworks"
         >Get Networks</b-btn>
         <b-btn variant="info">Get Status</b-btn>

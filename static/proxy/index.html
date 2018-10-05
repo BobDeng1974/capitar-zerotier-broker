@@ -26,8 +26,8 @@
       Vue.use(Vuex)
 
       // Global registration of components
-      Vue.component('controller', httpVueLoader('/static/controller/controller.vue'))
-      Vue.component('network', httpVueLoader('/static/network/network.vue'))
+      Vue.component('controller', httpVueLoader('/static/components/controller/controller.vue'))
+      Vue.component('network', httpVueLoader('/static/components/network/network.vue'))
       Vue.component('store', httpVueLoader('/static/store/store.vue'))
 
       new Vue({
