@@ -53,12 +53,12 @@ module.exports = {
       network: null
     }
   },
-  props: ["id", "index", "networks"],
+  props: ["id", "index", "networks", "controller"],
   mounted () {
-    console.log("xx: " + "www")
     console.log("id: " + this.id)
+    console.log("controller: " + this.controller)
     axios
-      .get("/api/1.0/proxy/zerotier/network/" + this.id)
+      .get("/api/1.0/proxy/" + this.controller + "/network/" + this.id)
       .then(response => {
         this.network = response.data
       })

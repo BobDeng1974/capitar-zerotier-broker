@@ -30,6 +30,7 @@
       <network
         v-for="nwid, index in networks"
         v-bind:id="nwid"
+        v-bind:controller="controller"
       >
       </network>
 
