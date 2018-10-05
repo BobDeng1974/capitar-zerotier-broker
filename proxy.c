@@ -71,9 +71,12 @@ nng_mtx *survlk;
 
 nng_socket      reqsock;
 nng_socket      survsock;
-char *          survurl;
-char *          httpurl;
-char *          zthome;
+char   *        survurl;
+char   *        httpurl;
+char   *        zthome;
+object *        static_pages;
+char   *        static_uri;
+char   *        static_dir;
 nng_tls_config *tls = NULL;
 
 typedef struct controller controller;
@@ -1292,14 +1295,25 @@ serve_http(void)
 	nng_url *         url;
 	nng_http_server * server;
 	nng_http_handler *h;
+	nng_http_handler *directory_h;
+	nng_http_handler *index_h;
+	char              index_page[255];
 	int               rv;
 
-	// Note that we set the method to NULL, as we want to receive
-	// all methods, not just GET.  This means we are obliged to
-	// inspect the method.  We only accept up to 200K, because
-	// there is no reason to ever receive a larger object than that.
+	sprintf(index_page, "%s/index.html", static_dir);
+
 	if (((rv = nng_url_parse(&url, httpurl)) != 0) ||
 	    ((rv = nng_http_server_hold(&server, url)) != 0) ||
+	    ((rv = nng_http_handler_alloc_file(&index_h, "/", index_page)) != 0) ||
+            ((rv = nng_http_handler_alloc_directory(
+		&directory_h, static_uri, static_dir)) != 0) ||
+            ((rv = nng_http_server_add_handler(server, index_h)) != 0) ||
+            ((rv = nng_http_server_add_handler(server, directory_h)) != 0) ||
+
+	    // Note that we set the method to NULL, as we want to receive
+	    // all methods, not just GET.  This means we are obliged to
+	    // inspect the method.  We only accept up to 200K, because
+	    // there is no reason to ever receive a larger object than that.
 	    ((rv = nng_http_handler_alloc(&h, PROXY_URI, proxy_api)) != 0) ||
 	    ((rv = nng_http_handler_collect_body(h, true, 204800)) != 0) ||
 	    ((rv = nng_http_handler_set_method(h, NULL)) != 0) ||
@@ -1348,6 +1362,14 @@ load_config(const char *path)
 	    (!get_obj_string(proxy, "http", &httpurl))) {
 		fprintf(stderr, "proxy configuration invalid\n");
 		exit(1);
+	}
+
+	// Locate the definition for web server.
+	if ((!get_obj_obj(cfg, "static", &static_pages)) ||
+		(!get_obj_string(static_pages, "uri", &static_uri)) ||
+		(!get_obj_string(static_pages, "dir", &static_dir))) {
+			fprintf(stderr, "static pages configuration invalid\n");
+			exit(1);
 	}
 
 	// TLS can be missing.

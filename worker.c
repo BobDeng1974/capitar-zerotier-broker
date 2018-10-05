@@ -493,6 +493,9 @@ get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
 	user *  user;
 	int     code;
 
+	if (debug > 1) {
+		printf("get_auth_param params: %s\n", print_obj(params));
+	}
 	// Rules:
 	// We accept a token, if one is present.
 	// Otherwise, we check for user, password, and otp. If the
@@ -532,6 +535,7 @@ get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
 	otp = NULL;
 	if ((!get_obj_string(obj, "user", &id)) ||
 	    (!get_obj_string(obj, "pass", &pass))) {
+		printf("E_AUTHFAIL\n");
 		send_err(w, E_AUTHFAIL, NULL);
 		return (false);
 	}
@@ -926,6 +930,9 @@ http_cb(worker *w)
 	w->http_cb = NULL;
 
 	if ((rv = nng_aio_result(aio)) != 0) {
+		if (debug > 1) {
+			printf("http_cb nng_aio_result err: %s\n", nng_strerror(rv));
+		}
 		send_err(w, E_INTERNAL, nng_strerror(rv));
 		return;
 	}
