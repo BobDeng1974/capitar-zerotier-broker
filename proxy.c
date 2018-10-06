@@ -74,7 +74,6 @@ nng_socket      survsock;
 char *          survurl;
 char *          httpurl;
 char *          zthome;
-char *          static_uri;
 char *          static_dir;
 nng_tls_config *tls = NULL;
 
@@ -1306,7 +1305,7 @@ serve_http(void)
 	// Directory handler.  Note that index.html is served for directories
 	// automatically. (Q: Should this be optional?)
 	if (((rv = nng_http_handler_alloc_directory(
-	          &h, static_uri, static_dir)) != 0) ||
+	          &h, "/static", static_dir)) != 0) ||
 	    ((rv = nng_http_server_add_handler(server, h)) != 0)) {
 		fprintf(stderr, "%s\n", nng_strerror(rv));
 		exit(1);
@@ -1368,12 +1367,10 @@ load_config(const char *path)
 		exit(1);
 	}
 
-	// Locate the definition for web server.
+	// Locate the definition for static content.
 	// This is now mandatory, but it could be optional.
-	if ((!get_obj_obj(cfg, "static", &tobj)) ||
-	    (!get_obj_string(tobj, "uri", &static_uri)) ||
-	    (!get_obj_string(tobj, "dir", &static_dir))) {
-		fprintf(stderr, "static pages configuration invalid\n");
+	if (!get_obj_string(cfg, "static", &static_dir)) {
+		fprintf(stderr, "static content configuration invalid\n");
 		exit(1);
 	}
 
