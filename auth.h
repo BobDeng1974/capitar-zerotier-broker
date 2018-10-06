@@ -27,7 +27,6 @@
 
 typedef struct otpwd otpwd; // one time password
 typedef struct token token; // authentication (bearer) token
-typedef struct user  user;
 
 // auth_init must be called with a valid configuration at the
 // start of operations, or nothing else will work.
