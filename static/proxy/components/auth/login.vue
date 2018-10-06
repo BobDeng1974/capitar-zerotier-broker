@@ -159,8 +159,6 @@
 
 <script>
 
-console.log('XXXX')
-
 module.exports = {
   data () {
     return {

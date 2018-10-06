@@ -130,7 +130,6 @@ module.exports = {
         return
       }
 
-      console.log(this.creds)
       // TODO check for expiration of token
       // move token functions to generic object or VUEX
 
@@ -140,7 +139,6 @@ module.exports = {
           headers: {'X-ZTC-Token': this.creds.token.id }
         }).then(response => {
           this.networks = response.data
-          console.log(this.networks)
         }).catch(error => {
           if ((error.response) && (error.response.status == 404)) {
             this.no_such_controller = true
