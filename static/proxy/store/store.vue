@@ -16,7 +16,8 @@ console.log('init store ...')
 
 const store = new Vuex.Store({
   state: {
-    count: 0
+    count: 0,
+    tokens: {},
   },
   mutations: {
   	increment: state => state.count++,

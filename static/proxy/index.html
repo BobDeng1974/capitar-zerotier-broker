@@ -18,7 +18,8 @@
 
   <body>
     <div id="my-app">
-      <controller></controller>
+      <login></login>
+      <!--controller></controller-->
     </div>
 
     <script type="text/javascript">
@@ -26,6 +27,7 @@
       Vue.use(Vuex)
 
       // Global registration of components
+      Vue.component('login', httpVueLoader('/static/components/auth/login.vue'))
       Vue.component('controller', httpVueLoader('/static/components/controller/controller.vue'))
       Vue.component('network', httpVueLoader('/static/components/network/network.vue'))
       Vue.component('store', httpVueLoader('/static/store/store.vue'))

@@ -1,5 +1,6 @@
 <template>
-<div>
+
+<div v-if="show_network">
 
   <section v-if="errored">
     <p>We're sorry, we're not able to retrieve this
@@ -29,11 +30,10 @@
   </section>
 
 </div>
+
 </template>
 
 <script>
-
-console.log('fetching network data')
 
 module.exports = {
 
@@ -43,20 +43,32 @@ module.exports = {
     },
     networkId() {
       return this.network.id;
+    },
+    show_network() {
+      return true
+      /*
+      if (!this.nw_filter) {
+        return true
+      }
+      if (this.network.name.match(/this.nw_filter/) {
+        return true
+      }
+      if (this.network.id.match(/this.nw_filter/) {
+        return true
+      }*/
     }
   },
   data () {
     return {
+      show_network: true,
       info: null,
       loading: true,
       errored: false,
       network: null
     }
   },
-  props: ["id", "index", "networks", "controller"],
+  props: ["id", "index", "networks", "controller", "creds", "nw_filter"],
   mounted () {
-    console.log("id: " + this.id)
-    console.log("controller: " + this.controller)
     axios
       .get("/api/1.0/proxy/" + this.controller + "/network/" + this.id)
       .then(response => {
