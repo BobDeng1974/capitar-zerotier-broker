@@ -71,12 +71,11 @@ nng_mtx *survlk;
 
 nng_socket      reqsock;
 nng_socket      survsock;
-char   *        survurl;
-char   *        httpurl;
-char   *        zthome;
-object *        static_pages;
-char   *        static_uri;
-char   *        static_dir;
+char *          survurl;
+char *          httpurl;
+char *          zthome;
+char *          static_uri;
+char *          static_dir;
 nng_tls_config *tls = NULL;
 
 typedef struct controller controller;
@@ -1295,26 +1294,30 @@ serve_http(void)
 	nng_url *         url;
 	nng_http_server * server;
 	nng_http_handler *h;
-	nng_http_handler *directory_h;
-	nng_http_handler *index_h;
-	char              index_page[255];
 	int               rv;
 
-	sprintf(index_page, "%s/index.html", static_dir);
-
+	// Allocate and hold the server.
 	if (((rv = nng_url_parse(&url, httpurl)) != 0) ||
-	    ((rv = nng_http_server_hold(&server, url)) != 0) ||
-	    ((rv = nng_http_handler_alloc_file(&index_h, "/", index_page)) != 0) ||
-            ((rv = nng_http_handler_alloc_directory(
-		&directory_h, static_uri, static_dir)) != 0) ||
-            ((rv = nng_http_server_add_handler(server, index_h)) != 0) ||
-            ((rv = nng_http_server_add_handler(server, directory_h)) != 0) ||
+	    ((rv = nng_http_server_hold(&server, url)) != 0)) {
+		fprintf(stderr, "%s\n", nng_strerror(rv));
+		exit(1);
+	}
 
-	    // Note that we set the method to NULL, as we want to receive
-	    // all methods, not just GET.  This means we are obliged to
-	    // inspect the method.  We only accept up to 200K, because
-	    // there is no reason to ever receive a larger object than that.
-	    ((rv = nng_http_handler_alloc(&h, PROXY_URI, proxy_api)) != 0) ||
+	// Directory handler.  Note that index.html is served for directories
+	// automatically. (Q: Should this be optional?)
+	if (((rv = nng_http_handler_alloc_directory(
+	          &h, static_uri, static_dir)) != 0) ||
+	    ((rv = nng_http_server_add_handler(server, h)) != 0)) {
+		fprintf(stderr, "%s\n", nng_strerror(rv));
+		exit(1);
+	}
+
+	// API handler.
+	// Note that we set the method to NULL, as we want to receive
+	// all methods, not just GET.  This means we are obliged to
+	// inspect the method.  We only accept up to 200K, because
+	// there is no reason to ever receive a larger object than that.
+	if (((rv = nng_http_handler_alloc(&h, PROXY_URI, proxy_api)) != 0) ||
 	    ((rv = nng_http_handler_collect_body(h, true, 204800)) != 0) ||
 	    ((rv = nng_http_handler_set_method(h, NULL)) != 0) ||
 	    ((rv = nng_http_handler_set_tree(h)) != 0) ||
@@ -1323,6 +1326,7 @@ serve_http(void)
 		exit(1);
 	}
 
+	// TLS configuration (optional).
 	if (strncmp(httpurl, "https", 5) == 0) {
 		if (tls == NULL) {
 			fprintf(stderr, "Missing TLS configuration\n");
@@ -1365,11 +1369,12 @@ load_config(const char *path)
 	}
 
 	// Locate the definition for web server.
-	if ((!get_obj_obj(cfg, "static", &static_pages)) ||
-		(!get_obj_string(static_pages, "uri", &static_uri)) ||
-		(!get_obj_string(static_pages, "dir", &static_dir))) {
-			fprintf(stderr, "static pages configuration invalid\n");
-			exit(1);
+	// This is now mandatory, but it could be optional.
+	if ((!get_obj_obj(cfg, "static", &tobj)) ||
+	    (!get_obj_string(tobj, "uri", &static_uri)) ||
+	    (!get_obj_string(tobj, "dir", &static_dir))) {
+		fprintf(stderr, "static pages configuration invalid\n");
+		exit(1);
 	}
 
 	// TLS can be missing.
