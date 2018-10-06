@@ -61,7 +61,8 @@ typedef void (*worker_http_cb)(worker *, void *, size_t);
 extern void worker_http(worker *, worker_http_cb);
 
 struct worker_ops {
-	int version;
+	int         version;
+	const char *type;
 	void (*get_status)(controller *, worker *);
 	void (*get_networks)(controller *, worker *);
 	void (*get_network)(controller *, worker *, uint64_t);
@@ -72,9 +73,9 @@ struct worker_ops {
 	void (*deauthorize_member)(controller *, worker *, uint64_t, uint64_t);
 };
 
-#define WORKER_OPS_VERSION 0
+#define WORKER_OPS_VERSION 1
 
-extern bool worker_register_ops(const char *, worker_ops *);
+extern bool worker_register_ops(worker_ops *);
 
 extern worker_ops controller_zt1_ops;
 extern worker_ops controller_ztcentral_ops;
@@ -146,10 +147,9 @@ struct worker_config {
 	char *             tokendir;
 };
 
-extern bool
-get_controller_param(worker *w, object *params, controller **cpp);
+extern bool get_controller_param(worker *w, object *params, controller **cpp);
 
-extern bool
-get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp);
+extern bool get_auth_param(
+    worker *w, object *params, user **userp, uint64_t *rolesp);
 
 #endif // WORKER_H

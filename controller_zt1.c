@@ -441,6 +441,7 @@ controller_deauthorize_member(
 
 worker_ops controller_zt1_ops = {
 	.version            = WORKER_OPS_VERSION,
+	.type               = "zt1",
 	.get_status         = controller_get_status,
 	.get_networks       = controller_get_networks,
 	.get_network        = controller_get_network,

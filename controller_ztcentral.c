@@ -435,6 +435,7 @@ central_deauthorize_member(
 
 worker_ops controller_ztcentral_ops = {
 	.version            = WORKER_OPS_VERSION,
+	.type               = "ztcentral",
 	.get_status         = central_get_status,
 	.get_networks       = central_get_networks,
 	.get_network        = central_get_network,

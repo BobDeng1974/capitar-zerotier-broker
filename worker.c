@@ -1243,7 +1243,7 @@ find_worker_ops(const char *name)
 	worker_ops_entry *ent;
 	// Default to controller_zt1.
 	if ((name == NULL) || (*name == '\0')) {
-		name = "controller_zt1";
+		name = "zt1";
 	}
 	for (ent = ops_types; ent != NULL; ent = ent->next) {
 		if (strcmp(ent->name, name) == 0) {
@@ -1254,11 +1254,11 @@ find_worker_ops(const char *name)
 }
 
 bool
-worker_register_ops(const char *name, worker_ops *ops)
+worker_register_ops(worker_ops *ops)
 {
 	worker_ops_entry *ent;
 	for (ent = ops_types; ent != NULL; ent = ent->next) {
-		if (strcmp(name, ent->name) == 0) {
+		if (strcmp(ops->type, ent->name) == 0) {
 			// already registered
 			return (true);
 		}
@@ -1270,7 +1270,7 @@ worker_register_ops(const char *name, worker_ops *ops)
 		return (false);
 	}
 	ent->next = ops_types;
-	ent->name = name;
+	ent->name = ops->type;
 	ent->ops  = ops;
 	ops_types = ent;
 	return (true);
@@ -1670,9 +1670,8 @@ main(int argc, char **argv)
 		}
 	}
 
-	if ((!worker_register_ops("controller_zt1", &controller_zt1_ops)) ||
-	    (!worker_register_ops(
-	        "controller_ztcentral", &controller_ztcentral_ops))) {
+	if ((!worker_register_ops(&controller_zt1_ops)) ||
+	    (!worker_register_ops(&controller_ztcentral_ops))) {
 		fprintf(stderr, "Failed to register worker ops\n");
 		exit(1);
 	}
