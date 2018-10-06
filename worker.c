@@ -425,13 +425,13 @@ samestr(const char *s1, const char *s2)
 controller *
 find_controller(worker *w, const char *name)
 {
-        for (int i = 0; i < cfg->ncontrollers; i++) {
-                if (strcmp(controllers[i].config->name, name) == 0) {
-                        w->client = controllers[i].client;
-                        return (&controllers[i]);
-                }
-        }
-        return (NULL);
+	for (int i = 0; i < cfg->ncontrollers; i++) {
+		if (strcmp(controllers[i].config->name, name) == 0) {
+			w->client = controllers[i].client;
+			return (&controllers[i]);
+		}
+	}
+	return (NULL);
 }
 
 static bool
@@ -467,20 +467,20 @@ get_controller_host(controller *cp)
 bool
 get_controller_param(worker *w, object *params, controller **cpp)
 {
-        char *      name;
-        controller *cp;
+	char *      name;
+	controller *cp;
 
-        if (!get_obj_string(params, "controller", &name)) {
-                send_err(w, E_BADPARAMS, "controller parameter required");
-                return (false);
-        }
-        if ((cp = find_controller(w, name)) == NULL) {
-                send_err(w, E_NOCTRLR, NULL);
-                return (false);
-        }
+	if (!get_obj_string(params, "controller", &name)) {
+		send_err(w, E_BADPARAMS, "controller parameter required");
+		return (false);
+	}
+	if ((cp = find_controller(w, name)) == NULL) {
+		send_err(w, E_NOCTRLR, NULL);
+		return (false);
+	}
 
-        *cpp = cp;
-        return (true);
+	*cpp = cp;
+	return (true);
 }
 
 bool
@@ -933,7 +933,8 @@ http_cb(worker *w)
 
 	if ((rv = nng_aio_result(aio)) != 0) {
 		if (debug > 1) {
-			printf("http_cb nng_aio_result err: %s\n", nng_strerror(rv));
+			printf("http_cb nng_aio_result err: %s\n",
+			    nng_strerror(rv));
 		}
 		send_err(w, E_INTERNAL, nng_strerror(rv));
 		return;
@@ -1089,7 +1090,8 @@ setup_proxy(worker_config *wc, proxy *p, char **errmsg)
 	memset(&s, 0, sizeof(s));
 	if (((rv = nng_rep0_open(&s)) != 0) ||
 	    (((wc->zthome != NULL) &&
-	      (rv = nng_setopt_string(s, NNG_OPT_ZT_HOME, wc->zthome)) != 0)) ||
+	        (rv = nng_setopt_string(s, NNG_OPT_ZT_HOME, wc->zthome)) !=
+	            0)) ||
 	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_PING_TIME, 1000)) != 0) ||
 	    ((rv = nng_listen(s, p->config->rpcurl, &l, 0)) != 0)) {
 		ERRF(errmsg, "rep(%s): %s", p->config->rpcurl,
@@ -1116,7 +1118,8 @@ setup_proxy(worker_config *wc, proxy *p, char **errmsg)
 	if (((rv = nng_aio_alloc(&p->survaio, survey_cb, p)) != 0) ||
 	    ((rv = nng_respondent0_open(&s)) != 0) ||
 	    (((wc->zthome != NULL) &&
-	      (rv = nng_setopt_string(s, NNG_OPT_ZT_HOME, wc->zthome)) != 0)) ||
+	        (rv = nng_setopt_string(s, NNG_OPT_ZT_HOME, wc->zthome)) !=
+	            0)) ||
 	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_PING_TIME, 1000)) != 0) ||
 	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_CONN_TIME, 1000)) != 0) ||
 	    ((rv = nng_setopt_ms(s, NNG_OPT_RECONNMINT, 1)) != 0) ||
@@ -1440,14 +1443,12 @@ load_config(const char *path, char **errmsg)
 			free_config(wc);
 			return (NULL);
 		}
-		i = -1;
-		for (key = next_obj_key(arr, NULL); key != NULL;
-		     key = next_obj_key(arr, key)) {
+		for (key = next_obj_key(arr, NULL), i = 0; key != NULL;
+		     key = next_obj_key(arr, key), i++) {
 			object *ao;
 			object *roles;
 			bool    valid;
 
-			i++;
 			if (!get_obj_obj(arr, key, &ao)) {
 				ERRF(errmsg, "api for %s invalid", key);
 				free_config(wc);
@@ -1456,6 +1457,7 @@ load_config(const char *path, char **errmsg)
 			wc->apis[i].method = key;
 			wc->apis[i].allow  = 0;
 			wc->apis[i].deny   = 0;
+
 			if ((get_obj_obj(ao, "allow", &roles)) &&
 			    (!parse_roles(
 			        wc, roles, &wc->apis[i].allow, errmsg))) {
@@ -1507,9 +1509,8 @@ load_config(const char *path, char **errmsg)
 			return (NULL);
 		}
 
-		i = 0;
-		for (key = next_obj_key(arr, NULL); key != NULL;
-		     key = next_obj_key(arr, key)) {
+		for (key = next_obj_key(arr, NULL), i = 0; key != NULL;
+		     key = next_obj_key(arr, key), i++) {
 			object *ao;
 			object *roles;
 			char *  ep;
@@ -1670,7 +1671,8 @@ main(int argc, char **argv)
 	}
 
 	if ((!worker_register_ops("controller_zt1", &controller_zt1_ops)) ||
-	    (!worker_register_ops("controller_ztcentral", &controller_ztcentral_ops))) {
+	    (!worker_register_ops(
+	        "controller_ztcentral", &controller_ztcentral_ops))) {
 		fprintf(stderr, "Failed to register worker ops\n");
 		exit(1);
 	}
