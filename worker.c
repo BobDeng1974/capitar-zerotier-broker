@@ -343,6 +343,7 @@ static void delete_auth_token(worker *, object *);
 static void get_auth_token(worker *, object *);
 static void get_auth_tokens(worker *, object *);
 static void set_own_password(worker *, object *);
+static void create_own_totp(worker *, object *);
 
 static struct {
 	const char *method;
@@ -361,6 +362,7 @@ static struct {
 	{ METHOD_GET_TOKEN, get_auth_token },
 	{ METHOD_GET_TOKENS, get_auth_tokens },
 	{ METHOD_SET_PASSWD, set_own_password },
+	{ METHOD_CREATE_TOTP, create_own_totp },
 	{ NULL, NULL },
 };
 
@@ -831,6 +833,45 @@ set_own_password(worker *w, object *params)
 		return;
 	}
 	if (!set_password(u, pass)) {
+		free_user(u);
+		free_obj(result);
+		send_err(w, E_NOMEM, NULL); // generally
+		return;
+	}
+	free_user(u);
+	send_result(w, result);
+}
+
+static void
+create_own_totp(worker *w, object *params)
+{
+	user *       u;
+	char *       name;
+	object *     result;
+	char *       uri;
+	const otpwd *o;
+
+	if (!get_auth_param(w, params, &u, NULL)) {
+		return;
+	}
+
+	if (!get_obj_string(params, "name", &name)) {
+		send_err(w, E_BADPARAMS, NULL);
+		return;
+	}
+	if ((result = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+		free_user(u);
+		return;
+	}
+	if ((!create_totp(u, name)) || ((o = user_otpwd(u, 1)) == NULL) ||
+	    (!add_obj_string(result, "name", otpwd_name(o))) ||
+	    (!add_obj_string(result, "type", otpwd_type(o))) ||
+	    (!add_obj_string(result, "algorithm", "sha1")) ||
+	    (!add_obj_number(result, "digits", otpwd_digits(o))) ||
+	    (!add_obj_number(result, "period", otpwd_period(o))) ||
+	    (!add_obj_string(result, "secret", otpwd_secret(o))) ||
+	    (!add_obj_string(result, "user", user_name(u)))) {
 		free_user(u);
 		free_obj(result);
 		send_err(w, E_NOMEM, NULL); // generally

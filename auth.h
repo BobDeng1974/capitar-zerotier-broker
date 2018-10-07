@@ -40,6 +40,15 @@ extern user *      find_user(const char *);
 extern user *auth_user(const char *name, const char *, const char *, int *);
 extern void  delete_user(user *);
 extern bool  set_password(user *, const char *);
+extern bool  create_totp(user *, const char *);
+
+extern int          user_num_otpwds(const user *);
+extern const otpwd *user_otpwd(const user *, int);
+extern const char * otpwd_name(const otpwd *);
+extern const char * otpwd_secret(const otpwd *);
+extern const char * otpwd_type(const otpwd *);
+extern int          otpwd_digits(const otpwd *);
+extern int          otpwd_period(const otpwd *);
 
 extern void        free_token(token *);
 extern uint64_t    token_roles(const token *);
@@ -55,9 +64,9 @@ extern double      token_expires(const token *);
 extern bool        user_tokens(const user *, token ***, int *);
 extern void        free_tokens(token **, int);
 
-extern uint64_t    find_role(const char *);
-extern uint64_t    find_role_ext(worker_config *, const char *);
-extern bool check_role_name_configured(worker_config *c, const char *role);
+extern uint64_t find_role(const char *);
+extern uint64_t find_role_ext(worker_config *, const char *);
+extern bool     check_role_name_configured(worker_config *c, const char *role);
 extern const char *role_name(uint64_t);
 extern bool        check_api_role(const char *, uint64_t);
 extern bool        check_nwid_role(uint64_t, uint64_t);

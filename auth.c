@@ -27,19 +27,13 @@
 #include <nng/supplemental/util/platform.h>
 
 #include "auth.h"
+#include "base32.h"
 #include "config.h"
+#include "otp.h"
 #include "util.h"
+#include "worker.h"
 
 static worker_config *wc;
-
-struct otpwd {
-	char *   name;
-	char *   secret;  // this may need to change to binary format
-	char *   type;    // "totp" or "hotp" -- only "totp" for now
-	int      digits;  // 6, 7, 8 (only 6 supported for now)
-	int      period;  // for totp
-	uint64_t counter; // for hotp
-};
 
 struct token {
 	object * json;
@@ -50,6 +44,15 @@ struct token {
 	uint64_t roles;
 	double   expire;
 	double   created;
+};
+
+struct otpwd {
+	char *   name;
+	char *   secret;  // base32, should be 32 digits (160 bits)
+	char *   type;    // "totp" or "hotp" -- only "totp" for now
+	int      digits;  // 6, 7, 8 (only 6 supported for now)
+	int      period;  // for totp
+	uint64_t counter; // for hotp
 };
 
 struct user {
@@ -253,6 +256,50 @@ find_user(const char *name)
 	return (u);
 }
 
+int
+user_num_otpwds(const user *u)
+{
+	return (u->notpwds);
+}
+
+const otpwd *
+user_otpwd(const user *u, int idx)
+{
+	if ((idx >= 0) && (idx < u->notpwds)) {
+		return (&u->otpwds[idx]);
+	}
+	return (NULL);
+}
+
+const char *
+otpwd_name(const otpwd *o)
+{
+	return (o->name);
+}
+
+const char *
+otpwd_secret(const otpwd *o)
+{
+	return (o->secret);
+}
+
+const char *
+otpwd_type(const otpwd *o)
+{
+	return (o->type);
+}
+
+int
+otpwd_digits(const otpwd *o)
+{
+	return (o->digits);
+}
+int
+otpwd_period(const otpwd *o)
+{
+	return (o->period);
+}
+
 bool
 set_password(user *u, const char *pass)
 {
@@ -290,11 +337,126 @@ set_password(user *u, const char *pass)
 	return (true);
 }
 
-static bool
-check_otp(const user *u, const char *otp)
+// create_totp creates a one time password entry.
+// At the moment, this service only supports a single TOTP secret
+// at a time, so if you have multiple devices you will need to
+// enter the same secret on all of them.  This will erase any
+// previously configured OTP entries.
+bool
+create_totp(user *u, const char *name)
 {
-	// Add validation of OTP here.
-	// For now we are returning false.
+	object *obj;
+	object *old;
+	object *arr;
+	char *  path;
+	char    encbuf[33];
+	uint8_t secret[20];
+	size_t  len;
+	otpwd * otwpd;
+
+	for (int i = 0; i < sizeof(secret); i += sizeof(uint32_t)) {
+		uint32_t r = nng_random();
+		memcpy(&secret[i], &r, sizeof(r));
+	}
+	len = base32_encode(secret, sizeof(secret), encbuf, sizeof(encbuf));
+	if (len >= sizeof(encbuf)) {
+		return (false); // base32 buffer overrun?  Should never happen.
+	}
+	// Note that the values for digits and period are required for the
+	// Google authenticator.
+	if (((obj = alloc_obj()) == NULL) ||
+	    (!add_obj_string(obj, "name", name)) ||
+	    (!add_obj_string(obj, "type", "totp")) ||
+	    (!add_obj_string(obj, "secret", encbuf)) ||
+	    (!add_obj_number(obj, "period", 30)) ||
+	    (!add_obj_number(obj, "digits", 6))) {
+		free_obj(obj);
+		return (false);
+	}
+	if (((arr = alloc_arr()) == NULL) || (!add_arr_obj(arr, obj)) ||
+	    ((obj = clone_obj(u->json)) == NULL) ||
+	    (!add_obj_obj(obj, "otpwds", arr))) {
+		free_obj(arr);
+		free_obj(obj);
+		return (false);
+	}
+
+	// Save the generated token...
+	if ((path = path_join(wc->userdir, u->name, ".usr")) == NULL) {
+		free_obj(obj);
+		return (false);
+	}
+	if (!obj_save(path, obj, NULL)) {
+		free(path);
+		free_obj(obj);
+		return (false);
+	}
+
+	// The file change is in effect.  Let's reparse.
+	// Note that if something bad happens here, the user might
+	// well be unusable. Best bet is for the caller to free the
+	// user and start over.  Note also that the change to the OTP
+	// will have taken effect.  This could leave the user locked
+	// locked out.
+	free(u->otpwds);
+	u->notpwds = 0;
+	old        = u->json;
+	u->json    = obj;
+	if (!parse_user(u)) {
+		u->json = old;
+		free(obj);
+		return (false);
+	}
+	free(old);
+	return (true);
+}
+
+static bool
+check_otp(const user *u, const char *pin)
+{
+	// This code rather naively checks each 2FA.  We don't have
+	// support for HOTP as we don't want to store and update
+	// counters in the database.  TOTP is stateless.
+	uint64_t now = time(NULL);
+
+	for (int i = 0; i < u->notpwds; i++) {
+		otpwd *  op;
+		char     otpbuf[16]; // digits should 6, 7, 8 or 9
+		uint8_t  decbuf[32]; // overkill - techically 20 is sufficient
+		size_t   declen;
+		uint64_t period;
+
+		op = &u->otpwds[i];
+		// No support for HOTP for now.
+		if (strcmp(op->type, "totp") != 0) {
+			continue;
+		}
+		// Base32 decode of the secret.  The secret should
+		// be 160 bits long.  That corresponds to 20 bytes
+		// of output, and 32 bytes of hash.   32 bytes of output
+		// would allow for a 256 bit key for the future.
+		declen = base32_decode(
+		    op->secret, strlen(op->secret), decbuf, sizeof(decbuf));
+		if ((declen == 0) || (declen > sizeof(decbuf))) {
+			continue; // bad decode
+		}
+		// Default is 30s.
+		period = op->period != 0 ? op->period : 30;
+
+		// We will run the OTP twice.  Once for the last period,
+		// and once for the current period.  This allows us to use
+		// a password even if the interval was just crossed.
+		otp(otpbuf, sizeof(otpbuf), decbuf, declen, op->digits,
+		    (now / period) - 1);
+		if (strcmp(otpbuf, pin) == 0) {
+			return (true);
+		}
+		otp(otpbuf, sizeof(otpbuf), decbuf, declen, op->digits,
+		    (now / period));
+		if (strcmp(otpbuf, pin) == 0) {
+			return (true);
+		}
+	}
 	return (false);
 }
 

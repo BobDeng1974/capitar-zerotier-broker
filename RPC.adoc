@@ -330,3 +330,28 @@ Parameters::
 
 Result::
 	Empty object.
+
+=== Configure a TOTP (time based one time password)
+
+This resets the TOTP entry.  Note that at this time only a single
+TOTP (time-based one time password) may be created per user.
+
+Method:: `create-totp`
+
+Parameters::
+	`auth`::: Current authentication credentials.
+	`name`::: A name for the token.
+
+Result::
+	`name`::: The name supplied in the call.
+	`secret`::: base-32 secret (32 bytes, 160 bits)
+	`digits`::: 6 (only 6 supported for now)
+	`period`::: 30 (30 secs since epoch)
+	`type`::: `totp`, for a time based OTP
+	`algorithm`::: `sha1` (no support for other algorithms)
+	`user`::: username
+
+The intention here is that the REST server will usethe above parameters
+to construct an otpauth:// URL that can be turned into a QR code for
+import into authentication apps.  The REST server should construct
+the label as `$controller:$user`.

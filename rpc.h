@@ -52,6 +52,7 @@ enum rpc_errors {
 #define METHOD_GET_TOKEN	"get-token"
 #define METHOD_GET_TOKENS	"get-tokens"
 #define METHOD_SET_PASSWD	"set-password"
+#define METHOD_CREATE_TOTP	"create-totp"
 //clang-format on
 
 #endif // RPC_H

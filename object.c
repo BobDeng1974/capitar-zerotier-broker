@@ -335,6 +335,17 @@ add_arr_string(object *obj, const char *s)
 	return (true);
 }
 
+bool
+add_arr_obj(object *obj, object *child)
+{
+
+	if (!cJSON_IsArray(&obj->json)) {
+		return (false);
+	}
+	cJSON_AddItemToArray(&obj->json, &child->json);
+	return (true);
+}
+
 char *
 next_obj_key(object *obj, const char *name)
 {

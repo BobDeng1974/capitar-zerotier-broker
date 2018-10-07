@@ -54,6 +54,7 @@ extern int     get_arr_len(object *);
 extern bool    get_arr_obj(object *, int, object **);
 extern bool    get_arr_string(object *, int, char **);
 extern bool    add_arr_string(object *, const char *);
+extern bool    add_arr_obj(object *, object *);
 extern bool    is_obj_array(object *);
 extern bool    is_obj_object(object *);
 extern char *  next_obj_key(object *, const char *);
