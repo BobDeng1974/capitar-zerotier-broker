@@ -19,6 +19,7 @@
 
   <body>
     <div id="my-app">
+      <navbar></navbar>
       <login></login>
       <!--controller></controller-->
     </div>
@@ -37,6 +38,7 @@
       Vue.use(Vuex)
 
       // Global registration of components
+      Vue.component('navbar', httpVueLoader('components/nav/navbar.vue'))
       Vue.component('login', httpVueLoader('components/auth/login.vue'))
       Vue.component('controller', httpVueLoader('components/controller/controller.vue'))
       Vue.component('network', httpVueLoader('components/network/network.vue'))
