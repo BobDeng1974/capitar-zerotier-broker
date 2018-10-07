@@ -340,18 +340,26 @@ Method:: `create-totp`
 
 Parameters::
 	`auth`::: Current authentication credentials.
-	`name`::: A name for the token.
+	`issuer`::: Issuer to associate with the OTP.  (From proxy usually).
 
 Result::
-	`name`::: The name supplied in the call.
+	`issuer`::: The name supplied in the call.
 	`secret`::: base-32 secret (32 bytes, 160 bits)
 	`digits`::: 6 (only 6 supported for now)
 	`period`::: 30 (30 secs since epoch)
 	`type`::: `totp`, for a time based OTP
-	`algorithm`::: `sha1` (no support for other algorithms)
-	`user`::: username
+	`algorithm`::: `SHA1` (no support for other algorithms)
+	`url`::: `otpauth://` URL suitable for conversion to QR code.
 
-The intention here is that the REST server will usethe above parameters
-to construct an otpauth:// URL that can be turned into a QR code for
-import into authentication apps.  The REST server should construct
-the label as `$controller:$user`.
+=== Unconfigure TOTP (time based one time password)
+
+This disables TOTP based authentication, restoring plain
+username/password authentication.
+
+Method:: `delete-totp`
+
+Parameters::
+	`auth`::: Current authentication credentials.
+
+Result::
+	Empty object.

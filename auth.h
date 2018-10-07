@@ -41,6 +41,7 @@ extern user *auth_user(const char *name, const char *, const char *, int *);
 extern void  delete_user(user *);
 extern bool  set_password(user *, const char *);
 extern bool  create_totp(user *, const char *);
+extern bool  delete_totp(user *);
 
 extern int          user_num_otpwds(const user *);
 extern const otpwd *user_otpwd(const user *, int);

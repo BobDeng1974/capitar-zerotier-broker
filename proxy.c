@@ -1046,6 +1046,45 @@ do_self_password(nng_aio *aio, object *auth, const char *method,
 	do_rpc(aio, cp, METHOD_SET_PASSWD, params);
 }
 
+static void
+do_totp(nng_aio *aio, object *auth, const char *method, controller *cp,
+    object *body)
+{
+	const char *id;
+	char *      pass;
+	object *    params;
+	char *      iss;
+	if ((params = create_controller_params(cp, auth)) == NULL) {
+		return;
+	}
+	if (strcmp(method, "DELETE") == 0) {
+		do_rpc(aio, cp, METHOD_DELETE_TOTP, params);
+		return;
+	}
+	if (strcmp(method, "POST") != 0) {
+		free_obj(params);
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+		return;
+	}
+	if (body == NULL) {
+		rpcerr(aio, NNG_HTTP_STATUS_BAD_REQUEST, "Bad JSON");
+		return;
+	}
+
+	// We don't care about the body contents, only that it is well-formed
+	// JSON.  Someday we might add other parameters.
+
+	iss = NULL;
+	if ((asprintf(&iss, "ZeroTier Controller Proxy %s", cp->name) < 0) ||
+	    (!add_obj_string(params, "issuer", iss))) {
+		rpcerr(aio, NNG_HTTP_STATUS_INTERNAL_SERVER_ERROR, NULL);
+		free(iss);
+		return;
+	}
+	free(iss);
+	do_rpc(aio, cp, METHOD_CREATE_TOTP, params);
+}
+
 #define PROXY_URI "/api/1.0/proxy"
 #define PROXY_URI_LEN strlen(PROXY_URI)
 
@@ -1284,6 +1323,21 @@ proxy_api(nng_aio *aio)
 		free_obj(body);
 		return;
 	}
+
+	if (strcmp(uri, "/totp") == 0) {
+		char *  data;
+		size_t  len;
+		object *body;
+
+		// Probably we should have a way to delete the TOTP as well.
+		nng_http_req_get_data(req, (void **) &data, &len);
+		body = parse_obj(data, len);
+
+		do_totp(aio, auth, method, cp, body);
+		free_obj(body);
+		return;
+	}
+
 	rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
 }
 

@@ -25,8 +25,9 @@ has a two-factor device (one-time-password generator) configured.
 
 === Two-Factor Authentication
 
-Two-factor authentication is based on OAth (not implemented yet),
-and works just like HTTP Basic Authentication, except that an additional header, `X-ZTC-OTP` must be supplied.  This header
+Two-factor authentication is based on OAth TOTP (see RFC 4622)
+and works just like HTTP Basic Authentication, except that an additional header,
+`X-ZTC-OTP` must be supplied.  This header
 must contain the value of a one-time-password (typically a 6, 7, 8,
 or 9 digit number) generated from the second factor.
 The `Authorization:` header must still contain the user's Basic
@@ -292,6 +293,8 @@ This changes the current user's password.
 
 URI:: `/proxy/$controller/password`
 
+Method:: `POST`
+
 URI Parameters::
 	`$controller`::: This is the name (or label) of the controller to access.
 
@@ -300,3 +303,30 @@ Body Parameters::
 
 Result::
 	Empty object.
+
+=== Create TOTP (Time Based One Time Password)
+
+This creates a one-time password suitable for use tools like Google
+authenticator.  If the user has any prior configured one-time-password
+generators, then those are removed and replaced.
+
+URI:: `/proxy/$controller/totp`
+
+Method:: `POST`
+
+URI Parameters::
+	None.
+
+Body Parameters::
+	Empty object (for now).
+
+Result::
+	`url`:: An otpauth:// URL suitable for use with QR code or sending to
+	other authenticators
+	`name`:: A generated name for the TOTP.  (Not user specifable.)
+	`secret`:: The shared secret encoded in Base-32.
+	`type`:: `totp` (we only support TOTP for now)
+	`algorithm`:: `SHA1`
+	`digits`:: 6
+	`period`:: 30 (secs)
+	`issuer`:: Based on the value of `$controller`, also not URL encoded.

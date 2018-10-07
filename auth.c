@@ -352,7 +352,6 @@ create_totp(user *u, const char *name)
 	char    encbuf[33];
 	uint8_t secret[20];
 	size_t  len;
-	otpwd * otwpd;
 
 	for (int i = 0; i < sizeof(secret); i += sizeof(uint32_t)) {
 		uint32_t r = nng_random();
@@ -399,6 +398,7 @@ create_totp(user *u, const char *name)
 	// will have taken effect.  This could leave the user locked
 	// locked out.
 	free(u->otpwds);
+	u->otpwds  = NULL;
 	u->notpwds = 0;
 	old        = u->json;
 	u->json    = obj;
@@ -408,6 +408,35 @@ create_totp(user *u, const char *name)
 		return (false);
 	}
 	free(old);
+	return (true);
+}
+
+bool
+delete_totp(user *u)
+{
+	object *obj = NULL;
+	object *arr;
+	char *  path;
+
+	if (((arr = alloc_arr()) == NULL) ||
+	    (!add_obj_obj(u->json, "otpwds", arr))) {
+		free_obj(arr);
+		return (false);
+	}
+
+	free(u->otpwds);
+	u->otpwds  = NULL;
+	u->notpwds = 0;
+
+	// Save the generated token...
+	if ((path = path_join(wc->userdir, u->name, ".usr")) == NULL) {
+		return (false);
+	}
+	if (!obj_save(path, u->json, NULL)) {
+		free(path);
+		return (false);
+	}
+
 	return (true);
 }
 

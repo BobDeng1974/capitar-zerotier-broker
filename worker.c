@@ -344,6 +344,7 @@ static void get_auth_token(worker *, object *);
 static void get_auth_tokens(worker *, object *);
 static void set_own_password(worker *, object *);
 static void create_own_totp(worker *, object *);
+static void delete_own_totp(worker *, object *);
 
 static struct {
 	const char *method;
@@ -363,6 +364,7 @@ static struct {
 	{ METHOD_GET_TOKENS, get_auth_tokens },
 	{ METHOD_SET_PASSWD, set_own_password },
 	{ METHOD_CREATE_TOTP, create_own_totp },
+	{ METHOD_DELETE_TOTP, delete_own_totp },
 	{ NULL, NULL },
 };
 
@@ -842,39 +844,140 @@ set_own_password(worker *w, object *params)
 	send_result(w, result);
 }
 
+static bool
+urlsafe(char c)
+{
+	if (isalnum(c)) {
+		return (true);
+	}
+	if (strchr("$-_.+!*'(),", c) != NULL) {
+		return (true);
+	}
+	return (false);
+}
+
+static char *
+urlencode(const char *in)
+{
+	size_t l = 0;
+	char * buf;
+	char * dst;
+	char   c;
+	for (int i = 0; (c = in[i]) != '\0'; i++) {
+		l += urlsafe(c) ? 1 : 3;
+	}
+	if ((buf = malloc(l + 1)) == NULL) {
+		return (NULL);
+	}
+	dst = buf;
+	for (int i = 0; (c = in[i]) != '\0'; i++) {
+		if (urlsafe(c)) {
+			*dst++ = c;
+		} else {
+			char hex[3];
+			*dst++ = '%';
+			snprintf(hex, 3, "%02X", c);
+			*dst++ = hex[0];
+			*dst++ = hex[1];
+		}
+	}
+	*dst = '\0';
+	return (buf);
+}
+
 static void
 create_own_totp(worker *w, object *params)
 {
 	user *       u;
-	char *       name;
+	char *       issuer;
 	object *     result;
-	char *       uri;
+	char *       url;
 	const otpwd *o;
+	char *       ibuf = NULL;
+	char *       ubuf = NULL;
 
 	if (!get_auth_param(w, params, &u, NULL)) {
 		return;
 	}
 
-	if (!get_obj_string(params, "name", &name)) {
+	if (!get_obj_string(params, "issuer", &issuer)) {
 		send_err(w, E_BADPARAMS, NULL);
 		return;
 	}
+	if (((result = alloc_obj()) == NULL) ||
+	    ((ibuf = urlencode(issuer)) == NULL) ||
+	    ((ubuf = urlencode(user_name(u))) == NULL)) {
+		send_err(w, E_NOMEM, NULL);
+		free_obj(result);
+		free(ibuf);
+		free_user(u);
+		return;
+	}
+	if ((!create_totp(u, issuer)) || ((o = user_otpwd(u, 0)) == NULL)) {
+		send_err(w, E_NOMEM, NULL);
+		free_obj(result);
+		free_user(u);
+		return;
+	}
+	// URL encode unsafe characters into buf
+
+	if (asprintf(&url,
+	        "otpauth://totp/%s:%s?secret=%s&issuer=%s&digits=%d&period=%d",
+	        ibuf, ubuf, otpwd_secret(o), ibuf, otpwd_digits(o),
+	        otpwd_period(o)) < 0) {
+		free_user(u);
+		free_obj(result);
+		free(ibuf);
+		free(ubuf);
+		send_err(w, E_NOMEM, NULL); // generally
+		return;
+	}
+
+	free(ibuf);
+	free(ubuf);
+
+	if ((!add_obj_string(result, "issuer", otpwd_name(o))) ||
+	    (!add_obj_string(result, "type", otpwd_type(o))) ||
+	    (!add_obj_string(result, "algorithm", "SHA1")) ||
+	    (!add_obj_number(result, "digits", otpwd_digits(o))) ||
+	    (!add_obj_number(result, "period", otpwd_period(o))) ||
+	    (!add_obj_string(result, "secret", otpwd_secret(o))) ||
+	    (!add_obj_string(result, "url", url))) {
+		free_user(u);
+		free(url);
+		free_obj(result);
+		send_err(w, E_NOMEM, NULL); // generally
+		return;
+	}
+	free(url);
+	free_user(u);
+	send_result(w, result);
+}
+
+static void
+delete_own_totp(worker *w, object *params)
+{
+	user *       u;
+	char *       issuer;
+	object *     result;
+	char *       url;
+	const otpwd *o;
+	char *       ibuf = NULL;
+	char *       ubuf = NULL;
+
+	if (!get_auth_param(w, params, &u, NULL)) {
+		return;
+	}
+
 	if ((result = alloc_obj()) == NULL) {
 		send_err(w, E_NOMEM, NULL);
 		free_user(u);
 		return;
 	}
-	if ((!create_totp(u, name)) || ((o = user_otpwd(u, 1)) == NULL) ||
-	    (!add_obj_string(result, "name", otpwd_name(o))) ||
-	    (!add_obj_string(result, "type", otpwd_type(o))) ||
-	    (!add_obj_string(result, "algorithm", "sha1")) ||
-	    (!add_obj_number(result, "digits", otpwd_digits(o))) ||
-	    (!add_obj_number(result, "period", otpwd_period(o))) ||
-	    (!add_obj_string(result, "secret", otpwd_secret(o))) ||
-	    (!add_obj_string(result, "user", user_name(u)))) {
-		free_user(u);
+	if (!delete_totp(u)) {
+		send_err(w, E_NOMEM, NULL);
 		free_obj(result);
-		send_err(w, E_NOMEM, NULL); // generally
+		free_user(u);
 		return;
 	}
 	free_user(u);
