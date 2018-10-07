@@ -1,7 +1,7 @@
 <template>
 <div>
 
-<b-jumbotron v-if="!creds.token && !creds.token.id"
+<b-jumbotron v-if="!creds.token || !creds.token.id"
              header="ZeroTier Network Controller"
              lead="Enter Credentials to Login:" >
   <div class="col-6">
@@ -127,6 +127,7 @@
   <b-alert class="col-6" :show="need_username"> Please enter username </b-alert>
   <b-alert class="col-6" :show="need_password"> Please enter password </b-alert>
   <b-alert class="col-6" :show="need_oath"> Please enter access token </b-alert>
+  <b-alert class="col-6" :show="tokenExpiresIn < 3600"> Access token will expire in {{ tokenExpiresIn }} seconds </b-alert>
   <b-alert class="col-6" :show="no_such_controller"> No such controller found </b-alert>
 </b-jumbotron>
 
@@ -175,13 +176,39 @@ module.exports = {
       controller: "",
       networks: null,
       nw_filter: "",
-      creds: { username: "", password: "", oath: "", token: "" },
+      creds: { username: "", password: "", oath: "", token: null },
     }
   },
   props: ["controller"],
+  computed: {
+    // Number of seconds the token will expire in, if expire time is set
+    tokenExpiresIn() {
+      if (!this.creds.token || this.creds.token.expires == 0) {
+        return null
+      }
+      return this.creds.token.expires - Math.floor(Date.now() / 1000)
+    }
+  },
   methods: {
     logout() {
-      this.creds = { username: "", password: "", oath: "", token: ""}
+      axios
+        .delete(this.$restApi + this.controller + "/token/" + this.creds.token.id)
+        .then(response => {
+          this.creds = { username: "", password: "", oath: "", token: ""}
+        })
+        .catch(error => {
+          if ((error.response) && (error.response.status == 404)) {
+            // Perhaps the controller has been pruned, or the token does not exist
+            // this.no_such_controller = true
+            console.log(error)
+            this.errored = true
+          }
+          else {
+            console.log(error)
+            this.errored = true
+          }
+        })
+        .finally(() => this.loading = false)
     },
     clear() {
       this.need_controller_name = false
@@ -207,8 +234,8 @@ module.exports = {
       }
       this.clear()
       axios
-        .post("/api/1.0/proxy/" + this.controller + "/token", {
-            expires: 3600*8 + Math.floor(Date.now() / 1000)
+        .post(this.$restApi + this.controller + "/token", {
+            expires: this.$cfg.tokenLifeTime + Math.floor(Date.now() / 1000)
           }, {
           auth: {
             username: this.creds.username,
@@ -238,7 +265,7 @@ module.exports = {
       }
       this.clear()
       axios
-        .get("/api/1.0/proxy/" + this.controller + "/status")
+        .get(this.$restApi + this.controller + "/status")
         .then(response => {
           this.controller_status = response.data
         })
@@ -261,7 +288,7 @@ module.exports = {
       this.clear()
       this.loading = true
       axios
-        .get("/api/1.0/proxy/" + this.controller + "/network")
+        .get(this.$restApi + this.controller + "/network")
         .then(response => {
           this.networks = response.data
         })

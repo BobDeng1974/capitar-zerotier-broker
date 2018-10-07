@@ -13,7 +13,7 @@
     <script src="https://unpkg.com/babel-polyfill@6.26.0/dist/polyfill.min.js"></script>
     <script src="https://unpkg.com/bootstrap-vue@2.0.0-rc.11/dist/bootstrap-vue.min.js"></script>
 
-    <base href="/static/">
+    <base href="/static/app/">
   </head>
 
   <body>
@@ -23,20 +23,29 @@
     </div>
 
     <script type="text/javascript">
+      // Global variables
 
+      Vue.prototype.$appName = 'Capitar Zerotier Broker'
+      Vue.prototype.$restApi = '/api/1.0/proxy/'
+      Vue.prototype.$cfg = {
+        //tokenLifeTime: 3600 * 8 // token is valid for 8 hours ( if allowed by endpoint )
+        tokenLifeTime: 360 // for testing handling expiration
+      }
+
+      // This must be done first, before modules are loaded.
       Vue.use(Vuex)
 
       // Global registration of components
-      Vue.component('login', httpVueLoader('/static/components/auth/login.vue'))
-      Vue.component('controller', httpVueLoader('/static/components/controller/controller.vue'))
-      Vue.component('network', httpVueLoader('/static/components/network/network.vue'))
-      Vue.component('store', httpVueLoader('/static/store/store.vue'))
+      Vue.component('login', httpVueLoader('components/auth/login.vue'))
+      Vue.component('controller', httpVueLoader('components/controller/controller.vue'))
+      Vue.component('network', httpVueLoader('components/network/network.vue'))
+      Vue.component('store', httpVueLoader('store/store.vue'))
 
       new Vue({
         el: '#my-app',
 	// local components that are not exposed outside this modules
         components: {
-          //'my-component': httpVueLoader('/static/my-component.vue')
+          //'my-component': httpVueLoader('components/my-component.vue')
         }
       })
     </script>

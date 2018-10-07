@@ -70,7 +70,7 @@ module.exports = {
   props: ["id", "index", "networks", "controller", "creds", "nw_filter"],
   mounted () {
     axios
-      .get("/api/1.0/proxy/" + this.controller + "/network/" + this.id)
+      .get(this.$restApi + this.controller + "/network/" + this.id)
       .then(response => {
         this.network = response.data
       })

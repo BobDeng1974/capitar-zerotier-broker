@@ -135,7 +135,7 @@ module.exports = {
 
       this.clear()
       axios
-        .get("/api/1.0/proxy/" + this.controller + "/network", {
+        .get(this.$restApi + this.controller + "/network", {
           headers: {'X-ZTC-Token': this.creds.token.id }
         }).then(response => {
           this.networks = response.data
