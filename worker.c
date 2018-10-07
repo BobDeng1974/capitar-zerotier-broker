@@ -40,6 +40,7 @@
 #include "auth.h"
 #include "cfgfile.h"
 #include "object.h"
+#include "otp.h"
 #include "util.h"
 #include "worker.h"
 
@@ -1669,6 +1670,8 @@ main(int argc, char **argv)
 			break;
 		}
 	}
+
+	otptest(); // Run an internal self test.  This can be removed later.
 
 	if ((!worker_register_ops(&controller_zt1_ops)) ||
 	    (!worker_register_ops(&controller_ztcentral_ops))) {

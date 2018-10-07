@@ -40,8 +40,6 @@
 #include <windows.h>
 #endif
 
-#include "auth.h"
-
 #ifndef HAVE_ASPRINTF
 // This is sort of like asprintf, but asprintf isn't portable, so
 // we baked our own.
