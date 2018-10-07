@@ -15,14 +15,6 @@
       <b-jumbotron :header="networkName" :lead="networkId" >
        <p>For more information visit website</p>
        <b-btn variant="primary" href="#">More Info</b-btn>
-
-        <b-card bg-variant="secondary"
-              :header="networkName"
-              text-variant="white"
-              class="text-center">
-          <p class="card-text"> {{ network.id }} </p>
-          <b-button href="#" variant="primary">Go somewhere</b-button>
-        </b-card>
       </b-jumbotron>
 
     </div>

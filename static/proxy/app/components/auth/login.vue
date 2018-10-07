@@ -127,7 +127,7 @@
   <b-alert class="col-6" :show="need_username"> Please enter username </b-alert>
   <b-alert class="col-6" :show="need_password"> Please enter password </b-alert>
   <b-alert class="col-6" :show="need_oath"> Please enter access token </b-alert>
-  <b-alert class="col-6" :show="tokenExpiresIn < 3600"> Access token will expire in {{ tokenExpiresIn }} seconds </b-alert>
+  <b-alert class="col-6" :show="10" v-if="tokenExpiresIn < 3600"> Access token will expire in {{ tokenExpiresIn }} seconds </b-alert>
   <b-alert class="col-6" :show="no_such_controller"> No such controller found </b-alert>
 </b-jumbotron>
 
