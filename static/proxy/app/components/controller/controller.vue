@@ -19,7 +19,7 @@
                     v-on:keyup.enter.native="getNetworks"
       ></b-form-input>
       <b-input-group-append>
-        <b-btn variant="succes"
+        <b-btn variant="success"
                v-on:click="getNetworks"
         >List Networks</b-btn>
       </b-input-group-append>
