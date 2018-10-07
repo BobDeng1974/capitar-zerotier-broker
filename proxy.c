@@ -1347,6 +1347,7 @@ serve_http(void)
 	nng_url *         url;
 	nng_http_server * server;
 	nng_http_handler *h;
+	char *            staturl;
 	int               rv;
 
 	// Allocate and hold the server.
@@ -1360,6 +1361,30 @@ serve_http(void)
 	// automatically. (Q: Should this be optional?)
 	if (((rv = nng_http_handler_alloc_directory(
 	          &h, "/static", static_dir)) != 0) ||
+	    ((rv = nng_http_server_add_handler(server, h)) != 0)) {
+		fprintf(stderr, "%s\n", nng_strerror(rv));
+		exit(1);
+	}
+
+	if (asprintf(&staturl, "%s/static", httpurl) < 0) {
+		fprintf(stderr, "strdup: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	// Redirect for /admin to /static
+	if (((rv = nng_http_handler_alloc_redirect(&h, "/admin",
+	          NNG_HTTP_STATUS_TEMPORARY_REDIRECT, staturl)) != 0) ||
+	    ((rv = nng_http_handler_set_method(h, NULL)) != 0) ||
+	    ((rv = nng_http_handler_set_tree(h)) != 0) ||
+	    ((rv = nng_http_server_add_handler(server, h)) != 0)) {
+		fprintf(stderr, "%s\n", nng_strerror(rv));
+		exit(1);
+	}
+
+	// Redirect for just /.
+	if (((rv = nng_http_handler_alloc_redirect(&h, "/",
+	          NNG_HTTP_STATUS_TEMPORARY_REDIRECT, staturl)) != 0) ||
+	    ((rv = nng_http_handler_set_method(h, NULL)) != 0) ||
 	    ((rv = nng_http_server_add_handler(server, h)) != 0)) {
 		fprintf(stderr, "%s\n", nng_strerror(rv));
 		exit(1);
