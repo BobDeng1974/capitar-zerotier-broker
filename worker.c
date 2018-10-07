@@ -489,7 +489,7 @@ get_controller_param(worker *w, object *params, controller **cpp)
 }
 
 bool
-get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
+get_auth_param(worker *w, object *params, user **userp)
 {
 	char *  id;
 	char *  pass;
@@ -518,7 +518,16 @@ get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
 			send_err(w, code, NULL); // Invalid token.
 			return (false);
 		}
-		if (!check_api_role(w->method, token_roles(tok))) {
+
+		w->eff_roles = token_roles(tok) | ROLE_ALL | ROLE_TOKEN;
+		w->eff_roles |= w->proxy->config->role_add;
+		w->eff_roles &= ~w->proxy->config->role_del;
+		// User roles can be subtraced by proxy rules.
+		w->user_roles = token_roles(tok) & ~w->proxy->config->role_del;
+
+		if (!check_api_role(w->method, w->eff_roles)) {
+			w->eff_roles  = 0;
+			w->user_roles = 0;
 			free_token(tok);
 			send_err(w, E_FORBIDDEN, "Permission denied");
 			return (false);
@@ -530,9 +539,6 @@ get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
 			return (false);
 		}
 
-		if (rolesp != NULL) {
-			*rolesp = (uint64_t) token_roles(tok);
-		}
 		free_token(tok);
 		return (true);
 	}
@@ -551,9 +557,12 @@ get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
 		send_err(w, code, NULL);
 		return (false);
 	}
-	w->eff_roles = w->user_roles = user_roles(user);
+	w->eff_roles = user_roles(user) | ROLE_ALL;
 	w->eff_roles |= w->proxy->config->role_add;
 	w->eff_roles &= ~w->proxy->config->role_del;
+	// User roles can be subtraced by proxy rules.
+	w->user_roles = user_roles(user) & ~w->proxy->config->role_del;
+	w->user_roles &= ~w->proxy->config->role_del;
 
 	if (!check_api_role(w->method, w->eff_roles)) {
 		w->eff_roles  = 0;
@@ -563,9 +572,6 @@ get_auth_param(worker *w, object *params, user **userp, uint64_t *rolesp)
 		return (false);
 	}
 
-	if (rolesp != NULL) {
-		*rolesp = (uint64_t) user_roles(user);
-	}
 	if (userp == NULL) {
 		free_user(user);
 	} else {
@@ -585,9 +591,14 @@ create_auth_token(worker *w, object *params)
 	char *   desc;
 	double   expire;
 
-	if (!get_auth_param(w, params, &u, &authroles)) {
+	if (!get_auth_param(w, params, &u)) {
 		return;
 	}
+	// authroles are the "inheritable" roles for a user.
+	// It specifically excludes "%all", "%token", and roles that
+	// were granted by the proxy accessed.  %admin will be treated
+	// like other roles for inheritance purposes.
+	authroles = w->user_roles;
 	if (get_obj_obj(params, "roles", &a)) {
 		reqroles = 0;
 		for (int i = 0; i < get_arr_len(a); i++) {
@@ -683,7 +694,7 @@ get_auth_token(worker *w, object *params)
 	char *   id;
 	int      code;
 
-	if (!get_auth_param(w, params, &u, NULL)) {
+	if (!get_auth_param(w, params, &u)) {
 		return;
 	}
 	if (!get_obj_string(params, "token", &id)) {
@@ -746,14 +757,13 @@ get_auth_token(worker *w, object *params)
 static void
 delete_auth_token(worker *w, object *params)
 {
-	uint64_t roles;
-	user *   u;
-	token *  tok;
-	object * result;
-	char *   id;
-	int      code;
+	user *  u;
+	token * tok;
+	object *result;
+	char *  id;
+	int     code;
 
-	if (!get_auth_param(w, params, &u, &roles)) {
+	if (!get_auth_param(w, params, &u)) {
 		return;
 	}
 	if (!get_obj_string(params, "token", &id)) {
@@ -788,7 +798,7 @@ get_auth_tokens(worker *w, object *params)
 	int     ntoks;
 	object *result;
 
-	if (!get_auth_param(w, params, &u, NULL)) {
+	if (!get_auth_param(w, params, &u)) {
 		return;
 	}
 	if (!user_tokens(u, &toks, &ntoks)) {
@@ -822,7 +832,7 @@ set_own_password(worker *w, object *params)
 	char *  pass;
 	object *result;
 
-	if (!get_auth_param(w, params, &u, NULL)) {
+	if (!get_auth_param(w, params, &u)) {
 		return;
 	}
 	if (!get_obj_string(params, "password", &pass)) {
@@ -896,7 +906,7 @@ create_own_totp(worker *w, object *params)
 	char *       ibuf = NULL;
 	char *       ubuf = NULL;
 
-	if (!get_auth_param(w, params, &u, NULL)) {
+	if (!get_auth_param(w, params, &u)) {
 		return;
 	}
 
@@ -965,7 +975,7 @@ delete_own_totp(worker *w, object *params)
 	char *       ibuf = NULL;
 	char *       ubuf = NULL;
 
-	if (!get_auth_param(w, params, &u, NULL)) {
+	if (!get_auth_param(w, params, &u)) {
 		return;
 	}
 
@@ -1480,7 +1490,11 @@ load_config(const char *path, char **errmsg)
 			free_config(wc);
 			return (NULL);
 		}
-		if ((wc->nroles = get_arr_len(arr)) > 64) {
+
+		// For now we are only permitting 32 roles.  The reason
+		// is so that we can reserve up to 32 additional built-in
+		// roles which are not configuration file driven.
+		if ((wc->nroles = get_arr_len(arr)) > 32) {
 			ERRF(errmsg, "too many roles");
 			free_config(wc);
 			return (NULL);
@@ -1499,12 +1513,18 @@ load_config(const char *path, char **errmsg)
 				free_config(wc);
 				return (NULL);
 			}
-			// alphnumeric + _ for role names.  We want to
-			// reserve other characters for future special
-			// purposes.
-			for (int j = 0; j < strlen(r->name); j++) {
-				if ((!isalnum(r->name[j])) &&
-				    (r->name[j] != '_')) {
+			// Role names are required to start with an alpha
+			// numeric or [_].  They furthermore must consist
+			// entirely of printable characters.  Special role
+			// names used by the system will start with other
+			// characters.
+			if ((!isalnum(r->name[0])) && (r->name[0] != '_')) {
+				ERRF(errmsg, "invalid role name");
+				free_config(wc);
+				return (NULL);
+			}
+			for (int j = 0; j < r->name[j] != '\0'; j++) {
+				if (!isprint(r->name[j])) {
 					ERRF(errmsg, "invalid role name");
 					free_config(wc);
 					return (NULL);

@@ -149,7 +149,6 @@ struct worker_config {
 
 extern bool get_controller_param(worker *w, object *params, controller **cpp);
 
-extern bool get_auth_param(
-    worker *w, object *params, user **userp, uint64_t *rolesp);
+extern bool get_auth_param(worker *w, object *params, user **userp);
 
 #endif // WORKER_H

@@ -29,15 +29,14 @@
 #include "object.h"
 #include "worker.h"
 
-
 struct controller {
-        char *             addr;
-        char *             name;
-        char *             secret;
-        char *             host; // for HTTP
-        nng_http_client *  client;
-        worker_ops *       ops;
-        controller_config *config;
+	char *             addr;
+	char *             name;
+	char *             secret;
+	char *             host; // for HTTP
+	nng_http_client *  client;
+	worker_ops *       ops;
+	controller_config *config;
 };
 
 void get_status(worker *, object *);
@@ -48,7 +47,6 @@ void get_network_member(worker *, object *);
 void delete_network_member(worker *, object *);
 void authorize_network_member(worker *, object *);
 void deauthorize_network_member(worker *, object *);
-
 
 bool
 get_network_param(worker *w, object *params, controller **cpp, uint64_t *nwidp)
@@ -112,7 +110,7 @@ get_networks(worker *w, object *params)
 {
 	controller *cp;
 
-	if (get_auth_param(w, params, NULL, NULL) &&
+	if (get_auth_param(w, params, NULL) &&
 	    get_controller_param(w, params, &cp)) {
 		cp->ops->get_networks(cp, w);
 	}
@@ -124,7 +122,7 @@ get_network(worker *w, object *params)
 	controller *cp;
 	uint64_t    nwid;
 
-	if (get_auth_param(w, params, NULL, NULL) &&
+	if (get_auth_param(w, params, NULL) &&
 	    get_network_param(w, params, &cp, &nwid)) {
 		cp->ops->get_network(cp, w, nwid);
 	}
@@ -136,7 +134,7 @@ get_network_members(worker *w, object *params)
 	controller *cp;
 	uint64_t    nwid;
 
-	if (get_auth_param(w, params, NULL, NULL) &&
+	if (get_auth_param(w, params, NULL) &&
 	    get_network_param(w, params, &cp, &nwid)) {
 		cp->ops->get_members(cp, w, nwid);
 	}
@@ -149,7 +147,7 @@ get_network_member(worker *w, object *params)
 	uint64_t    nwid;
 	uint64_t    member;
 
-	if (get_auth_param(w, params, NULL, NULL) &&
+	if (get_auth_param(w, params, NULL) &&
 	    get_member_param(w, params, &cp, &nwid, &member)) {
 		cp->ops->get_member(cp, w, nwid, member);
 	}
@@ -162,7 +160,7 @@ delete_network_member(worker *w, object *params)
 	uint64_t    nwid;
 	uint64_t    member;
 
-	if (get_auth_param(w, params, NULL, NULL) &&
+	if (get_auth_param(w, params, NULL) &&
 	    get_member_param(w, params, &cp, &nwid, &member)) {
 		cp->ops->delete_member(cp, w, nwid, member);
 	}
@@ -175,7 +173,7 @@ authorize_network_member(worker *w, object *params)
 	uint64_t    nwid;
 	uint64_t    member;
 
-	if (get_auth_param(w, params, NULL, NULL) &&
+	if (get_auth_param(w, params, NULL) &&
 	    get_member_param(w, params, &cp, &nwid, &member)) {
 		cp->ops->authorize_member(cp, w, nwid, member);
 	}
@@ -188,7 +186,7 @@ deauthorize_network_member(worker *w, object *params)
 	uint64_t    nwid;
 	uint64_t    member;
 
-	if (get_auth_param(w, params, NULL, NULL) &&
+	if (get_auth_param(w, params, NULL) &&
 	    get_member_param(w, params, &cp, &nwid, &member)) {
 		cp->ops->deauthorize_member(cp, w, nwid, member);
 	}

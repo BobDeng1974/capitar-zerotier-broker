@@ -857,6 +857,19 @@ token_belongs(const token *tok, const user *u)
 bool
 check_role_name_configured(worker_config *c, const char *role)
 {
+	// Builtin roles.
+	if (role[0] == '%') {
+		if (strcmp(role, "%admin") == 0) {
+			return (true);
+		}
+		if (strcmp(role, "%token") == 0) {
+			return (true);
+		}
+		if (strcmp(role, "%all") == 0) {
+			return (true);
+		}
+		return (false);
+	}
 	for (int i = 0; i < c->nroles; i++) {
 		if (strcmp(c->roles[i].name, role) == 0) {
 			return true;
@@ -869,6 +882,18 @@ check_role_name_configured(worker_config *c, const char *role)
 uint64_t
 find_role_ext(worker_config *c, const char *role)
 {
+	if (role[0] == '%') {
+		if (strcmp(role, "%admin") == 0) {
+			return (ROLE_ADMIN);
+		}
+		if (strcmp(role, "%token") == 0) {
+			return (ROLE_TOKEN);
+		}
+		if (strcmp(role, "%all") == 0) {
+			return (ROLE_ALL);
+		}
+		return (0);
+	}
 	for (int i = 0; i < c->nroles; i++) {
 		if (strcmp(c->roles[i].name, role) == 0) {
 			return (c->roles[i].mask);
@@ -886,6 +911,14 @@ find_role(const char *role)
 const char *
 role_name(uint64_t role)
 {
+	switch (role) {
+	case ROLE_ADMIN:
+		return "%admin";
+	case ROLE_TOKEN:
+		return "%token";
+	case ROLE_ALL:
+		return "%all";
+	}
 	for (int i = 0; i < wc->nroles; i++) {
 		if (wc->roles[i].mask == role) {
 			return (wc->roles[i].name);
@@ -900,6 +933,10 @@ check_api_role(const char *method, uint64_t roles)
 	uint64_t allow = 0;
 	uint64_t deny  = 0;
 
+	if ((roles & ROLE_ADMIN) != 0) {
+		// admin can do everything
+		return (true);
+	}
 	for (int i = 0; i < wc->napis; i++) {
 		if (strcmp(wc->apis[i].method, method) == 0) {
 			allow = wc->apis[i].allow;
@@ -928,6 +965,9 @@ check_nwid_role(uint64_t nwid, uint64_t roles)
 	uint64_t allow = 0;
 	uint64_t deny  = 0;
 
+	if ((roles & ROLE_ADMIN) != 0) {
+		return (true);
+	}
 	for (int i = 0; i < wc->nnets; i++) {
 		if (wc->nets[i].nwid == nwid) {
 			allow = wc->nets[i].allow;
