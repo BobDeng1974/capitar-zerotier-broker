@@ -59,6 +59,7 @@
 #include "cfgfile.h"
 #include "object.h"
 #include "rpc.h"
+#include "util.h"
 
 #ifndef CONFIG
 #define CONFIG "proxy.cfg"
@@ -1085,6 +1086,19 @@ do_totp(nng_aio *aio, object *auth, const char *method, controller *cp,
 	do_rpc(aio, cp, METHOD_CREATE_TOTP, params);
 }
 
+static void
+proxy_rpc(nng_aio *aio, object *auth, const char *method, controller *cp,
+    const char *rpc_method, object * params)
+{
+	if (strcmp(method, "POST") == 0) {
+		do_rpc(aio, cp, rpc_method, params);
+		return;
+	}
+	free_obj(params);
+	rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+}
+
+
 #define PROXY_URI "/api/1.0/proxy"
 #define PROXY_URI_LEN strlen(PROXY_URI)
 
@@ -1226,6 +1240,7 @@ proxy_api(nng_aio *aio)
 	// /api/1.0/proxy/<name>/network/<nwid>/member/<node>/deauthorize
 	// POST /api/1.0/proxy/<name>/token
 	// DELETE /api/1.0/proxy/<name>/token/<tokenid>
+	// POST /api/1.0/proxy/<name>/rpc/<method>
 
 	req    = nng_aio_get_input(aio, 0);
 	method = nng_http_req_get_method(req);
@@ -1335,6 +1350,29 @@ proxy_api(nng_aio *aio)
 
 		do_totp(aio, auth, method, cp, body);
 		free_obj(body);
+		return;
+	}
+
+	if (strncmp(uri, "/rpc/", strlen("/rpc/")) == 0) {
+		uri += strlen("/rpc/");
+		ep = (char *) uri;
+		while ((*ep != '/') && (*ep != '\0')) {
+			ep++;
+		}
+		// Proxy RPC methods don't have a subpath.
+		if ((*ep != '\0') || (ep == uri)) {
+			rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
+			return;
+		}
+
+		char *  data;
+		size_t  len;
+		object *params;
+
+		nng_http_req_get_data(req, (void **) &data, &len);
+		params = parse_obj(data, len);
+
+		proxy_rpc(aio, auth, method, cp, uri, params);
 		return;
 	}
 
