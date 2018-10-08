@@ -1091,6 +1091,14 @@ proxy_rpc(nng_aio *aio, object *auth, const char *method, controller *cp,
     const char *rpc_method, object * params)
 {
 	if (strcmp(method, "POST") == 0) {
+
+		if ((!add_obj_string(params, "controller", cp->name)) ||
+		    (!add_obj_obj(params, "auth", auth))) {
+			free_obj(auth);
+			free_obj(params);
+			nng_aio_finish(aio, NNG_ENOMEM);
+			return;
+		}
 		do_rpc(aio, cp, rpc_method, params);
 		return;
 	}
