@@ -91,7 +91,7 @@
 >Logout</b-btn>
 
 
-<controller v-if="controller && creds && creds.token && (controller != 'libvirt-lenojbo')"
+<controller v-if="controller && creds && creds.token && (controller != 'libvirt-poc')"
   v-bind:controller="controller"
   v-bind:creds="creds"
 ></controller>
