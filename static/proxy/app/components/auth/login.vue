@@ -86,74 +86,21 @@
   <b-alert class="col-6" :show="no_such_controller"> No such controller found </b-alert>
 </b-jumbotron>
 
-
-<b-jumbotron v-if="creds.token && creds.token.id"
-             header="ZeroTier Network Controller"
-             :lead=controller >
-  <div class="col-6">
-
-    <b-input-group>
-      <div class="input-group-prepend w-25">
-        <span class="input-group-text w-100" id="nw_filter">Search network</span>
-      </div>
-      <b-form-input 
-                    type="text"
-                    v-model="nw_filter"
-                    placeholder="Enter part of ID or name"
-                    v-on:keyup.enter.native="show_networks=true"
-      ></b-form-input>
-      <b-input-group-append>
-        <b-btn variant="success"
-               v-on:click="show_networks=true"
-        >Search</b-btn>
-        <b-btn variant="warning"
-               v-on:click="logout"
-        >Logout</b-btn>
-      </b-input-group-append>
-    </b-input-group>
-
-    <b-list-group v-if="controller_status" >
-      <b-list-group-item v-if="controller_status.central" >
-            Zerotier Central</b-list-group-item>
-      <b-list-group-item v-if="controller_status.controller" >
-            Zerotier One
-      </b-list-group-item>
-      <b-list-group-item>
-            Version: {{ controller_status.version }}
-      </b-list-group-item>
-    </b-list-group>
-  </div>
-  <b-alert class="col-6" :show="need_controller_name"> Please enter controller name </b-alert>
-  <b-alert class="col-6" :show="need_username"> Please enter username </b-alert>
-  <b-alert class="col-6" :show="need_password"> Please enter password </b-alert>
-  <b-alert class="col-6" :show="need_oath"> Please enter access token </b-alert>
-  <b-alert class="col-6" :show="10" v-if="tokenExpiresIn < 3600"> Access token will expire in {{ tokenExpiresIn }} seconds </b-alert>
-  <b-alert class="col-6" :show="no_such_controller"> No such controller found </b-alert>
-</b-jumbotron>
+<b-btn v-if="controller && creds && creds.token" variant="warning"
+    v-on:click="logout"
+>Logout</b-btn>
 
 
-  <section v-if="errored">
-    <i v-if="error"> {{ error }} </i>
-    <p>We're sorry, we're not able to retrieve this
-       information at the moment, please try back later</p>
-  </section>
+<controller v-if="controller && creds && creds.token && (controller != 'libvirt-lenojbo')"
+  v-bind:controller="controller"
+  v-bind:creds="creds"
+></controller>
 
-  <section v-else>
-    <div v-if="loading">
-      <b-alert class="col-6" show > Searching ... </b-alert>
-    </div>
-    <div v-else-if="controller && creds.token">
-
-      <controller
-        v-bind:creds="creds"
-        v-bind:controller="controller"
-        v-bind:nw_filter="nw_filter"
-      >
-      </controller>
-
-    </div>
-
-  </section>
+<controller-libvirt
+  v-if="controller && creds && creds.token && (controller == 'libvirt-lenojbo')"
+  v-bind:controller="controller"
+  v-bind:creds="creds"
+></controller-libvirt>
 
 </div>
 </template>
@@ -172,14 +119,14 @@ module.exports = {
       need_password: false,
       need_oath: false,
       no_such_controller: false,
+      controller: null,
       controller_status: null,
-      controller: "",
       networks: null,
       nw_filter: "",
       creds: { username: "", password: "", oath: "", token: null },
     }
   },
-  props: ["controller"],
+  props: [],
   computed: {
     // Number of seconds the token will expire in, if expire time is set
     tokenExpiresIn() {
@@ -192,7 +139,9 @@ module.exports = {
   methods: {
     logout() {
       axios
-        .delete(this.$restApi + this.controller + "/token/" + this.creds.token.id)
+        .delete(this.$restApi + this.controller + "/token/" + this.creds.token.id, {
+        headers: {'X-ZTC-Token': this.creds.token.id }
+        })
         .then(response => {
           this.creds = { username: "", password: "", oath: "", token: ""}
         })
@@ -268,29 +217,6 @@ module.exports = {
         .get(this.$restApi + this.controller + "/status")
         .then(response => {
           this.controller_status = response.data
-        })
-        .catch(error => {
-          if ((error.response) && (error.response.status == 404)) {
-            this.no_such_controller = true
-          }
-          else {
-            console.log(error)
-            this.errored = true
-          }
-        })
-        .finally(() => this.loading = false)
-    },
-    getNetworks (event) {
-      if ((this.controller == null) || (this.controller == "")) {
-        this.need_controller_name = true
-        return
-      }
-      this.clear()
-      this.loading = true
-      axios
-        .get(this.$restApi + this.controller + "/network")
-        .then(response => {
-          this.networks = response.data
         })
         .catch(error => {
           if ((error.response) && (error.response.status == 404)) {

@@ -1,42 +1,43 @@
 <template>
 <div>
 
-<!--
-
   <div>
 
     <b-input-group>
       <div class="input-group-prepend w-25">
-        <span class="input-group-text w-100" id="network-name">
-          Network ID or Name:
-        </span>
+        <span class="input-group-text w-100" id="nw_filter">Search network</span>
       </div>
-
-      <b-form-input 
+      <b-form-input
                     type="text"
-                    v-model="controller"
-                    placeholder="Enter network ID or name"
-                    v-on:keyup.enter.native="getNetworks"
+                    v-model="network_filter"
+                    placeholder="Enter part of ID or name"
+                    v-on:keyup.enter.native="getNetworks()"
       ></b-form-input>
       <b-input-group-append>
         <b-btn variant="success"
-               v-on:click="getNetworks"
-        >List Networks</b-btn>
+               v-on:click="getNetworks()"
+        >Search</b-btn>
       </b-input-group-append>
-    </b-input-group>
 
     </b-input-group>
 
+    <b-list-group v-if="controller_status" >
+      <b-list-group-item v-if="controller_status.central" >
+            Zerotier Central</b-list-group-item>
+      <b-list-group-item v-if="controller_status.controller" >
+            Zerotier One
+      </b-list-group-item>
+      <b-list-group-item>
+            Version: {{ controller_status.version }}
+      </b-list-group-item>
+    </b-list-group>
   </div>
   <b-alert class="col-6" :show="need_controller_name"> Please enter controller name </b-alert>
   <b-alert class="col-6" :show="need_username"> Please enter username </b-alert>
   <b-alert class="col-6" :show="need_password"> Please enter password </b-alert>
   <b-alert class="col-6" :show="need_oath"> Please enter access token </b-alert>
+  <b-alert class="col-6" :show="10" v-if="tokenExpiresIn < 3600"> Access token will expire in {{ tokenExpiresIn }} seconds </b-alert>
   <b-alert class="col-6" :show="no_such_controller"> No such controller found </b-alert>
-
-  <b-alert class="col-6" :show="need_token"> Access token is missing ?? </b-alert>
-  <b-alert class="col-6" :show="have_invalid_token"> Access token is invalid ?? </b-alert>
-
 
   <section v-if="errored">
     <i v-if="error"> {{ error }} </i>
@@ -55,7 +56,7 @@
         v-bind:id="nwid"
         v-bind:controller="controller"
         v-bind:creds="creds"
-        v-bind:nw_filter="nw_filter"
+        v-bind:nw_filter="network_filter"
       >
       </network>
 
@@ -66,16 +67,6 @@
     </div>
 
   </section>
--->
-
-      <network
-        v-for="nwid, index in networks"
-        v-bind:id="nwid"
-        v-bind:controller="controller"
-        v-bind:creds="creds"
-        v-bind:nw_filter="nw_filter"
-      >
-      </network>
 
 </div>
 </template>
@@ -97,13 +88,22 @@ module.exports = {
       have_invalid_token: false,
       no_such_controller: false,
       controller_status: null,
-      controller: "",
       networks: [],
-      creds: {username: "", password: "", oath: "", token: ""},
+      network_filter: "",
     }
   },
   props: ["controller", "creds", "nw_filter"],
+  computed: {
+    // Number of seconds the token will expire in, if expire time is set
+    tokenExpiresIn() {
+      if (!this.creds.token || this.creds.token.expires == 0) {
+        return null
+      }
+      return this.creds.token.expires - Math.floor(Date.now() / 1000)
+    }
+  },
   mounted () {
+    this.network_filter = this.nw_filter
     this.getNetworks()
   },
   methods: {

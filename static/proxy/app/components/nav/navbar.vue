@@ -1,16 +1,20 @@
 <template>
 <div>
 
-<b-navbar toggleable="md" type="dark" variant="warning">
+<b-navbar class="navbar navbar-dark bg-warning navbar-expand-md navbar-capitar"
+          toggleable="md" type="dark" variant="warning">
 
   <b-navbar-toggle target="nav_collapse"></b-navbar-toggle>
 
-  <b-navbar-brand href="#">NavBar</b-navbar-brand>
+  <b-navbar-brand href="#">
+      <img src="/static/deps/logos/capitar-logo-inverse.png"
+           class="d-inline-block align-top capitar-logo">
+  </b-navbar-brand>
 
   <b-collapse is-nav id="nav_collapse">
 
     <b-navbar-nav>
-      <b-nav-item href="#">Link</b-nav-item>
+      <b-nav-item class="navbar-link" href="#">Link</b-nav-item>
       <b-nav-item href="#" disabled>Disabled</b-nav-item>
     </b-navbar-nav>
 
@@ -61,11 +65,30 @@ module.exports = {
 
 </script>
 
-<style>
+<style scoped>
 .bg-warning {
     background-color: #eb5814 !important;
 }
-.navbar {
+
+.navbar-capitar {
     border-style: unset;
+    height: 52px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
 }
+
+.capitar-logo {
+    float: left;
+    height: 52px;
+}
+
+.navbar-dark .navbar-nav .nav-link {
+	color: rgba(255,255,255,255);
+}
+
+.navbar-dark .navbar-nav .nav-link.disabled {
+	color: rgba(255,255,255,0.25);
+}
+
 </style>

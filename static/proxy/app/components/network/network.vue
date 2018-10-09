@@ -7,17 +7,12 @@
        information at the moment, please try back later</p>
   </section>
 
-  <section v-else>
-    <div v-if="loading"> <!-- Loading... --> </div>
+  <section v-else-if="network">
 
-    <div v-else>
-
-      <b-jumbotron :header="networkName" :lead="networkId" >
-       <p>For more information visit website</p>
-       <b-btn variant="primary" href="#">More Info</b-btn>
-      </b-jumbotron>
-
-    </div>
+    <b-jumbotron :header="networkName" :lead="networkId" >
+     <p>For more information visit website</p>
+     <b-btn variant="primary" href="#">More Info</b-btn>
+    </b-jumbotron>
 
   </section>
 
@@ -31,28 +26,31 @@ module.exports = {
 
   computed: {
     networkName() {
+      if (!this.network) {
+        return null
+      }
       return this.network.name;
     },
     networkId() {
       return this.network.id;
     },
     show_network() {
-      return true
-      /*
+      if (!this.network) {
+        return false
+      }
       if (!this.nw_filter) {
         return true
       }
-      if (this.network.name.match(/this.nw_filter/) {
+      if (this.network.name.match(/this.nw_filter/)) {
         return true
       }
-      if (this.network.id.match(/this.nw_filter/) {
+      if (this.network.id.match(/this.nw_filter/)) {
         return true
-      }*/
+      }
     }
   },
   data () {
     return {
-      show_network: true,
       info: null,
       loading: true,
       errored: false,
@@ -62,7 +60,9 @@ module.exports = {
   props: ["id", "index", "networks", "controller", "creds", "nw_filter"],
   mounted () {
     axios
-      .get(this.$restApi + this.controller + "/network/" + this.id)
+      .get(this.$restApi + this.controller + "/network/" + this.id, {
+        headers: {'X-ZTC-Token': this.creds.token.id }
+      })
       .then(response => {
         this.network = response.data
       })
