@@ -63,7 +63,7 @@ extern void worker_http(worker *, worker_http_cb);
 struct worker_ops {
 	int         version;
 	const char *type;
-	bool (*exec_jsonrpc)(controller *, worker *, const char *, object *);
+	void (*exec_jsonrpc)(controller *, worker *, const char *, object *);
 	void (*get_status)(controller *, worker *);
 	void (*get_networks)(controller *, worker *);
 	void (*get_network)(controller *, worker *, uint64_t);
@@ -78,6 +78,7 @@ struct worker_ops {
 
 extern bool worker_register_ops(worker_ops *);
 
+extern worker_ops controller_libvirt_ops;
 extern worker_ops controller_zt1_ops;
 extern worker_ops controller_ztcentral_ops;
 

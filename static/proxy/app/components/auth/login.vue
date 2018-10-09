@@ -97,7 +97,7 @@
 ></controller>
 
 <controller-libvirt
-  v-if="controller && creds && creds.token && (controller == 'libvirt-lenojbo')"
+  v-if="controller && creds && creds.token && (controller == 'libvirt-poc')"
   v-bind:controller="controller"
   v-bind:creds="creds"
 ></controller-libvirt>

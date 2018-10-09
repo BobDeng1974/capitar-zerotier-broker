@@ -436,23 +436,23 @@ central_deauthorize_member(
 
 static struct {
 	const char *method;
-	void (*func)(worker *, object *);
+	void (*func)(controller *, worker *, object *);
 } jsonrpc_methods_ctr[] = {
 	{ NULL, NULL },
 };
 
 
-bool
+static void
 central_exec_jsonrpc(
     controller *cp, worker *w, char *meth, object *params)
 {
 	for (int i = 0; jsonrpc_methods_ctr[i].method != NULL; i++) {
                 if (strcmp(jsonrpc_methods_ctr[i].method, meth) == 0) {
-                        jsonrpc_methods_ctr[i].func(w, params);
-                        return true;
+                        jsonrpc_methods_ctr[i].func(cp, w, params);
+                        return;
                 }
 	}
-	return false;
+	send_err(w, E_BADMETHOD, NULL);
 }
 
 

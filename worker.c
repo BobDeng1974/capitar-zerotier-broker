@@ -385,6 +385,8 @@ jsonrpc(worker *w, object *reqobj, const char *meth, object *parm)
 	controller *cp;
 
 	// Check the controller specific registered methods
+/*
+FIXME JBO
 	if (get_auth_param(w, parm, NULL) &&
 	    get_controller_param(w, parm, &cp)) {
                 w->method = meth; // save for auth checks;
@@ -393,9 +395,24 @@ jsonrpc(worker *w, object *reqobj, const char *meth, object *parm)
 			return;
                 }
         }
-
+*/
+/*
+	get_controller_param(w, parm, &cp);
+	w->method = meth; // save for auth checks;
+	if (cp->ops->exec_jsonrpc(cp, w, meth, parm)) {
+		free_obj(reqobj);
+		return;
+        }
 	free_obj(reqobj);
-	send_err(w, E_BADMETHOD, NULL);
+	send_err(w, E_BADMETHOD, NULL)
+*/
+
+	get_controller_param(w, parm, &cp);
+	w->method = meth; // save for auth checks;
+	cp->ops->exec_jsonrpc(cp, w, meth, parm);
+	free_obj(reqobj);
+	return;
+
 }
 
 
@@ -1187,6 +1204,14 @@ setup_controller(worker_config *wc, controller *cp, char **errmsg)
 	int      rv;
 	nng_url *url = NULL;
 
+	if (strcmp(cp->config->type, "libvirt") == 0) {
+		if ((cp->ops = find_worker_ops(cp->config->type)) == NULL) {
+			ERRF(errmsg, "controller: unable to find ops vector");
+			return (false);
+		}
+		return (true);
+	}
+
 	// Allocate an HTTP client.  We can reuse the client.
 	if (((rv = nng_url_parse(&url, cp->config->url)) != 0) ||
 	    ((rv = nng_http_client_alloc(&cp->client, url)) != 0)) {
@@ -1853,7 +1878,8 @@ main(int argc, char **argv)
 
 	otptest(); // Run an internal self test.  This can be removed later.
 
-	if ((!worker_register_ops(&controller_zt1_ops)) ||
+	if ((!worker_register_ops(&controller_libvirt_ops)) ||
+	    (!worker_register_ops(&controller_zt1_ops)) ||
 	    (!worker_register_ops(&controller_ztcentral_ops))) {
 		fprintf(stderr, "Failed to register worker ops\n");
 		exit(1);
