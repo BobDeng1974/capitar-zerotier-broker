@@ -433,15 +433,39 @@ central_deauthorize_member(
 	worker_http(w, central_deauthorize_member_cb);
 }
 
+
+static struct {
+	const char *method;
+	void (*func)(worker *, object *);
+} jsonrpc_methods_ctr[] = {
+	{ NULL, NULL },
+};
+
+
+bool
+central_exec_jsonrpc(
+    controller *cp, worker *w, char *meth, object *params)
+{
+	for (int i = 0; jsonrpc_methods_ctr[i].method != NULL; i++) {
+                if (strcmp(jsonrpc_methods_ctr[i].method, meth) == 0) {
+                        jsonrpc_methods_ctr[i].func(w, params);
+                        return true;
+                }
+	}
+	return false;
+}
+
+
 worker_ops controller_ztcentral_ops = {
-	.version            = WORKER_OPS_VERSION,
-	.type               = "ztcentral",
-	.get_status         = central_get_status,
-	.get_networks       = central_get_networks,
-	.get_network        = central_get_network,
-	.get_members        = central_get_members,
-	.get_member         = central_get_member,
-	.delete_member      = central_delete_member,
-	.authorize_member   = central_authorize_member,
-	.deauthorize_member = central_deauthorize_member,
+	.version             = WORKER_OPS_VERSION,
+	.type                = "ztcentral",
+        .exec_jsonrpc        = central_exec_jsonrpc,
+	.get_status          = central_get_status,
+	.get_networks        = central_get_networks,
+	.get_network         = central_get_network,
+	.get_members         = central_get_members,
+	.get_member          = central_get_member,
+	.delete_member       = central_delete_member,
+	.authorize_member    = central_authorize_member,
+	.deauthorize_member  = central_deauthorize_member,
 };

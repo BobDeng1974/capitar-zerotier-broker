@@ -368,9 +368,11 @@ static struct {
 	{ NULL, NULL },
 };
 
+
 static void
 jsonrpc(worker *w, object *reqobj, const char *meth, object *parm)
 {
+	// First check the general registered methods
 	for (int i = 0; jsonrpc_methods[i].method != NULL; i++) {
 		if (strcmp(jsonrpc_methods[i].method, meth) == 0) {
 			w->method = meth; // save for auth checks
@@ -379,9 +381,23 @@ jsonrpc(worker *w, object *reqobj, const char *meth, object *parm)
 			return;
 		}
 	}
+
+	controller *cp;
+
+	// Check the controller specific registered methods
+	if (get_auth_param(w, parm, NULL) &&
+	    get_controller_param(w, parm, &cp)) {
+                w->method = meth; // save for auth checks;
+                if (cp->ops->exec_jsonrpc(cp, w, meth, parm)) {
+			free_obj(reqobj);
+			return;
+                }
+        }
+
 	free_obj(reqobj);
 	send_err(w, E_BADMETHOD, NULL);
 }
+
 
 nng_http_req *
 worker_http_req(worker *w)
