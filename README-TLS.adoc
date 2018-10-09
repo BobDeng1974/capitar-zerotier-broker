@@ -1,0 +1,22 @@
+= TLS Certificates
+
+The utils are part of mbedtls, and in stalled in the specified
+build target directory in ./install/bin/
+
+We need gen_key and cert_write
+
+= Self-signed Certificate
+
+For complete description, see:
+https://tls.mbed.org/kb/how-to/generate-a-self-signed-certificate
+
+From build target directory:
+
+./install/bin/gen_key filename=proxy.key
+./install/bin/cert_write selfsign=1 issuer_key=proxy.key output_file=proxy.crt
+cat  proxy.crt >> proxy.key && rm proxy.crt
+
+./install/bin/gen_key filename=worker.key
+./install/bin/cert_write selfsign=1 issuer_key=worker.key output_file=worker.crt
+cat  worker.crt >> worker.key && rm worker.crt
+
