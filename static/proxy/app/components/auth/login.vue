@@ -90,17 +90,10 @@
     v-on:click="logout"
 >Logout</b-btn>
 
-
-<controller v-if="controller && creds && creds.token && (controller != 'libvirt-poc')"
+<controller v-if="controller && creds && creds.token"
   v-bind:controller="controller"
   v-bind:creds="creds"
 ></controller>
-
-<controller-libvirt
-  v-if="controller && creds && creds.token && (controller == 'libvirt-poc')"
-  v-bind:controller="controller"
-  v-bind:creds="creds"
-></controller-libvirt>
 
 </div>
 </template>
