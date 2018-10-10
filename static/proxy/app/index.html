@@ -32,15 +32,13 @@
 
   <body>
     <div id="my-app">
-      <navbar></navbar>
-      <login></login>
-      <!--controller></controller-->
+      <zerotier-admin></zerotier-admin>
     </div>
 
     <script type="text/javascript">
       // Global variables
 
-      Vue.prototype.$appName = 'Capitar Zerotier Broker'
+      Vue.prototype.$appName = 'Capitar ZeroTier Broker Admin'
       Vue.prototype.$restApi = '/api/1.0/proxy/'
       Vue.prototype.$cfg = {
         //tokenLifeTime: 3600 * 8 // token is valid for 8 hours ( if allowed by endpoint )
@@ -51,6 +49,7 @@
       Vue.use(Vuex)
 
       // Global registration of components
+      Vue.component('zerotier-admin', httpVueLoader('zerotier/admin/main.vue'))
       Vue.component('navbar', httpVueLoader('components/nav/navbar.vue'))
       Vue.component('login', httpVueLoader('components/auth/login.vue'))
       Vue.component('controller', httpVueLoader('components/controller/controller.vue'))

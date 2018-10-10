@@ -2,7 +2,7 @@
 <div>
 
 <b-jumbotron v-if="!creds.token || !creds.token.id"
-             header="ZeroTier Network Controller"
+             :header="$appName"
              lead="Enter Credentials to Login:" >
   <div class="col-6">
 
