@@ -78,7 +78,6 @@ struct worker_ops {
 
 extern bool worker_register_ops(worker_ops *);
 
-extern worker_ops controller_libvirt_ops;
 extern worker_ops controller_zt1_ops;
 extern worker_ops controller_ztcentral_ops;
 
