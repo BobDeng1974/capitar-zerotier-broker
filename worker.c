@@ -385,34 +385,15 @@ jsonrpc(worker *w, object *reqobj, const char *meth, object *parm)
 	controller *cp;
 
 	// Check the controller specific registered methods
-/*
-FIXME JBO
-	if (get_auth_param(w, parm, NULL) &&
-	    get_controller_param(w, parm, &cp)) {
-                w->method = meth; // save for auth checks;
-                if (cp->ops->exec_jsonrpc(cp, w, meth, parm)) {
-			free_obj(reqobj);
-			return;
-                }
-        }
-*/
-/*
-	get_controller_param(w, parm, &cp);
 	w->method = meth; // save for auth checks;
-	if (cp->ops->exec_jsonrpc(cp, w, meth, parm)) {
+	if (get_auth_param(w, parm, NULL)) {
+		get_controller_param(w, parm, &cp);
+		cp->ops->exec_jsonrpc(cp, w, meth, parm);
 		free_obj(reqobj);
 		return;
-        }
-	free_obj(reqobj);
-	send_err(w, E_BADMETHOD, NULL)
-*/
+	}
 
-	get_controller_param(w, parm, &cp);
-	w->method = meth; // save for auth checks;
-	cp->ops->exec_jsonrpc(cp, w, meth, parm);
 	free_obj(reqobj);
-	return;
-
 }
 
 
@@ -1693,8 +1674,10 @@ load_config(const char *path, char **errmsg)
 			}
 			if (!valid) {
 				ERRF(errmsg, "unknown method name %s", key);
+				/* FIXME for controller specific methods
 				free_config(wc);
 				return (NULL);
+				*/
 			}
 		}
 	}
