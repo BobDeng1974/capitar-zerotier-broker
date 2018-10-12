@@ -23,7 +23,6 @@
 #include <nng/nng.h>
 #include <nng/supplemental/http/http.h>
 
-#include "cfgfile.h"
 #include "object.h"
 #include "worker.h"
 

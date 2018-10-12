@@ -38,7 +38,6 @@
 #include <nng/transport/zerotier/zerotier.h>
 
 #include "auth.h"
-#include "cfgfile.h"
 #include "object.h"
 #include "otp.h"
 #include "util.h"

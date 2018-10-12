@@ -56,7 +56,6 @@
 #include <string.h>
 #include <time.h>
 
-#include "cfgfile.h"
 #include "object.h"
 #include "rpc.h"
 #include "util.h"
@@ -1088,7 +1087,7 @@ do_totp(nng_aio *aio, object *auth, const char *method, controller *cp,
 
 static void
 proxy_rpc(nng_aio *aio, object *auth, const char *method, controller *cp,
-    const char *rpc_method, object * params)
+    const char *rpc_method, object *params)
 {
 	if (strcmp(method, "POST") == 0) {
 
@@ -1105,7 +1104,6 @@ proxy_rpc(nng_aio *aio, object *auth, const char *method, controller *cp,
 	free_obj(params);
 	rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
 }
-
 
 #define PROXY_URI "/api/1.0/proxy"
 #define PROXY_URI_LEN strlen(PROXY_URI)
@@ -1476,10 +1474,11 @@ load_config(const char *path)
 	object *cfg;
 	object *proxy;
 	object *tobj;
+	char *  emsg;
 
-	// The configuration will leak, but we only ever exit
-	// abnormally.
-	if ((cfg = cfgfile_load(path)) == NULL) {
+	// The configuration will leak, but we only ever exit abnormally.
+	if ((cfg = obj_load(path, &emsg)) == NULL) {
+		fprintf(stderr, "%s\n", emsg == NULL ? "Out of memory" : emsg);
 		exit(1);
 	}
 

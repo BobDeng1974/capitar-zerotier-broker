@@ -37,9 +37,9 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 add_executable(${PROJECT_NAME}-worker worker.c
         cJSON.c auth.c base32.c
         controller.c controller_zt1.c controller_ztcentral.c
-        cfgfile.c object.c otp.c util.c)
+        object.c otp.c util.c)
 
 target_link_libraries(${PROJECT_NAME}-worker nng::nng)
 
-add_executable(${PROJECT_NAME}-proxy proxy.c cJSON.c cfgfile.c object.c util.c)
+add_executable(${PROJECT_NAME}-proxy proxy.c cJSON.c object.c util.c)
 target_link_libraries(${PROJECT_NAME}-proxy nng::nng)
