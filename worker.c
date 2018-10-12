@@ -1468,13 +1468,28 @@ parse_roles(worker_config *wc, object *arr, uint64_t *maskp, char **errmsg)
 			ERRF(errmsg, "bad role array item at index %d", i);
 			return (false);
 		}
-		if ((!check_role_name_configured(wc, n))) {
+		if ((v = find_role_ext(wc, n)) == 0) {
 			ERRF(errmsg, "unknown role %s", n);
 			return (false);
 		}
+
 		m |= v;
 	}
 	*maskp = m;
+	return (true);
+}
+
+static bool
+valid_rolename(const char *name)
+{
+	if ((name == NULL) || ((!isalnum(name[0])) && (name[0] != '_'))) {
+		return (false);
+	}
+	for (int j = 0; j < name[j] != '\0'; j++) {
+		if (!isprint(name[j])) {
+			return (false);
+		}
+	}
 	return (true);
 }
 
@@ -1490,83 +1505,134 @@ load_config(const char *path, char **errmsg)
 		return (NULL);
 	}
 	if ((wc->json = obj_load(path, errmsg)) == NULL) {
-		free_config(wc);
-		return (NULL);
+		goto error;
 	}
 
+	wc->nroles = 0;
 	if (get_obj_obj(wc->json, "roles", &arr)) {
-		uint64_t mask;
-		int      i;
+		int n;
 		if (!is_obj_array(arr)) {
 			ERRF(errmsg, "roles must be array");
-			free_config(wc);
-			return (NULL);
+			goto error;
 		}
 
 		// For now we are only permitting 32 roles.  The reason
 		// is so that we can reserve up to 32 additional built-in
 		// roles which are not configuration file driven.
-		if ((wc->nroles = get_arr_len(arr)) > 32) {
+		if ((n = get_arr_len(arr)) > 32) {
 			ERRF(errmsg, "too many roles");
-			free_config(wc);
-			return (NULL);
+			goto error;
 		}
-		if ((wc->roles = calloc(sizeof(role_config), wc->nroles)) ==
-		    NULL) {
+		if ((n > 0) &&
+		    ((wc->roles = calloc(sizeof(role_config), n)) == NULL)) {
 			ERRF(errmsg, "calloc: %s", strerror(errno));
-			free_config(wc);
-			return (NULL);
+			goto error;
 		}
-		mask = 1;
-		for (i = 0; i < get_arr_len(arr); i++) {
-			role_config *r = &wc->roles[i];
-			if (!get_arr_string(arr, i, &r->name)) {
-				ERRF(errmsg, "roles must be array of strings");
-				free_config(wc);
-				return (NULL);
+		for (wc->nroles = 0; wc->nroles < n; wc->nroles++) {
+			int          idx = wc->nroles;
+			role_config *r   = &wc->roles[idx];
+			if (!get_arr_string(arr, idx, &r->name)) {
+				ERRF(errmsg, "role %d: not a string", idx);
+				goto error;
 			}
 			// Role names are required to start with an alpha
 			// numeric or [_].  They furthermore must consist
 			// entirely of printable characters.  Special role
 			// names used by the system will start with other
 			// characters.
-			if ((!isalnum(r->name[0])) && (r->name[0] != '_')) {
-				ERRF(errmsg, "invalid role name");
+			if (!valid_rolename(r->name)) {
+				ERRF(errmsg, "role %d: invalid name", idx);
+				goto error;
+			}
+			if (find_role_ext(wc, r->name) != 0) {
+				ERRF(errmsg, "role %d: duplicate name", idx);
+				goto error;
+			}
+			r->mask = 1U << wc->nroles;
+			if (debug > 1) {
+				printf(
+				    "ROLE %s: mask %llx\n", r->name, r->mask);
+			}
+		}
+	}
+
+	// Load role groups.  Role groups are named like roles, but
+	// use a group name to refer to multiple other roles.  The
+	// values are prefixed by an @ sign.  As a little bonus,
+	// rolegroups can reference other rolegroups, provided that the
+	// referent is listed before the referrer.
+	wc->nrolegrps = 0;
+	if (get_obj_obj(wc->json, "rolegroups", &arr)) {
+		int     n;
+		object *rarr;
+		if (!is_obj_array(arr)) {
+			ERRF(errmsg, "rolegroups must be array");
+			goto error;
+		}
+
+		n = get_arr_len(arr);
+		if ((n > 0) &&
+		    ((wc->rolegrps = calloc(sizeof(role_config), n)) ==
+		        NULL)) {
+			ERRF(errmsg, "calloc: %s", strerror(errno));
+			goto error;
+		}
+
+		for (wc->nrolegrps = 0; wc->nrolegrps < n; wc->nrolegrps++) {
+			object *        robj;
+			object *        rarr;
+			int             idx = wc->nrolegrps;
+			rolegrp_config *r   = &wc->rolegrps[idx];
+
+			if (!get_arr_obj(arr, wc->nrolegrps, &robj)) {
+				ERRF(errmsg, "rolegroup %d: not object", idx);
 				free_config(wc);
 				return (NULL);
 			}
-			for (int j = 0; j < r->name[j] != '\0'; j++) {
-				if (!isprint(r->name[j])) {
-					ERRF(errmsg, "invalid role name");
-					free_config(wc);
-					return (NULL);
-				}
+			if (!get_obj_string(robj, "name", &r->name)) {
+				ERRF(
+				    errmsg, "rolegroup %d: missing name", idx);
+				free_config(wc);
+				return (NULL);
 			}
-			for (int j = 0; j < i; j++) {
-				if (strcmp(r->name, wc->roles[j].name) == 0) {
-					ERRF(errmsg, "duplicate role name %s",
-					    r->name);
-					free_config(wc);
-					return (NULL);
-				}
+			if (!valid_rolename(r->name)) {
+				ERRF(
+				    errmsg, "rolegroup %d: invalid name", idx);
+				free_config(wc);
+				return (NULL);
+			}
+			if (find_role_ext(wc, r->name) != 0) {
+				ERRF(errmsg, "rolegroup %d: duplicate name",
+				    idx);
+				free_config(wc);
+				return (NULL);
+			}
+			if ((!get_obj_obj(robj, "roles", &rarr)) ||
+			    (!is_obj_array(rarr))) {
+				ERRF(errmsg, "rolegroup %d: bad roles", idx);
+				goto error;
+			}
+			if (!parse_roles(wc, rarr, &r->mask, errmsg)) {
+				goto error;
+			}
+			if (debug > 1) {
+				printf("ROLEGRP %s: mask %llx\n", r->name,
+				    r->mask);
 			}
 		}
-	} else {
-		wc->nroles = 0;
 	}
+
 	if ((!get_obj_obj(wc->json, "proxies", &arr)) ||
 	    (!is_obj_array(arr))) {
 		ERRF(errmsg, "missing proxies array");
-		free_config(wc);
-		return (NULL);
+		goto error;
 	}
 
 	wc->nproxies = get_arr_len(arr);
 	if ((wc->proxies = calloc(sizeof(proxy_config), wc->nproxies)) ==
 	    NULL) {
 		ERRF(errmsg, "calloc: %s", strerror(errno));
-		free_config(wc);
-		return (NULL);
+		goto error;
 	}
 
 	for (int i = 0; i < wc->nproxies; i++) {
@@ -1576,16 +1642,14 @@ load_config(const char *path, char **errmsg)
 		if ((!get_arr_obj(arr, i, &obj)) ||
 		    (!get_obj_string(obj, "survey", &pp->survurl)) ||
 		    (!get_obj_string(obj, "reqrep", &pp->rpcurl))) {
-			ERRF(errmsg, "proxy %d malformed", i);
-			free_config(wc);
-			return (NULL);
+			ERRF(errmsg, "proxy %d: malformed", i);
+			goto error;
 		}
 		pp->nworkers = 4;
 		if (get_obj_int(obj, "workers", &pp->nworkers) &&
 		    ((pp->nworkers < 1) || (pp->nworkers > 1024))) {
-			ERRF(errmsg, "proxy %d invalid worker count", i);
-			free_config(wc);
-			return (NULL);
+			ERRF(errmsg, "proxy %d: invalid worker count", i);
+			goto error;
 		}
 
 		// load in roles for proxy
@@ -1595,13 +1659,11 @@ load_config(const char *path, char **errmsg)
 			object *roles;
 			if ((get_obj_obj(rmod, "add", &roles)) &&
 			    (!parse_roles(wc, roles, &pp->role_add, errmsg))) {
-				free_config(wc);
-				return (NULL);
+				goto error;
 			}
 			if ((get_obj_obj(rmod, "del", &roles)) &&
 			    (!parse_roles(wc, roles, &pp->role_del, errmsg))) {
-				free_config(wc);
-				return (NULL);
+				goto error;
 			}
 		}
 	}
@@ -1617,8 +1679,7 @@ load_config(const char *path, char **errmsg)
 		if ((wc->apis = calloc(sizeof(api_config), wc->napis)) ==
 		    NULL) {
 			ERRF(errmsg, "calloc: %s", strerror(errno));
-			free_config(wc);
-			return (NULL);
+			goto error;
 		}
 		for (key = next_obj_key(arr, NULL), i = 0; key != NULL;
 		     key = next_obj_key(arr, key), i++) {
@@ -1627,9 +1688,8 @@ load_config(const char *path, char **errmsg)
 			bool    valid;
 
 			if (!get_obj_obj(arr, key, &ao)) {
-				ERRF(errmsg, "api for %s invalid", key);
-				free_config(wc);
-				return (NULL);
+				ERRF(errmsg, "api %d: not an object", i);
+				goto error;
 			}
 			wc->apis[i].method = key;
 			wc->apis[i].allow  = 0;
@@ -1638,20 +1698,17 @@ load_config(const char *path, char **errmsg)
 			if ((get_obj_obj(ao, "allow", &roles)) &&
 			    (!parse_roles(
 			        wc, roles, &wc->apis[i].allow, errmsg))) {
-				free_config(wc);
-				return (NULL);
+				goto error;
 			}
 			if ((get_obj_obj(ao, "deny", &roles)) &&
 			    (!parse_roles(
 			        wc, roles, &wc->apis[i].deny, errmsg))) {
-				free_config(wc);
-				return (NULL);
+				goto error;
 			}
 			for (int j = 0; j < i; j++) {
 				if (strcmp(wc->apis[j].method, key) == 0) {
-					ERRF(errmsg, "duplicate api %s", key);
-					free_config(wc);
-					return (NULL);
+					ERRF(errmsg, "api %d: duplicate", i);
+					goto error;
 				}
 			}
 			valid = false;
@@ -1663,10 +1720,9 @@ load_config(const char *path, char **errmsg)
 				}
 			}
 			if (!valid) {
-				ERRF(errmsg, "unknown method name %s", key);
-				/* FIXME for controller specific methods
-				free_config(wc);
-				return (NULL);
+				ERRF(errmsg, "api %d: unknown method", i);
+				/* FIXME for controller specific
+				methods free_config(wc); return (NULL);
 				*/
 			}
 		}
@@ -1684,8 +1740,7 @@ load_config(const char *path, char **errmsg)
 		if ((wc->nets = calloc(sizeof(net_config), wc->nnets)) ==
 		    NULL) {
 			ERRF(errmsg, "calloc: %s", strerror(errno));
-			free_config(wc);
-			return (NULL);
+			goto error;
 		}
 
 		for (key = next_obj_key(arr, NULL), i = 0; key != NULL;
@@ -1699,36 +1754,32 @@ load_config(const char *path, char **errmsg)
 			} else if (((wc->nets[i].nwid =
 			                    strtoull(key, &ep, 16)) == 0) ||
 			    (ep == key) || (*ep != '\0')) {
-				ERRF(errmsg, "invalid network id %d", i);
-				free_config(wc);
-				return (NULL);
+				ERRF(errmsg, "network %d: invalid id", i);
+				goto error;
 			}
 
 			for (int j = 0; j < i; j++) {
 				if (wc->nets[j].nwid == wc->nets[i].nwid) {
-					ERRF(errmsg, "duplicate nwid %s", key);
-					free_config(wc);
-					return (NULL);
+					ERRF(errmsg, "network %d: duplicate",
+					    i);
+					goto error;
 				}
 			}
 			if (!get_obj_obj(arr, key, &ao)) {
-				ERRF(errmsg, "api for %s invalid", key);
-				free_config(wc);
-				return (NULL);
+				ERRF(errmsg, "nettwork %d: not an object", i);
+				goto error;
 			}
 			wc->nets[i].allow = 0;
 			wc->nets[i].deny  = 0;
 			if ((get_obj_obj(ao, "allow", &roles)) &&
 			    (!parse_roles(
 			        wc, roles, &wc->nets[i].allow, errmsg))) {
-				free_config(wc);
-				return (NULL);
+				goto error;
 			}
 			if ((get_obj_obj(ao, "deny", &roles)) &&
 			    (!parse_roles(
 			        wc, roles, &wc->nets[i].deny, errmsg))) {
-				free_config(wc);
-				return (NULL);
+				goto error;
 			}
 		}
 	}
@@ -1736,16 +1787,13 @@ load_config(const char *path, char **errmsg)
 	// Look up the list of controllers.
 	if ((!get_obj_obj(wc->json, "controllers", &arr)) ||
 	    ((wc->ncontrollers = get_arr_len(arr)) < 1)) {
-
 		ERRF(errmsg, "no controllers supplied");
-		free_config(wc);
-		return (NULL);
+		goto error;
 	}
 	wc->controllers = calloc(sizeof(controller_config), wc->ncontrollers);
 	if (wc->controllers == NULL) {
 		ERRF(errmsg, "calloc: %s", strerror(errno));
-		free_config(wc);
-		return (NULL);
+		goto error;
 	}
 
 	for (int i = 0; i < wc->ncontrollers; i++) {
@@ -1756,30 +1804,26 @@ load_config(const char *path, char **errmsg)
 		    (!get_obj_string(obj, "address", &cp->url)) ||
 		    (!get_obj_string(obj, "secret", &cp->secret)) ||
 		    (!get_obj_string(obj, "name", &cp->name))) {
-			ERRF(errmsg, "controller %d incomplete", i);
-			free_config(wc);
-			return (NULL);
+			ERRF(errmsg, "controller %d: incomplete", i);
+			goto error;
 		}
 		cp->type = "controller_zt1";
 		get_obj_string(obj, "type", &cp->type);
 		if (find_worker_ops(cp->type) == NULL) {
-			ERRF(errmsg, "controller %d unknown type", i);
-			free_config(wc);
-			return (NULL);
+			ERRF(errmsg, "controller %d: unknown type", i);
+			goto error;
 		}
 
 		if (!valid_name(cp->name)) {
-			ERRF(errmsg, "invalid controller name %d", i);
-			free_config(wc);
-			return (NULL);
+			ERRF(errmsg, "controller %d: invalid name", i);
+			goto error;
 		}
 
 		for (int j = 0; j < i; j++) {
 			if (strcmp(cp->name, wc->controllers[j].name) == 0) {
-				ERRF(errmsg, "duplicate controller name %s",
-				    cp->name);
-				free_config(wc);
-				return (NULL);
+				ERRF(errmsg, "controller %d: duplicate name",
+				    i);
+				goto error;
 			}
 		}
 	}
@@ -1794,33 +1838,33 @@ load_config(const char *path, char **errmsg)
 		if ((wc->tls.keyfile != NULL) &&
 		    (!path_exists(wc->tls.keyfile))) {
 			ERRF(errmsg, "keyfile does not exist");
-			free_config(wc);
-			return (NULL);
+			goto error;
 		}
 		if ((wc->tls.cacert != NULL) &&
 		    (!path_exists(wc->tls.cacert))) {
 			ERRF(errmsg, "cacert does not exist");
-			free_config(wc);
-			return (NULL);
+			goto error;
 		}
 	}
 	if ((!get_obj_string(wc->json, "userdir", &wc->userdir)) ||
 	    (!path_exists(wc->userdir))) {
 		ERRF(errmsg, "userdir missing or does not exist");
-		free_config(wc);
-		return (NULL);
+		goto error;
 	}
 	if ((!get_obj_string(wc->json, "tokendir", &wc->tokendir)) ||
 	    (!path_exists(wc->tokendir))) {
 		ERRF(errmsg, "tokendir missing or does not exist");
-		free_config(wc);
-		return (NULL);
+		goto error;
 	}
 
 	// zthome is optional, but recommended.  If not used,
 	// then an ephemeral ZeroTier node will be used.
 	(void) get_obj_string(wc->json, "zthome", &wc->zthome);
 	return (wc);
+
+error:
+	free_config(wc);
+	return (NULL);
 }
 
 static nng_optspec opts[] = {

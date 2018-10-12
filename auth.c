@@ -854,31 +854,8 @@ token_belongs(const token *tok, const user *u)
 // same care as the original password.  Hashing it is just designed
 // to guard against accidental casual exposure to the administrator.
 
-bool
-check_role_name_configured(worker_config *c, const char *role)
-{
-	// Builtin roles.
-	if (role[0] == '%') {
-		if (strcmp(role, "%admin") == 0) {
-			return (true);
-		}
-		if (strcmp(role, "%token") == 0) {
-			return (true);
-		}
-		if (strcmp(role, "%all") == 0) {
-			return (true);
-		}
-		return (false);
-	}
-	for (int i = 0; i < c->nroles; i++) {
-		if (strcmp(c->roles[i].name, role) == 0) {
-			return true;
-		}
-	}
-	return false;
-}
-
-// Returns the bit associated with a role name.
+// Returns the bit associated with a role name.  Looks up rolegroups
+// as well. Returns 0 if nothing matches.
 uint64_t
 find_role_ext(worker_config *c, const char *role)
 {
@@ -897,6 +874,11 @@ find_role_ext(worker_config *c, const char *role)
 	for (int i = 0; i < c->nroles; i++) {
 		if (strcmp(c->roles[i].name, role) == 0) {
 			return (c->roles[i].mask);
+		}
+	}
+	for (int i = 0; i < c->nrolegrps; i++) {
+		if (strcmp(c->rolegrps[i].name, role) == 0) {
+			return (c->rolegrps[i].mask);
 		}
 	}
 	return (0);

@@ -88,6 +88,7 @@ typedef struct tls_config        tls_config;
 typedef struct net_config        net_config;
 typedef struct api_config        api_config;
 typedef struct role_config       role_config;
+typedef struct rolegrp_config    rolegrp_config;
 
 struct tls_config {
 	char *keypass;
@@ -97,6 +98,11 @@ struct tls_config {
 };
 
 struct role_config {
+	char *   name;
+	uint64_t mask;
+};
+
+struct rolegrp_config {
 	char *   name;
 	uint64_t mask;
 };
@@ -137,8 +143,10 @@ struct worker_config {
 	proxy_config *     proxies;      // Proxy structures
 	int                ncontrollers; // Number of controllers
 	controller_config *controllers;  // Controller structures
-	int                nroles;
-	role_config *      roles;
+	int                nroles;       // Number of roles (permissions)
+	role_config *      roles;        // Role (name & bit)
+	int                nrolegrps;    // Number of role groups
+	rolegrp_config *   rolegrps;     // Role group (name & mask)
 	int                napis;
 	api_config *       apis;
 	int                nnets;
