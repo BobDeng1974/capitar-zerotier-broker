@@ -27,7 +27,6 @@
 #include "object.h"
 #include "worker.h"
 
-
 static bool
 controller_init_req(controller *cp, worker *w, const char *fmt, ...)
 {
@@ -440,7 +439,6 @@ controller_deauthorize_member(
 	worker_http(w, controller_deauthorize_member_cb);
 }
 
-
 static struct {
 	const char *method;
 	void (*func)(controller *, worker *, object *);
@@ -448,31 +446,29 @@ static struct {
 	{ NULL, NULL },
 };
 
-
 static void
 controller_exec_jsonrpc(
-    controller *cp, worker *w, char *meth, object *params)
+    controller *cp, worker *w, const char *meth, object *params)
 {
-        for (int i = 0; jsonrpc_methods_ctr[i].method != NULL; i++) {
-                if (strcmp(jsonrpc_methods_ctr[i].method, meth) == 0) {
-                        jsonrpc_methods_ctr[i].func(cp, w, params);
-                        return;
-                }
-        }
-        send_err(w, E_BADMETHOD, NULL);
+	for (int i = 0; jsonrpc_methods_ctr[i].method != NULL; i++) {
+		if (strcmp(jsonrpc_methods_ctr[i].method, meth) == 0) {
+			jsonrpc_methods_ctr[i].func(cp, w, params);
+			return;
+		}
+	}
+	send_err(w, E_BADMETHOD, NULL);
 }
 
-
 worker_ops controller_zt1_ops = {
-	.version                = WORKER_OPS_VERSION,
-	.type                   = "zt1",
-	.exec_jsonrpc           = controller_exec_jsonrpc,
-	.get_status             = controller_get_status,
-	.get_networks           = controller_get_networks,
-	.get_network            = controller_get_network,
-	.get_members            = controller_get_members,
-	.get_member             = controller_get_member,
-	.delete_member          = controller_delete_member,
-	.authorize_member       = controller_authorize_member,
-	.deauthorize_member     = controller_deauthorize_member,
+	.version            = WORKER_OPS_VERSION,
+	.type               = "zt1",
+	.exec_jsonrpc       = controller_exec_jsonrpc,
+	.get_status         = controller_get_status,
+	.get_networks       = controller_get_networks,
+	.get_network        = controller_get_network,
+	.get_members        = controller_get_members,
+	.get_member         = controller_get_member,
+	.delete_member      = controller_delete_member,
+	.authorize_member   = controller_authorize_member,
+	.deauthorize_member = controller_deauthorize_member,
 };
