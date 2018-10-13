@@ -1245,6 +1245,7 @@ setup_controllers(worker_config *wc, char **errmsg)
 	return (true);
 }
 
+
 static bool
 setup_proxy(worker_config *wc, proxy *p, char **errmsg)
 {
@@ -1276,6 +1277,19 @@ setup_proxy(worker_config *wc, proxy *p, char **errmsg)
 		nng_close(s);
 		return (false);
 	}
+
+
+	for (int i = 0; i < wc->nmoons; i++) {
+		rv = nng_setopt(
+			s, NNG_OPT_ZT_ORBIT,
+			wc->moons[0].ids,
+			sizeof(wc->moons[0].ids));
+		if (rv != 0) {
+			printf("Error orbiting\n");
+		} else {
+			printf("Success orbiting\n");
+		}
+       }
 
 	p->repport = sa.s_zt.sa_port;
 	p->repsock = s;
@@ -1855,6 +1869,32 @@ load_config(const char *path, char **errmsg)
 	    (!path_exists(wc->tokendir))) {
 		ERRF(errmsg, "tokendir missing or does not exist");
 		goto error;
+	}
+
+	// ZT Moons
+	if ((get_obj_obj(wc->json, "moons", &arr)) &&
+	    (!is_obj_array(arr))) {
+		ERRF(errmsg, "moons must be an array");
+		goto error;
+	}
+
+	wc->nmoons = get_arr_len(arr);
+	if ((wc->moons = calloc(sizeof(moon_config), wc->nmoons)) ==
+	    NULL) {
+		ERRF(errmsg, "calloc: %s", strerror(errno));
+		goto error;
+	}
+
+	for (int i = 0; i < wc->nmoons; i++) {
+		object *      moon_cfg;
+		moon_config *pp = &wc->moons[i];
+
+		if ((!get_arr_obj(arr, i, &obj)) ||
+		    (!get_obj_uint64(obj, "moonid", &pp->ids[0])) ||
+		    (!get_obj_uint64(obj, "nodeid", &pp->ids[1]))) {
+			ERRF(errmsg, "moon %d: malformed", i);
+			goto error;
+		}
 	}
 
 	// zthome is optional, but recommended.  If not used,

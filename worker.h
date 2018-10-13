@@ -78,9 +78,11 @@ struct worker_ops {
 
 extern bool worker_register_ops(worker_ops *);
 
+extern worker_ops controller_openldap_ops;
 extern worker_ops controller_zt1_ops;
 extern worker_ops controller_ztcentral_ops;
 
+typedef struct moon_config       moon_config;
 typedef struct proxy_config      proxy_config;
 typedef struct controller_config controller_config;
 typedef struct worker_config     worker_config;
@@ -89,6 +91,10 @@ typedef struct net_config        net_config;
 typedef struct api_config        api_config;
 typedef struct role_config       role_config;
 typedef struct rolegrp_config    rolegrp_config;
+
+struct moon_config {
+	uint64_t ids[2];
+};
 
 struct tls_config {
 	char *keypass;
@@ -154,6 +160,8 @@ struct worker_config {
 	char *             zthome;
 	char *             userdir;
 	char *             tokendir;
+	int                nmoons;       // Number of moons
+	moon_config *      moons;        // ZeroTier moon structure
 };
 
 extern bool get_controller_param(worker *w, object *params, controller **cpp);

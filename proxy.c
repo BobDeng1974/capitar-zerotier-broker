@@ -77,6 +77,14 @@ char *          zthome;
 char *          static_dir;
 nng_tls_config *tls = NULL;
 
+typedef struct  moon_config moon_config;
+int             nmoons;
+struct moon_config {
+        uint64_t ids[2];
+};
+moon_config *   moons;
+
+
 typedef struct controller controller;
 
 struct controller {
@@ -174,6 +182,7 @@ prune_controllers(nng_time stale)
 	nng_time     now = nng_clock();
 	controller **cpp;
 	controller * cp;
+
 	now -= stale;
 
 	nng_mtx_lock(lock);
@@ -214,7 +223,17 @@ survey_pipe_cb(nng_pipe p, int ev, void *arg)
 				// Remote peer is removed, mark it stale.
 				// This will force it to be reaped.  Note
 				// that there can be more than one such.
-				cp->stamp = 0;
+				//
+				// FIXME There often seem to be false positives.
+				// The peer is removed and immediately added
+				// if the check interval is short enough. Perhaps
+				// change this to double check peer connectivity.
+				//
+				// Probably this is related to needed fixes in
+				// the ZeroTier transport.
+				//
+				// cp->stamp = 0;
+
 			}
 		}
 		nng_mtx_unlock(lock);
@@ -237,8 +256,10 @@ survey_loop(void)
 	    ((rv = nng_pipe_notify(survsock, NNG_PIPE_EV_REM_POST,
 	          survey_pipe_cb, NULL)) != 0) ||
 	    ((rv = nng_setopt_ms(
-	          survsock, NNG_OPT_SURVEYOR_SURVEYTIME, 1000)) != 0) ||
-	    ((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_PING_TIME, 1000)) !=
+	          //survsock, NNG_OPT_SURVEYOR_SURVEYTIME, 1000)) != 0) ||
+	          survsock, NNG_OPT_SURVEYOR_SURVEYTIME, 100)) != 0) ||
+	    //((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_PING_TIME, 1000)) !=
+	    ((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_PING_TIME, 90)) !=
 	        0) ||
 	    ((rv = nng_listener_create(&l, survsock, survurl)) != 0)) {
 		fprintf(stderr, "%s\n", nng_strerror(rv));
@@ -250,6 +271,18 @@ survey_loop(void)
 		if (rv != 0) {
 			fprintf(stderr, "ZT_HOME: %s\n", nng_strerror(rv));
 			exit(1);
+		}
+	}
+
+	for (int i = 0; i < nmoons; i++) {
+		rv = nng_listener_setopt(
+			l, NNG_OPT_ZT_ORBIT,
+			moons[0].ids,
+			sizeof(moons[0].ids));
+		if (rv != 0) {
+			printf("Error orbiting\n");
+		} else {
+			printf("Success orbiting\n");
 		}
 	}
 
@@ -1474,6 +1507,7 @@ load_config(const char *path)
 	object *cfg;
 	object *proxy;
 	object *tobj;
+	object *arr;
 	char *  emsg;
 
 	// The configuration will leak, but we only ever exit abnormally.
@@ -1536,6 +1570,31 @@ load_config(const char *path)
 		}
 		if ((rv = nng_tls_config_auth_mode(tls, amode)) != 0) {
 			fprintf(stderr, "%s\n", nng_strerror(rv));
+			exit(1);
+		}
+	}
+
+	// ZT Moons
+	if (get_obj_obj(cfg, "moons", &arr)) {
+		if (!is_obj_array(arr)) {
+			fprintf(stderr, "moons must be an array\n");
+			exit(1);
+		}
+		nmoons = get_arr_len(arr);
+		if ((moons = calloc(sizeof(moon_config), nmoons)) ==
+		    NULL) {
+			fprintf(stderr, "calloc: %s\n", strerror(errno));
+			exit(1);
+		}
+	}
+	for (int i = 0; i < nmoons; i++) {
+		object *      moon_cfg;
+		moon_config *pp = &moons[i];
+
+		if ((!get_arr_obj(arr, i, &tobj)) ||
+		    (!get_obj_uint64(tobj, "moonid", &pp->ids[0])) ||
+		    (!get_obj_uint64(tobj, "nodeid", &pp->ids[1]))) {
+			fprintf(stderr, "moon %d: malformed\n", i);
 			exit(1);
 		}
 	}
