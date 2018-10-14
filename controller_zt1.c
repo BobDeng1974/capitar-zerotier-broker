@@ -486,14 +486,6 @@ controller_zt1_setup(worker_config *wc, controller *cp, char **errmsg)
 	int      rv;
 	nng_url *url = NULL;
 
-	if (strcmp(cp->config->type, "libvirt") == 0) {
-		if ((cp->ops = find_worker_ops(cp->config->type)) == NULL) {
-			ERRF(errmsg, "controller: unable to find ops vector");
-			return (false);
-		}
-		return (true);
-	}
-
 	// Allocate an HTTP client.  We can reuse the client.
 	if (((rv = nng_url_parse(&url, cp->config->url)) != 0) ||
 	    ((rv = nng_http_client_alloc(&cp->client, url)) != 0)) {

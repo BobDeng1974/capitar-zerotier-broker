@@ -1177,6 +1177,7 @@ start_proxies(worker_config *wc)
 		}
 	}
 }
+
 static bool
 setup_controller(worker_config *wc, controller *cp, char **errmsg)
 {
