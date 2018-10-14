@@ -121,7 +121,7 @@ proxy *     proxies;
 
 netperm *netperms;
 
-static worker_ops *find_worker_ops(const char *);
+worker_ops *find_worker_ops(const char *);
 
 // Note that the CTRLR NODE will almost certainly not be the same as the ZT
 // address.  That's because we can create per-process (ephemeral) ZT nodes
@@ -1180,46 +1180,12 @@ start_proxies(worker_config *wc)
 static bool
 setup_controller(worker_config *wc, controller *cp, char **errmsg)
 {
-	int      rv;
-	nng_url *url = NULL;
-
-	// Allocate an HTTP client.  We can reuse the client.
-	if (((rv = nng_url_parse(&url, cp->config->url)) != 0) ||
-	    ((rv = nng_http_client_alloc(&cp->client, url)) != 0)) {
-		ERRF(errmsg, "controller: %s", nng_strerror(rv));
-		nng_url_free(url);
-		return (false);
-	}
-
-	if (((strcmp(url->u_scheme, "http") == 0) &&
-	        (strcmp(url->u_port, "80") == 0)) ||
-	    ((strcmp(url->u_scheme, "https") == 0) &&
-	        (strcmp(url->u_port, "443") == 0))) {
-		cp->host = strdup(url->u_host);
-	} else {
-		cp->host = strdup(url->u_hostname);
-	}
-	nng_url_free(url);
-	if (cp->host == NULL) {
-		ERRF(errmsg, "strdup: %s", strerror(ENOMEM));
-		return (false);
-	}
-
-	if (strncmp(cp->config->url, "https", 5) == 0) {
-		if (tls == NULL) {
-			ERRF(errmsg, "controller: missing TLS config");
-			return (false);
-		}
-		if ((rv = nng_http_client_set_tls(cp->client, tls)) != 0) {
-			ERRF(errmsg, "controller TLS: %s", nng_strerror(rv));
-			return (false);
-		}
-	}
 	if ((cp->ops = find_worker_ops(cp->config->type)) == NULL) {
 		ERRF(errmsg, "controller: unable to find ops vector");
 		return (false);
 	}
-	return (true);
+
+	return (cp->ops->setup(wc, cp, errmsg));
 }
 
 static bool
@@ -1418,7 +1384,7 @@ struct worker_ops_entry {
 
 worker_ops_entry *ops_types;
 
-static worker_ops *
+worker_ops *
 find_worker_ops(const char *name)
 {
 	worker_ops_entry *ent;
@@ -1821,6 +1787,7 @@ load_config(const char *path, char **errmsg)
 			ERRF(errmsg, "controller %d: incomplete", i);
 			goto error;
 		}
+		cp->json = obj;
 		cp->type = "controller_zt1";
 		get_obj_string(obj, "type", &cp->type);
 		if (find_worker_ops(cp->type) == NULL) {

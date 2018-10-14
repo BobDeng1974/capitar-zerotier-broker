@@ -19,12 +19,34 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 #include <nng/nng.h>
 #include <nng/supplemental/http/http.h>
+#include <nng/supplemental/tls/tls.h>
 
 #include "object.h"
 #include "worker.h"
+#include "util.h"
+
+
+// This macro makes us do asprintf conditionally.
+#define ERRF(strp, fmt, ...) \
+	if (strp != NULL)    \
+	asprintf(strp, fmt, ##__VA_ARGS__)
+
+extern nng_tls_config *tls;
+extern worker_ops *find_worker_ops(const char *);
+
+struct controller {
+	char *             addr;
+	char *             name;
+	char *             secret;
+	char *             host; // for HTTP
+	nng_http_client *  client;
+	worker_ops *       ops;
+	controller_config *config;
+};
 
 static bool
 central_init_req(controller *cp, worker *w, const char *fmt, ...)
@@ -452,9 +474,51 @@ central_exec_jsonrpc(
 	send_err(w, E_BADMETHOD, NULL);
 }
 
+static bool
+controller_ztcentral_setup(worker_config *wc, controller *cp, char **errmsg)
+{
+	int      rv;
+	nng_url *url = NULL;
+
+	// Allocate an HTTP client.  We can reuse the client.
+	if (((rv = nng_url_parse(&url, cp->config->url)) != 0) ||
+	    ((rv = nng_http_client_alloc(&cp->client, url)) != 0)) {
+		ERRF(errmsg, "controller: %s", nng_strerror(rv));
+		nng_url_free(url);
+		return (false);
+	}
+
+	if (((strcmp(url->u_scheme, "http") == 0) &&
+	        (strcmp(url->u_port, "80") == 0)) ||
+	    ((strcmp(url->u_scheme, "https") == 0) &&
+	        (strcmp(url->u_port, "443") == 0))) {
+		cp->host = strdup(url->u_host);
+	} else {
+		cp->host = strdup(url->u_hostname);
+	}
+	nng_url_free(url);
+	if (cp->host == NULL) {
+		ERRF(errmsg, "strdup: %s", strerror(ENOMEM));
+		return (false);
+	}
+
+	if (strncmp(cp->config->url, "https", 5) == 0) {
+		if (tls == NULL) {
+			ERRF(errmsg, "controller: missing TLS config");
+			return (false);
+		}
+		if ((rv = nng_http_client_set_tls(cp->client, tls)) != 0) {
+			ERRF(errmsg, "controller TLS: %s", nng_strerror(rv));
+			return (false);
+		}
+	}
+	return (true);
+}
+
 worker_ops controller_ztcentral_ops = {
 	.version            = WORKER_OPS_VERSION,
 	.type               = "ztcentral",
+	.setup              = controller_ztcentral_setup,
 	.exec_jsonrpc       = central_exec_jsonrpc,
 	.get_status         = central_get_status,
 	.get_networks       = central_get_networks,

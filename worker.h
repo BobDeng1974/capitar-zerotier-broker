@@ -22,6 +22,7 @@
 #include "object.h"
 #include "rpc.h"
 
+typedef struct worker_config worker_config;
 typedef struct worker_ops worker_ops;
 typedef struct worker     worker;
 typedef struct controller controller;
@@ -63,6 +64,7 @@ extern void worker_http(worker *, worker_http_cb);
 struct worker_ops {
 	int         version;
 	const char *type;
+	bool (*setup)(worker_config *, controller *, char **);
 	void (*exec_jsonrpc)(controller *, worker *, const char *, object *);
 	void (*get_status)(controller *, worker *);
 	void (*get_networks)(controller *, worker *);
@@ -84,7 +86,6 @@ extern worker_ops controller_ztcentral_ops;
 typedef struct moon_config       moon_config;
 typedef struct proxy_config      proxy_config;
 typedef struct controller_config controller_config;
-typedef struct worker_config     worker_config;
 typedef struct tls_config        tls_config;
 typedef struct net_config        net_config;
 typedef struct api_config        api_config;
@@ -121,6 +122,7 @@ struct proxy_config {
 };
 
 struct controller_config {
+	object *json;
 	char *name;
 	char *url;
 	char *secret;
