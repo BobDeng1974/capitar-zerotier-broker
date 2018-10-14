@@ -1872,17 +1872,17 @@ load_config(const char *path, char **errmsg)
 	}
 
 	// ZT Moons
-	if ((get_obj_obj(wc->json, "moons", &arr)) &&
-	    (!is_obj_array(arr))) {
-		ERRF(errmsg, "moons must be an array");
-		goto error;
-	}
-
-	wc->nmoons = get_arr_len(arr);
-	if ((wc->moons = calloc(sizeof(moon_config), wc->nmoons)) ==
-	    NULL) {
-		ERRF(errmsg, "calloc: %s", strerror(errno));
-		goto error;
+	if (get_obj_obj(wc->json, "moons", &arr)) {
+		if (!is_obj_array(arr)) {
+			ERRF(errmsg, "moons must be an array");
+			goto error;
+		}
+		wc->nmoons = get_arr_len(arr);
+		if ((wc->moons = calloc(sizeof(moon_config), wc->nmoons)) ==
+		    NULL) {
+			ERRF(errmsg, "calloc: %s", strerror(errno));
+			goto error;
+		}
 	}
 
 	for (int i = 0; i < wc->nmoons; i++) {
