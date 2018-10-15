@@ -81,7 +81,7 @@ module.exports = {
     //background-color: #ffe;
 }
 .display-3 {
-    font-size: 2.5rem;
+    font-size: 1.5rem;
     font-weight: 300;
     line-height: 1.2;
     }

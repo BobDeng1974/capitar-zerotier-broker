@@ -164,7 +164,7 @@ module.exports = {
         .finally(() => this.loading = false)
     },
     clear() {
-      controller_status: null
+      this.controller_status: null
       this.err_resp = null
       this.alert_msg = ""
     },
