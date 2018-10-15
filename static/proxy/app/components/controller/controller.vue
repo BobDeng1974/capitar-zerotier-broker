@@ -21,52 +21,31 @@
 
     </b-input-group>
 
-    <b-list-group v-if="controller_status" >
-      <b-list-group-item v-if="controller_status.central" >
-            Zerotier Central</b-list-group-item>
-      <b-list-group-item v-if="controller_status.controller" >
-            Zerotier One
-      </b-list-group-item>
-      <b-list-group-item>
-            Version: {{ controller_status.version }}
-      </b-list-group-item>
-    </b-list-group>
-  </div>
-  <b-alert class="col-6" :show="need_controller_name"> Please enter controller name </b-alert>
-  <b-alert class="col-6" :show="need_username"> Please enter username </b-alert>
-  <b-alert class="col-6" :show="need_password"> Please enter password </b-alert>
-  <b-alert class="col-6" :show="need_oath"> Please enter access token </b-alert>
   <b-alert class="col-6" :show="10" v-if="tokenExpiresIn < 3600"> Access token will expire in {{ tokenExpiresIn }} seconds </b-alert>
-  <b-alert class="col-6" :show="no_such_controller"> No such controller found </b-alert>
 
-  <section v-if="errored">
-    <i v-if="error"> {{ error }} </i>
-    <p>We're sorry, we're not able to retrieve this
-       information at the moment, please try back later</p>
-  </section>
+  <error-axios
+    v-bind:err_resp="err_resp"
+  >
+  </error-axios>
 
-  <section v-else>
-    <div v-if="loading">
-      <b-alert class="col-6" show > Searching ... </b-alert>
-    </div>
-    <div v-else-if="networks && networks.length > 0">
+  <div v-if="loading">
+    <b-alert class="col-6" show > Searching ... </b-alert>
+  </div>
 
-      <network
-        v-for="nwid, index in networks"
-        v-bind:id="nwid"
-        v-bind:controller="controller"
-        v-bind:creds="creds"
-        v-bind:nw_filter="network_filter"
-      >
-      </network>
+  <div v-else-if="networks && networks.length > 0">
+    <network
+      v-for="nwid, index in networks"
+      v-bind:id="nwid"
+      v-bind:controller="controller"
+      v-bind:creds="creds"
+      v-bind:nw_regex="nw_regex"
+    >
+    </network>
+  </div>
 
-    </div>
-
-    <div v-else-if="networks">
-        <b-alert class="col-6" show> No networks found ... </b-alert>
-    </div>
-
-  </section>
+  <div v-else-if="networks">
+      <b-alert class="col-6" show> No networks found ... </b-alert>
+  </div>
 
 </div>
 </template>
@@ -77,17 +56,9 @@ module.exports = {
   data () {
     return {
       info: null,
-      loading: false,
-      errored: false,
-      error: null,
-      need_controller_name: false,
-      need_username: false,
-      need_password: false,
-      need_oath: false,
-      need_token: false,
-      have_invalid_token: false,
-      no_such_controller: false,
-      controller_status: null,
+      loading: true,
+      err_resp: null,
+      alert_msg: "",
       networks: [],
       network_filter: "",
     }
@@ -100,6 +71,12 @@ module.exports = {
         return null
       }
       return this.creds.token.expires - Math.floor(Date.now() / 1000)
+    },
+    nw_regex () {
+      if (!this.network_filter) {
+        return null
+      }
+      return new RegExp(this.network_filter, 'g')
     }
   },
   mounted () {
@@ -108,31 +85,10 @@ module.exports = {
   },
   methods: {
     clear() {
-      this.need_controller_name = false
-      this.need_username = false
-      this.need_password = false
-      this.need_oath = false
-      this.no_such_controller = false
-      controller_status: null,
-      this.error = null
+      this.err_resp = null
+      this.alert_msg = ""
     },
     getNetworks (event) {
-      if ((this.controller == null) || (this.controller == "")) {
-        this.need_controller_name = true
-        return
-      }
-      if ((this.creds == null) || (this.creds.token == null)) {
-        this.need_token = true
-        return
-      }
-      if (!this.creds.token.id) {
-        this.have_invalid_token = true
-        return
-      }
-
-      // TODO check for expiration of token
-      // move token functions to generic object or VUEX
-
       this.clear()
       axios
         .get(this.$restApi + this.controller + "/network", {
@@ -141,11 +97,13 @@ module.exports = {
           this.networks = response.data
         }).catch(error => {
           if ((error.response) && (error.response.status == 404)) {
-            this.no_such_controller = true
+            this.alert_msg = "No such controller found"
+          }
+          if ((error.response) && error.response.status ) {
+            this.err_resp = error.response
           }
           else {
-            console.log(error)
-            this.errored = true
+            console.log("undefined error: ", error)
           }
         })
         .finally(() => this.loading = false)

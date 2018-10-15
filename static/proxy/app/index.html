@@ -41,8 +41,7 @@
       Vue.prototype.$appName = 'Capitar ZeroTier Broker Admin'
       Vue.prototype.$restApi = '/api/1.0/proxy/'
       Vue.prototype.$cfg = {
-        //tokenLifeTime: 3600 * 8 // token is valid for 8 hours ( if allowed by endpoint )
-        tokenLifeTime: 360 // for testing handling expiration
+        tokenLifeTime: 3600 * 8 // token is valid for 8 hours ( if allowed by endpoint )
       }
 
       // This must be done first, before modules are loaded.
@@ -52,6 +51,7 @@
       Vue.component('zerotier-admin', httpVueLoader('zerotier/admin/main.vue'))
       Vue.component('navbar', httpVueLoader('components/nav/navbar.vue'))
       Vue.component('login', httpVueLoader('components/auth/login.vue'))
+      Vue.component('error-axios', httpVueLoader('components/error/axios.vue'))
       Vue.component('controller', httpVueLoader('components/controller/controller.vue'))
       Vue.component('network', httpVueLoader('components/network/network.vue'))
       Vue.component('store', httpVueLoader('store/store.vue'))

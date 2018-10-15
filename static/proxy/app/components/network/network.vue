@@ -38,15 +38,16 @@ module.exports = {
       if (!this.network) {
         return false
       }
-      if (!this.nw_filter) {
+      if (!this.nw_regex) {
         return true
       }
-      if (this.network.name.match(/this.nw_filter/)) {
+      if (this.network.name.match(this.nw_regex)) {
         return true
       }
-      if (this.network.id.match(/this.nw_filter/)) {
+      if (this.network.id.match(this.nw_regex)) {
         return true
       }
+      return false
     }
   },
   data () {
@@ -57,7 +58,7 @@ module.exports = {
       network: null
     }
   },
-  props: ["id", "index", "networks", "controller", "creds", "nw_filter"],
+  props: ["id", "index", "networks", "controller", "creds", "nw_regex"],
   mounted () {
     axios
       .get(this.$restApi + this.controller + "/network/" + this.id, {

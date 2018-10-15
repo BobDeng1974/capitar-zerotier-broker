@@ -77,23 +77,36 @@
       <b-list-group-item>
             Version: {{ controller_status.version }}
       </b-list-group-item>
+      <b-list-group-item>
+            Description: {{ controller_status.description }}
+      </b-list-group-item>
     </b-list-group>
   </div>
-  <b-alert class="col-6" :show="need_controller_name"> Please enter controller name </b-alert>
-  <b-alert class="col-6" :show="need_username"> Please enter username </b-alert>
-  <b-alert class="col-6" :show="need_password"> Please enter password </b-alert>
-  <b-alert class="col-6" :show="need_oath"> Please enter access token </b-alert>
-  <b-alert class="col-6" :show="no_such_controller"> No such controller found </b-alert>
+
+  <b-alert class="col-6" :show="show_alert_msg"> {{ alert_msg }} </b-alert>
+
+  <error-axios
+    v-bind:err_resp="err_resp"
+  >
+  </error-axios>
+
 </b-jumbotron>
 
 <b-btn v-if="controller && creds && creds.token" variant="warning"
     v-on:click="logout"
 >Logout</b-btn>
 
-<controller v-if="controller && creds && creds.token"
+
+<controller v-if="controller && creds && creds.token && (controller != 'libvirt-poc')"
   v-bind:controller="controller"
   v-bind:creds="creds"
 ></controller>
+
+<controller-libvirt
+  v-if="controller && creds && creds.token && (controller == 'libvirt-poc')"
+  v-bind:controller="controller"
+  v-bind:creds="creds"
+></controller-libvirt>
 
 </div>
 </template>
@@ -105,14 +118,9 @@ module.exports = {
     return {
       info: null,
       loading: false,
-      errored: false,
-      error: null,
-      need_controller_name: false,
-      need_username: false,
-      need_password: false,
-      need_oath: false,
-      no_such_controller: false,
-      controller: null,
+      err_resp: null,
+      alert_msg: "",
+      controller: "zerotier",
       controller_status: null,
       networks: null,
       nw_filter: "",
@@ -121,6 +129,12 @@ module.exports = {
   },
   props: [],
   computed: {
+    show_alert_msg() {
+      if (this.alert_msg) {
+        return true
+      }
+      return false
+    },
     // Number of seconds the token will expire in, if expire time is set
     tokenExpiresIn() {
       if (!this.creds.token || this.creds.token.expires == 0) {
@@ -131,6 +145,7 @@ module.exports = {
   },
   methods: {
     logout() {
+      this.clear()
       axios
         .delete(this.$restApi + this.controller + "/token/" + this.creds.token.id, {
         headers: {'X-ZTC-Token': this.creds.token.id }
@@ -139,39 +154,31 @@ module.exports = {
           this.creds = { username: "", password: "", oath: "", token: ""}
         })
         .catch(error => {
-          if ((error.response) && (error.response.status == 404)) {
-            // Perhaps the controller has been pruned, or the token does not exist
-            // this.no_such_controller = true
-            console.log(error)
-            this.errored = true
+          if ((error.response) && error.response.status ) {
+            this.err_resp = error.response
           }
           else {
-            console.log(error)
-            this.errored = true
+            console.log("undefined error: ", error)
           }
         })
         .finally(() => this.loading = false)
     },
     clear() {
-      this.need_controller_name = false
-      this.need_username = false
-      this.need_password = false
-      this.need_oath = false
-      this.no_such_controller = false
-      controller_status: null,
-      this.error = null
+      controller_status: null
+      this.err_resp = null
+      this.alert_msg = ""
     },
     login (event) {
       if ((this.controller == null) || (this.controller == "")) {
-        this.need_controller_name = true
+        this.alert_msg = "Please enter controller name"
         return
       }
       if ((this.creds.username == "")) {
-        this.need_username = true
+        this.alert_msg = "Please enter username"
         return
       }
       if ((this.creds.password == "")) {
-        this.need_password = true
+        this.alert_msg = "Please enter password"
         return
       }
       this.clear()
@@ -183,26 +190,26 @@ module.exports = {
             username: this.creds.username,
             password: this.creds.password
           },
-          //headers: { 'Authorization': + 'xx'}
-          //headers: { 'X-ZTC-Token:': + 'xx' }
         }).then(response => {
           this.creds.token = response.data
           this.creds.password = ''
         })
         .catch(error => {
           if ((error.response) && (error.response.status == 404)) {
-            this.no_such_controller = true
+            this.alert_msg = "No such controller found"
+          }
+          if ((error.response) && error.response.status ) {
+            this.err_resp = error.response
           }
           else {
-            console.log(error)
-            this.errored = true
+            console.log("undefined error: ", error)
           }
         })
         .finally(() => this.loading = false)
     },
     getControllerStatus (event) {
       if ((this.controller == null) || (this.controller == "")) {
-        this.need_controller_name = true
+        this.alert_msg = "Please enter controller name"
         return
       }
       this.clear()
@@ -213,11 +220,13 @@ module.exports = {
         })
         .catch(error => {
           if ((error.response) && (error.response.status == 404)) {
-            this.no_such_controller = true
+            this.alert_msg = "No such controller found"
+          }
+          if ((error.response) && error.response.status ) {
+            this.err_resp = error.response
           }
           else {
-            console.log(error)
-            this.errored = true
+            console.log("undefined error: ", error)
           }
         })
         .finally(() => this.loading = false)
