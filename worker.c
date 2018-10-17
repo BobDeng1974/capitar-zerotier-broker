@@ -239,7 +239,7 @@ send_resp(worker *w, const char *key, object *obj)
 	char *   str;
 	char     idbuf[32];
 
-	snprintf(idbuf, sizeof(idbuf), "%llx", w->id);
+	snprintf(idbuf, sizeof(idbuf), "%llx", (long long unsigned) w->id);
 
 	if ((nng_msg_alloc(&msg, 0) != 0) || ((res = alloc_obj()) == NULL) ||
 	    (!add_obj_string(res, "jsonrpc", "2.0")) ||
@@ -1039,10 +1039,14 @@ recv_cb(worker *w)
 		nng_pipe_getopt_sockaddr(pipe, NNG_OPT_REMADDR, &raddr);
 		nng_pipe_getopt_sockaddr(pipe, NNG_OPT_LOCADDR, &laddr);
 		printf("Rep-Recv {\n");
-		printf("\tfrom: zt://%llx.%llx:%u\n", raddr.s_zt.sa_nodeid,
-		    raddr.s_zt.sa_nwid, raddr.s_zt.sa_port);
-		printf("\tto:   zt://%llx.%llx:%u\n", laddr.s_zt.sa_nodeid,
-		    laddr.s_zt.sa_nwid, laddr.s_zt.sa_port);
+		printf("\tfrom: zt://%llx.%llx:%u\n",
+		    (unsigned long long) raddr.s_zt.sa_nodeid,
+		    (unsigned long long) raddr.s_zt.sa_nwid,
+		    raddr.s_zt.sa_port);
+		printf("\tto:   zt://%llx.%llx:%u\n",
+		    (unsigned long long) laddr.s_zt.sa_nodeid,
+		    (unsigned long long) laddr.s_zt.sa_nwid,
+		    laddr.s_zt.sa_port);
 		printf("}\n");
 	} else if (debug > 0) {
 		putc('r', stdout);
@@ -1531,8 +1535,8 @@ load_config(const char *path, char **errmsg)
 			}
 			r->mask = 1U << wc->nroles;
 			if (debug > 1) {
-				printf(
-				    "ROLE %s: mask %llx\n", r->name, r->mask);
+				printf("ROLE %s: mask %llx\n", r->name,
+				    (unsigned long long) r->mask);
 			}
 		}
 	}
@@ -1598,7 +1602,7 @@ load_config(const char *path, char **errmsg)
 			}
 			if (debug > 1) {
 				printf("ROLEGRP %s: mask %llx\n", r->name,
-				    r->mask);
+				    (unsigned long long) r->mask);
 			}
 		}
 	}
