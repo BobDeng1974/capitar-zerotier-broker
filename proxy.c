@@ -117,6 +117,8 @@ add_controller(nng_sockaddr sa, const char *name, nng_pipe p)
 	controller *cp;
 	nng_dialer *dialer;
 	nng_mtx_lock(lock);
+	int rv;
+
 	for (cp = controllers; cp != NULL; cp = cp->next) {
 		if ((strcmp(cp->name, name) == 0) &&
 		    (sa.s_zt.sa_port == cp->sa.s_zt.sa_port) &&
@@ -153,6 +155,18 @@ add_controller(nng_sockaddr sa, const char *name, nng_pipe p)
 		free(cp->name);
 		free(cp);
 		return;
+	}
+
+	if (zthome != NULL) {
+		rv = nng_setopt_string(cp->reqsock, NNG_OPT_ZT_HOME, zthome);
+		if (rv != 0) {
+			fprintf(stderr, "ZT_HOME: %s\n", nng_strerror(rv));
+			nng_mtx_unlock(lock);
+			nng_close(cp->reqsock);
+			free(cp->name);
+			free(cp);
+			return;
+		}
 	}
 
 	if ((nng_setopt_ms(cp->reqsock, NNG_OPT_RECONNMINT, 1) != 0) ||
@@ -250,8 +264,20 @@ survey_loop(void)
 	char *       urls;
 	int          rv;
 
-	if (((rv = nng_surveyor0_open(&survsock)) != 0) ||
-	    ((rv = nng_pipe_notify(survsock, NNG_PIPE_EV_ADD_POST,
+	if ((rv = nng_surveyor0_open(&survsock)) != 0) {
+		fprintf(stderr, "%s\n", nng_strerror(rv));
+		exit(1);
+	}
+
+	if (zthome != NULL) {
+		rv = nng_setopt_string(survsock, NNG_OPT_ZT_HOME, zthome);
+		if (rv != 0) {
+			fprintf(stderr, "ZT_HOME: %s\n", nng_strerror(rv));
+			exit(1);
+		}
+	}
+
+	if (((rv = nng_pipe_notify(survsock, NNG_PIPE_EV_ADD_POST,
 	          survey_pipe_cb, NULL)) != 0) ||
 	    ((rv = nng_pipe_notify(survsock, NNG_PIPE_EV_REM_POST,
 	          survey_pipe_cb, NULL)) != 0) ||
@@ -264,14 +290,6 @@ survey_loop(void)
 	    ((rv = nng_listener_create(&l, survsock, survurl)) != 0)) {
 		fprintf(stderr, "%s\n", nng_strerror(rv));
 		exit(1);
-	}
-
-	if (zthome != NULL) {
-		rv = nng_listener_setopt_string(l, NNG_OPT_ZT_HOME, zthome);
-		if (rv != 0) {
-			fprintf(stderr, "ZT_HOME: %s\n", nng_strerror(rv));
-			exit(1);
-		}
 	}
 
 	for (int i = 0; i < nmoons; i++) {
