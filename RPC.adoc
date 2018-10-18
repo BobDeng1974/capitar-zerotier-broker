@@ -363,3 +363,16 @@ Parameters::
 
 Result::
 	Empty object.
+
+=== Validate Configuration File
+
+This validates that the configuration file is usable.
+This is useful if the configuration file has been changed out of band.
+
+Method:: `validate-config`
+
+Parameters::
+	`auth`::: Current authentication credentials.
+
+Result::
+	Empty object.

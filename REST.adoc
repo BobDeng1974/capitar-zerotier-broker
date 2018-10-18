@@ -330,3 +330,39 @@ Result::
 	`digits`:: 6
 	`period`:: 30 (secs)
 	`issuer`:: Based on the value of `$controller`, also not URL encoded.
+
+=== Delete TOTP (Time Based One Time Password)
+
+This deletes the TOTP password (if any exists) for the user.
+
+URI:: `/proxy/$controller/totp`
+
+Method:: `DELETE`
+
+URI Parameters::
+	None.
+
+Body Parameters::
+	Empty object (for now).
+
+Result::
+	Empty object.
+
+=== Validate Config
+
+This validates the configuration for the worker/controller.
+This attempts to parse the config file at the standard location,
+and ensure that that it is suitable for use.
+
+URI:: `/proxy/$controller/config`
+
+Method:: `POST`
+
+URI Parameters::
+	None.
+
+Body Parameters::
+	Empty object (for now).
+
+Result::
+	Empty object.

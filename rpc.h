@@ -30,6 +30,7 @@ enum rpc_errors {
 	E_NOMEM      = -32001, // Out of memory
 	E_BADJSON    = -32002, // Bad JSON from backend
 	E_NOCTRLR    = -32003, // Specified controller does not exist
+	E_BADCONFIG  = -32004, // Bad configuration file
 	E_AUTHREQD   = 4010,   // Authentication required
 	E_AUTHFAIL   = 4011,   // Authentication well-formed, but invalid
 	E_AUTHOTP    = 4012,   // Basic+OTP auth needed
@@ -54,6 +55,7 @@ enum rpc_errors {
 #define METHOD_SET_PASSWD	"set-password"
 #define METHOD_CREATE_TOTP	"create-totp"
 #define METHOD_DELETE_TOTP	"delete-totp"
+#define	METHOD_VALIDATE_CONFIG	"validate-config"
 //clang-format on
 
 #endif // RPC_H

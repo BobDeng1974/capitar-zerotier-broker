@@ -55,6 +55,8 @@
 #define CONFIG "worker.cfg"
 #endif
 
+char *cfgpath = CONFIG;
+
 // This macro makes us do asprintf conditionally.
 #define ERRF(strp, fmt, ...) \
 	if (strp != NULL)    \
@@ -344,6 +346,7 @@ static void get_auth_tokens(worker *, object *);
 static void set_own_password(worker *, object *);
 static void create_own_totp(worker *, object *);
 static void delete_own_totp(worker *, object *);
+static void validate_config(worker *, object *);
 
 static struct {
 	const char *method;
@@ -364,6 +367,7 @@ static struct {
 	{ METHOD_SET_PASSWD, set_own_password },
 	{ METHOD_CREATE_TOTP, create_own_totp },
 	{ METHOD_DELETE_TOTP, delete_own_totp },
+	{ METHOD_VALIDATE_CONFIG, validate_config },
 	{ NULL, NULL },
 };
 
@@ -1216,7 +1220,6 @@ setup_controllers(worker_config *wc, char **errmsg)
 	return (true);
 }
 
-
 static bool
 setup_proxy(worker_config *wc, proxy *p, char **errmsg)
 {
@@ -1249,18 +1252,15 @@ setup_proxy(worker_config *wc, proxy *p, char **errmsg)
 		return (false);
 	}
 
-
 	for (int i = 0; i < wc->nmoons; i++) {
-		rv = nng_setopt(
-			s, NNG_OPT_ZT_ORBIT,
-			wc->moons[0].ids,
-			sizeof(wc->moons[0].ids));
+		rv = nng_setopt(s, NNG_OPT_ZT_ORBIT, wc->moons[0].ids,
+		    sizeof(wc->moons[0].ids));
 		if (rv != 0) {
 			printf("Error orbiting\n");
 		} else {
 			printf("Success orbiting\n");
 		}
-       }
+	}
 
 	p->repport = sa.s_zt.sa_port;
 	p->repsock = s;
@@ -1858,7 +1858,7 @@ load_config(const char *path, char **errmsg)
 	}
 
 	for (int i = 0; i < wc->nmoons; i++) {
-		object *      moon_cfg;
+		object *     moon_cfg;
 		moon_config *pp = &wc->moons[i];
 
 		if ((!get_arr_obj(arr, i, &obj)) ||
@@ -1879,6 +1879,30 @@ error:
 	return (NULL);
 }
 
+static void
+validate_config(worker *w, object *params)
+{
+	object *       result;
+	char *         errmsg = NULL;
+	worker_config *wc     = NULL;
+
+	if (!get_auth_param(w, params, NULL)) {
+		return;
+	}
+
+	if ((result = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+	if ((wc = load_config(cfgpath, &errmsg)) == NULL) {
+		send_err(w, E_BADCONFIG, errmsg);
+		free(errmsg);
+		return;
+	}
+	send_result(w, result);
+	free_config(wc);
+}
+
 static nng_optspec opts[] = {
 	{ "cfg", 'c', 'c', true },
 	{ "debug", 'd', 'd', false },
@@ -1887,17 +1911,16 @@ static nng_optspec opts[] = {
 int
 main(int argc, char **argv)
 {
-	int         optc;
-	char *      opta;
-	int         opti = 1;
-	const char *path = CONFIG;
-	int         rv;
-	char *      err;
+	int   optc;
+	char *opta;
+	int   opti = 1;
+	int   rv;
+	char *err;
 
 	while (nng_opts_parse(argc, argv, opts, &optc, &opta, &opti) == 0) {
 		switch (optc) {
 		case 'c':
-			path = opta;
+			cfgpath = opta;
 			break;
 		case 'd':
 			debug++;
@@ -1918,7 +1941,7 @@ main(int argc, char **argv)
 		    nng_strerror(rv));
 	}
 
-	if ((cfg = load_config(path, &err)) == NULL) {
+	if ((cfg = load_config(cfgpath, &err)) == NULL) {
 		fprintf(stderr, "Failed to load config: %s\n", err);
 		exit(1);
 	}

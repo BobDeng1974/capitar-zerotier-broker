@@ -77,13 +77,12 @@ char *          zthome;
 char *          static_dir;
 nng_tls_config *tls = NULL;
 
-typedef struct  moon_config moon_config;
-int             nmoons;
+typedef struct moon_config moon_config;
+int                        nmoons;
 struct moon_config {
-        uint64_t ids[2];
+	uint64_t ids[2];
 };
-moon_config *   moons;
-
+moon_config *moons;
 
 typedef struct controller controller;
 
@@ -238,16 +237,16 @@ survey_pipe_cb(nng_pipe p, int ev, void *arg)
 				// This will force it to be reaped.  Note
 				// that there can be more than one such.
 				//
-				// FIXME There often seem to be false positives.
-				// The peer is removed and immediately added
-				// if the check interval is short enough. Perhaps
-				// change this to double check peer connectivity.
+				// FIXME There often seem to be false
+				// positives. The peer is removed and
+				// immediately added if the check interval is
+				// short enough. Perhaps change this to double
+				// check peer connectivity.
 				//
 				// Probably this is related to needed fixes in
 				// the ZeroTier transport.
 				//
 				// cp->stamp = 0;
-
 			}
 		}
 		nng_mtx_unlock(lock);
@@ -282,11 +281,10 @@ survey_loop(void)
 	    ((rv = nng_pipe_notify(survsock, NNG_PIPE_EV_REM_POST,
 	          survey_pipe_cb, NULL)) != 0) ||
 	    ((rv = nng_setopt_ms(
-	          //survsock, NNG_OPT_SURVEYOR_SURVEYTIME, 1000)) != 0) ||
+	          // survsock, NNG_OPT_SURVEYOR_SURVEYTIME, 1000)) != 0) ||
 	          survsock, NNG_OPT_SURVEYOR_SURVEYTIME, 100)) != 0) ||
 	    //((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_PING_TIME, 1000)) !=
-	    ((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_PING_TIME, 90)) !=
-	        0) ||
+	    ((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_PING_TIME, 90)) != 0) ||
 	    ((rv = nng_listener_create(&l, survsock, survurl)) != 0)) {
 		fprintf(stderr, "%s\n", nng_strerror(rv));
 		exit(1);
@@ -294,9 +292,7 @@ survey_loop(void)
 
 	for (int i = 0; i < nmoons; i++) {
 		rv = nng_listener_setopt(
-			l, NNG_OPT_ZT_ORBIT,
-			moons[0].ids,
-			sizeof(moons[0].ids));
+		    l, NNG_OPT_ZT_ORBIT, moons[0].ids, sizeof(moons[0].ids));
 		if (rv != 0) {
 			printf("Error orbiting\n");
 		} else {
@@ -1137,6 +1133,33 @@ do_totp(nng_aio *aio, object *auth, const char *method, controller *cp,
 }
 
 static void
+do_config(nng_aio *aio, object *auth, const char *method, controller *cp,
+    object *body)
+{
+	const char *id;
+	char *      pass;
+	object *    params;
+	char *      iss;
+	if ((params = create_controller_params(cp, auth)) == NULL) {
+		return;
+	}
+	if (strcmp(method, "POST") != 0) {
+		free_obj(params);
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+		return;
+	}
+	if (body == NULL) {
+		rpcerr(aio, NNG_HTTP_STATUS_BAD_REQUEST, "Bad JSON");
+		return;
+	}
+
+	// We don't care about the body contents, only that it is well-formed
+	// JSON.  Someday we might add other parameters.
+
+	do_rpc(aio, cp, METHOD_VALIDATE_CONFIG, params);
+}
+
+static void
 proxy_rpc(nng_aio *aio, object *auth, const char *method, controller *cp,
     const char *rpc_method, object *params)
 {
@@ -1410,6 +1433,20 @@ proxy_api(nng_aio *aio)
 		return;
 	}
 
+	if (strcmp(uri, "/config") == 0) {
+		char *  data;
+		size_t  len;
+		object *body;
+
+		// Probably we should have a way to delete the TOTP as well.
+		nng_http_req_get_data(req, (void **) &data, &len);
+		body = parse_obj(data, len);
+
+		do_config(aio, auth, method, cp, body);
+		free_obj(body);
+		return;
+	}
+
 	if (strncmp(uri, "/rpc/", strlen("/rpc/")) == 0) {
 		uri += strlen("/rpc/");
 		ep = (char *) uri;
@@ -1599,14 +1636,13 @@ load_config(const char *path)
 			exit(1);
 		}
 		nmoons = get_arr_len(arr);
-		if ((moons = calloc(sizeof(moon_config), nmoons)) ==
-		    NULL) {
+		if ((moons = calloc(sizeof(moon_config), nmoons)) == NULL) {
 			fprintf(stderr, "calloc: %s\n", strerror(errno));
 			exit(1);
 		}
 	}
 	for (int i = 0; i < nmoons; i++) {
-		object *      moon_cfg;
+		object *     moon_cfg;
 		moon_config *pp = &moons[i];
 
 		if ((!get_arr_obj(arr, i, &tobj)) ||
