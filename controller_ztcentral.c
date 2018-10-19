@@ -14,21 +14,20 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 
 #include <nng/nng.h>
 #include <nng/supplemental/http/http.h>
 #include <nng/supplemental/tls/tls.h>
 
 #include "object.h"
-#include "worker.h"
 #include "util.h"
-
+#include "worker.h"
 
 // This macro makes us do asprintf conditionally.
 #define ERRF(strp, fmt, ...) \
@@ -36,7 +35,7 @@
 	asprintf(strp, fmt, ##__VA_ARGS__)
 
 extern nng_tls_config *tls;
-extern worker_ops *find_worker_ops(const char *);
+extern worker_ops *    find_worker_ops(const char *);
 
 struct controller {
 	char *             addr;
@@ -475,7 +474,7 @@ central_exec_jsonrpc(
 }
 
 static bool
-controller_ztcentral_setup(worker_config *wc, controller *cp, char **errmsg)
+ztcentral_setup(worker_config *wc, controller *cp, char **errmsg)
 {
 	int      rv;
 	nng_url *url = NULL;
@@ -515,10 +514,20 @@ controller_ztcentral_setup(worker_config *wc, controller *cp, char **errmsg)
 	return (true);
 }
 
+static void
+ztcentral_teardown(controller *cp)
+{
+	free(cp->host);
+	if (cp->client != NULL) {
+		nng_http_client_free(cp->client);
+	}
+}
+
 worker_ops controller_ztcentral_ops = {
 	.version            = WORKER_OPS_VERSION,
 	.type               = "ztcentral",
-	.setup              = controller_ztcentral_setup,
+	.setup              = ztcentral_setup,
+	.teardown           = ztcentral_teardown,
 	.exec_jsonrpc       = central_exec_jsonrpc,
 	.get_status         = central_get_status,
 	.get_networks       = central_get_networks,

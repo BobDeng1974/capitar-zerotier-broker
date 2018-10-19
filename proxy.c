@@ -223,7 +223,7 @@ static nng_optspec opts[] = {
 static void
 survey_pipe_cb(nng_pipe p, int ev, void *arg)
 {
-	// We actually don't care about the arguments for 	xnow.
+	// We actually don't care about the arguments for now.
 	// Later we might actually want to print these.  We could also
 	// apply a more aggressive pruning for peers that have dropped.
 	(void) arg;
@@ -246,7 +246,7 @@ survey_pipe_cb(nng_pipe p, int ev, void *arg)
 				// Probably this is related to needed fixes in
 				// the ZeroTier transport.
 				//
-				// cp->stamp = 0;
+				cp->stamp = 0;
 			}
 		}
 		nng_mtx_unlock(lock);
@@ -276,15 +276,24 @@ survey_loop(void)
 		}
 	}
 
+	// SURVEYTIME is how long we keep the survey open.  This needs to
+	// be kind of long especially as ZT can time some time delivering
+	// messages.
+	// Ping Time helps us to detect remote disconnects.  It should be long
+	// as well.
+	// These are in milliseconds.
+
 	if (((rv = nng_pipe_notify(survsock, NNG_PIPE_EV_ADD_POST,
 	          survey_pipe_cb, NULL)) != 0) ||
 	    ((rv = nng_pipe_notify(survsock, NNG_PIPE_EV_REM_POST,
 	          survey_pipe_cb, NULL)) != 0) ||
 	    ((rv = nng_setopt_ms(
-	          // survsock, NNG_OPT_SURVEYOR_SURVEYTIME, 1000)) != 0) ||
-	          survsock, NNG_OPT_SURVEYOR_SURVEYTIME, 100)) != 0) ||
-	    //((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_PING_TIME, 1000)) !=
-	    ((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_PING_TIME, 90)) != 0) ||
+	          survsock, NNG_OPT_SURVEYOR_SURVEYTIME, 3000)) != 0) ||
+	    // survsock, NNG_OPT_SURVEYOR_SURVEYTIME, 100)) != 0) ||
+	    ((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_PING_TIME, 1000)) !=
+	        0) ||
+	    //((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_PING_TIME, 90)) != 0)
+	    //||
 	    ((rv = nng_listener_create(&l, survsock, survurl)) != 0)) {
 		fprintf(stderr, "%s\n", nng_strerror(rv));
 		exit(1);
@@ -320,6 +329,7 @@ survey_loop(void)
 		case 0:
 			break;
 		case NNG_ECLOSED:
+			printf("SURVEYOR closed.\n");
 			nng_msg_free(msg);
 			return;
 		default:
@@ -344,6 +354,7 @@ survey_loop(void)
 				// End of survey responses.
 				goto endsurvey;
 			case NNG_ECLOSED:
+				printf("SURVEYOR closed.\n");
 				return;
 			case 0:
 				break;
@@ -1160,6 +1171,33 @@ do_config(nng_aio *aio, object *auth, const char *method, controller *cp,
 }
 
 static void
+do_restart(nng_aio *aio, object *auth, const char *method, controller *cp,
+    object *body)
+{
+	const char *id;
+	char *      pass;
+	object *    params;
+	char *      iss;
+	if ((params = create_controller_params(cp, auth)) == NULL) {
+		return;
+	}
+	if (strcmp(method, "POST") != 0) {
+		free_obj(params);
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+		return;
+	}
+	if (body == NULL) {
+		rpcerr(aio, NNG_HTTP_STATUS_BAD_REQUEST, "Bad JSON");
+		return;
+	}
+
+	// We don't care about the body contents, only that it is well-formed
+	// JSON.  Someday we might add other parameters.
+
+	do_rpc(aio, cp, METHOD_RESTART_SERVICE, params);
+}
+
+static void
 proxy_rpc(nng_aio *aio, object *auth, const char *method, controller *cp,
     const char *rpc_method, object *params)
 {
@@ -1443,6 +1481,20 @@ proxy_api(nng_aio *aio)
 		body = parse_obj(data, len);
 
 		do_config(aio, auth, method, cp, body);
+		free_obj(body);
+		return;
+	}
+
+	if (strcmp(uri, "/restart") == 0) {
+		char *  data;
+		size_t  len;
+		object *body;
+
+		// Probably we should have a way to delete the TOTP as well.
+		nng_http_req_get_data(req, (void **) &data, &len);
+		body = parse_obj(data, len);
+
+		do_restart(aio, auth, method, cp, body);
 		free_obj(body);
 		return;
 	}

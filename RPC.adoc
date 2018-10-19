@@ -376,3 +376,18 @@ Parameters::
 
 Result::
 	Empty object.
+
+=== Restart Service
+
+This completely restarts the targeted worker.  Note that there is some
+possibility that the worker will not successfully restart, so this should
+be used with caution, or the worker should be used with a supervisor daemon
+that will restart it.
+
+Method:: `restart-service`
+
+Parameters::
+	`auth`::: Current authentication credentials.
+
+Result::
+	Empty object.

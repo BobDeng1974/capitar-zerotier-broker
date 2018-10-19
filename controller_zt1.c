@@ -14,29 +14,28 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 
 #include <nng/nng.h>
 #include <nng/supplemental/http/http.h>
 #include <nng/supplemental/tls/tls.h>
 
 #include "object.h"
-#include "worker.h"
 #include "util.h"
-
+#include "worker.h"
 
 // This macro makes us do asprintf conditionally.
 #define ERRF(strp, fmt, ...) \
-	 if (strp != NULL)    \
-	 asprintf(strp, fmt, ##__VA_ARGS__)
+	if (strp != NULL)    \
+	asprintf(strp, fmt, ##__VA_ARGS__)
 
 extern nng_tls_config *tls;
-extern worker_ops *find_worker_ops(const char *);
+extern worker_ops *    find_worker_ops(const char *);
 
 struct controller {
 	char *             addr;
@@ -49,7 +48,7 @@ struct controller {
 };
 
 static bool
-controller_init_req(controller *cp, worker *w, const char *fmt, ...)
+zt1_init_req(controller *cp, worker *w, const char *fmt, ...)
 {
 	char          uri[256];
 	nng_http_req *req;
@@ -74,7 +73,7 @@ controller_init_req(controller *cp, worker *w, const char *fmt, ...)
 }
 
 static void
-controller_get_status_cb(worker *w, void *body, size_t len)
+zt1_get_status_cb(worker *w, void *body, size_t len)
 {
 	object *obj;
 	bool    b;
@@ -99,16 +98,16 @@ controller_get_status_cb(worker *w, void *body, size_t len)
 }
 
 static void
-controller_get_status(controller *cp, worker *w)
+zt1_get_status(controller *cp, worker *w)
 {
-	if (!controller_init_req(cp, w, "/controller")) {
+	if (!zt1_init_req(cp, w, "/controller")) {
 		return;
 	}
-	worker_http(w, controller_get_status_cb);
+	worker_http(w, zt1_get_status_cb);
 }
 
 static void
-controller_get_networks_cb(worker *w, void *body, size_t len)
+zt1_get_networks_cb(worker *w, void *body, size_t len)
 {
 	object *arr;
 	object *arr2;
@@ -149,17 +148,17 @@ controller_get_networks_cb(worker *w, void *body, size_t len)
 }
 
 static void
-controller_get_networks(controller *cp, worker *w)
+zt1_get_networks(controller *cp, worker *w)
 {
-	if (!controller_init_req(cp, w, "/controller/network")) {
+	if (!zt1_init_req(cp, w, "/controller/network")) {
 		return;
 	}
 
-	worker_http(w, controller_get_networks_cb);
+	worker_http(w, zt1_get_networks_cb);
 }
 
 static void
-controller_get_network_cb(worker *w, void *body, size_t len)
+zt1_get_network_cb(worker *w, void *body, size_t len)
 {
 	object *obj1;
 	object *obj2;
@@ -227,17 +226,17 @@ err:
 }
 
 static void
-controller_get_network(controller *cp, worker *w, uint64_t nwid)
+zt1_get_network(controller *cp, worker *w, uint64_t nwid)
 {
-	if (!controller_init_req(cp, w, "/controller/network/%016llx", nwid)) {
+	if (!zt1_init_req(cp, w, "/controller/network/%016llx", nwid)) {
 		return;
 	}
 
-	worker_http(w, controller_get_network_cb);
+	worker_http(w, zt1_get_network_cb);
 }
 
 static void
-controller_get_members_cb(worker *w, void *body, size_t len)
+zt1_get_members_cb(worker *w, void *body, size_t len)
 {
 	object *obj;
 	object *arr;
@@ -268,18 +267,17 @@ controller_get_members_cb(worker *w, void *body, size_t len)
 }
 
 static void
-controller_get_members(controller *cp, worker *w, uint64_t nwid)
+zt1_get_members(controller *cp, worker *w, uint64_t nwid)
 {
-	if (!controller_init_req(
-	        cp, w, "/controller/network/%016llx/member", nwid)) {
+	if (!zt1_init_req(cp, w, "/controller/network/%016llx/member", nwid)) {
 		return;
 	}
 
-	worker_http(w, controller_get_members_cb);
+	worker_http(w, zt1_get_members_cb);
 }
 
 static void
-controller_get_member_cb(worker *w, void *body, size_t len)
+zt1_get_member_cb(worker *w, void *body, size_t len)
 {
 	object *obj1;
 	object *obj2;
@@ -324,18 +322,18 @@ controller_get_member_cb(worker *w, void *body, size_t len)
 }
 
 static void
-controller_get_member(controller *cp, worker *w, uint64_t nwid, uint64_t node)
+zt1_get_member(controller *cp, worker *w, uint64_t nwid, uint64_t node)
 {
-	if (!controller_init_req(cp, w,
-	        "/controller/network/%016llx/member/%010llx", nwid, node)) {
+	if (!zt1_init_req(cp, w, "/controller/network/%016llx/member/%010llx",
+	        nwid, node)) {
 		return;
 	}
 
-	worker_http(w, controller_get_member_cb);
+	worker_http(w, zt1_get_member_cb);
 }
 
 static void
-controller_delete_member_cb(worker *w, void *body, size_t len)
+zt1_delete_member_cb(worker *w, void *body, size_t len)
 {
 	object *obj;
 
@@ -353,13 +351,12 @@ controller_delete_member_cb(worker *w, void *body, size_t len)
 }
 
 static void
-controller_delete_member(
-    controller *cp, worker *w, uint64_t nwid, uint64_t node)
+zt1_delete_member(controller *cp, worker *w, uint64_t nwid, uint64_t node)
 {
 	nng_http_req *req;
 
-	if (!controller_init_req(cp, w,
-	        "/controller/network/%016llx/member/%010llx", nwid, node)) {
+	if (!zt1_init_req(cp, w, "/controller/network/%016llx/member/%010llx",
+	        nwid, node)) {
 		return;
 	}
 	req = worker_http_req(w);
@@ -367,11 +364,11 @@ controller_delete_member(
 		send_err(w, E_NOMEM, NULL);
 		return;
 	}
-	worker_http(w, controller_delete_member_cb);
+	worker_http(w, zt1_delete_member_cb);
 }
 
 static void
-controller_authorize_member_cb(worker *w, void *body, size_t len)
+zt1_authorize_member_cb(worker *w, void *body, size_t len)
 {
 	object *obj;
 	bool    auth;
@@ -396,14 +393,13 @@ controller_authorize_member_cb(worker *w, void *body, size_t len)
 }
 
 static void
-controller_authorize_member(
-    controller *cp, worker *w, uint64_t nwid, uint64_t node)
+zt1_authorize_member(controller *cp, worker *w, uint64_t nwid, uint64_t node)
 {
 	nng_http_req *req;
 	char *        body = "{ \"authorized\": true }";
 
-	if (!controller_init_req(cp, w,
-	        "/controller/network/%016llx/member/%010llx", nwid, node)) {
+	if (!zt1_init_req(cp, w, "/controller/network/%016llx/member/%010llx",
+	        nwid, node)) {
 		return;
 	}
 	req = worker_http_req(w);
@@ -412,11 +408,11 @@ controller_authorize_member(
 		send_err(w, E_NOMEM, NULL);
 		return;
 	}
-	worker_http(w, controller_authorize_member_cb);
+	worker_http(w, zt1_authorize_member_cb);
 }
 
 static void
-controller_deauthorize_member_cb(worker *w, void *body, size_t len)
+zt1_deauthorize_member_cb(worker *w, void *body, size_t len)
 {
 	object *obj;
 	bool    auth;
@@ -441,14 +437,13 @@ controller_deauthorize_member_cb(worker *w, void *body, size_t len)
 }
 
 static void
-controller_deauthorize_member(
-    controller *cp, worker *w, uint64_t nwid, uint64_t node)
+zt1_deauthorize_member(controller *cp, worker *w, uint64_t nwid, uint64_t node)
 {
 	nng_http_req *req;
 	char *        body = "{ \"authorized\": false }";
 
-	if (!controller_init_req(cp, w,
-	        "/controller/network/%016llx/member/%010llx", nwid, node)) {
+	if (!zt1_init_req(cp, w, "/controller/network/%016llx/member/%010llx",
+	        nwid, node)) {
 		return;
 	}
 	req = worker_http_req(w);
@@ -457,7 +452,7 @@ controller_deauthorize_member(
 		send_err(w, E_NOMEM, NULL);
 		return;
 	}
-	worker_http(w, controller_deauthorize_member_cb);
+	worker_http(w, zt1_deauthorize_member_cb);
 }
 
 static struct {
@@ -468,8 +463,7 @@ static struct {
 };
 
 static void
-controller_exec_jsonrpc(
-    controller *cp, worker *w, const char *meth, object *params)
+zt1_exec_jsonrpc(controller *cp, worker *w, const char *meth, object *params)
 {
 	for (int i = 0; jsonrpc_methods_ctr[i].method != NULL; i++) {
 		if (strcmp(jsonrpc_methods_ctr[i].method, meth) == 0) {
@@ -481,7 +475,7 @@ controller_exec_jsonrpc(
 }
 
 static bool
-controller_zt1_setup(worker_config *wc, controller *cp, char **errmsg)
+zt1_setup(worker_config *wc, controller *cp, char **errmsg)
 {
 	int      rv;
 	nng_url *url = NULL;
@@ -521,17 +515,27 @@ controller_zt1_setup(worker_config *wc, controller *cp, char **errmsg)
 	return (true);
 }
 
+static void
+zt1_teardown(controller *cp)
+{
+	free(cp->host);
+	if (cp->client) {
+		nng_http_client_free(cp->client);
+	}
+}
+
 worker_ops controller_zt1_ops = {
 	.version            = WORKER_OPS_VERSION,
 	.type               = "zt1",
-	.setup              = controller_zt1_setup,
-	.exec_jsonrpc       = controller_exec_jsonrpc,
-	.get_status         = controller_get_status,
-	.get_networks       = controller_get_networks,
-	.get_network        = controller_get_network,
-	.get_members        = controller_get_members,
-	.get_member         = controller_get_member,
-	.delete_member      = controller_delete_member,
-	.authorize_member   = controller_authorize_member,
-	.deauthorize_member = controller_deauthorize_member,
+	.setup              = zt1_setup,
+	.teardown           = zt1_teardown,
+	.exec_jsonrpc       = zt1_exec_jsonrpc,
+	.get_status         = zt1_get_status,
+	.get_networks       = zt1_get_networks,
+	.get_network        = zt1_get_network,
+	.get_members        = zt1_get_members,
+	.get_member         = zt1_get_member,
+	.delete_member      = zt1_delete_member,
+	.authorize_member   = zt1_authorize_member,
+	.deauthorize_member = zt1_deauthorize_member,
 };

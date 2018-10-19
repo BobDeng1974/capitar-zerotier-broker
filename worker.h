@@ -23,10 +23,10 @@
 #include "rpc.h"
 
 typedef struct worker_config worker_config;
-typedef struct worker_ops worker_ops;
-typedef struct worker     worker;
-typedef struct controller controller;
-typedef struct user       user;
+typedef struct worker_ops    worker_ops;
+typedef struct worker        worker;
+typedef struct controller    controller;
+typedef struct user          user;
 
 // when authenticating a user using username/password, we return the actual
 // user structure.  As we only do this for auth methods, we want the
@@ -65,6 +65,7 @@ struct worker_ops {
 	int         version;
 	const char *type;
 	bool (*setup)(worker_config *, controller *, char **);
+	void (*teardown)(controller *);
 	void (*exec_jsonrpc)(controller *, worker *, const char *, object *);
 	void (*get_status)(controller *, worker *);
 	void (*get_networks)(controller *, worker *);
@@ -123,10 +124,10 @@ struct proxy_config {
 
 struct controller_config {
 	object *json;
-	char *name;
-	char *url;
-	char *secret;
-	char *type;
+	char *  name;
+	char *  url;
+	char *  secret;
+	char *  type;
 };
 
 struct api_config {
@@ -161,8 +162,8 @@ struct worker_config {
 	char *             zthome;
 	char *             userdir;
 	char *             tokendir;
-	int                nmoons;       // Number of moons
-	moon_config *      moons;        // ZeroTier moon structure
+	int                nmoons; // Number of moons
+	moon_config *      moons;  // ZeroTier moon structure
 };
 
 extern bool get_controller_param(worker *w, object *params, controller **cpp);

@@ -56,6 +56,7 @@ enum rpc_errors {
 #define METHOD_CREATE_TOTP	"create-totp"
 #define METHOD_DELETE_TOTP	"delete-totp"
 #define	METHOD_VALIDATE_CONFIG	"validate-config"
+#define	METHOD_RESTART_SERVICE	"restart-service"
 //clang-format on
 
 #endif // RPC_H

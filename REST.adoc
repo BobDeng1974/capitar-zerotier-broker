@@ -366,3 +366,20 @@ Body Parameters::
 
 Result::
 	Empty object.
+
+=== Restart Controller Worker
+
+This restarts the worker.
+
+URI:: `/proxy/$controller/restart`
+
+Method:: `POST`
+
+URI Parameters::
+	None.
+
+Body Parameters::
+	Empty object (for now).
+
+Result::
+	Empty object.

@@ -70,6 +70,7 @@ typedef enum {
 	STATE_RECVING,
 	STATE_HTTPING,
 	STATE_REPLYING,
+	STATE_IDLE,
 } worker_state;
 
 typedef struct proxy   proxy;
@@ -107,6 +108,7 @@ struct proxy {
 	nng_socket    repsock;
 	uint32_t      repport;
 	worker *      workers;
+	int           nworkers;
 	nng_aio *     survaio;
 	int           state; // 0 - receiving, 1 sending
 	proxy_config *config;
@@ -124,6 +126,12 @@ proxy *     proxies;
 netperm *netperms;
 
 worker_ops *find_worker_ops(const char *);
+
+nng_mtx *   mtx;
+nng_cv *    cv;
+static bool reload;
+static int  nidle;
+static int  nworkers;
 
 // Note that the CTRLR NODE will almost certainly not be the same as the ZT
 // address.  That's because we can create per-process (ephemeral) ZT nodes
@@ -229,6 +237,15 @@ fail:
 static void
 recv_request(worker *w)
 {
+	nng_mtx_lock(mtx);
+	if (reload) {
+		nidle++;
+		w->state = STATE_IDLE;
+		nng_cv_wake(cv);
+		nng_mtx_unlock(mtx);
+		return;
+	}
+	nng_mtx_unlock(mtx);
 	w->state = STATE_RECVING;
 	nng_ctx_recv(w->ctx, w->aio);
 }
@@ -347,6 +364,7 @@ static void set_own_password(worker *, object *);
 static void create_own_totp(worker *, object *);
 static void delete_own_totp(worker *, object *);
 static void validate_config(worker *, object *);
+static void restart_server(worker *, object *);
 
 static struct {
 	const char *method;
@@ -368,12 +386,22 @@ static struct {
 	{ METHOD_CREATE_TOTP, create_own_totp },
 	{ METHOD_DELETE_TOTP, delete_own_totp },
 	{ METHOD_VALIDATE_CONFIG, validate_config },
+	{ METHOD_RESTART_SERVICE, restart_server },
 	{ NULL, NULL },
 };
 
 static void
 jsonrpc(worker *w, object *reqobj, const char *meth, object *parm)
 {
+	nng_mtx_lock(mtx);
+	if (reload) {
+		send_err(w, 503, "Restart pending");
+		nng_mtx_unlock(mtx);
+		free_obj(reqobj);
+		return;
+	}
+	nng_mtx_unlock(mtx);
+
 	// First check the general registered methods
 	for (int i = 0; jsonrpc_methods[i].method != NULL; i++) {
 		if (strcmp(jsonrpc_methods[i].method, meth) == 0) {
@@ -396,6 +424,7 @@ jsonrpc(worker *w, object *reqobj, const char *meth, object *parm)
 		return;
 	}
 
+	send_err(w, E_BADMETHOD, NULL);
 	free_obj(reqobj);
 }
 
@@ -1169,6 +1198,9 @@ worker_cb(void *arg)
 	case STATE_REPLYING:
 		reply_cb(w);
 		break;
+
+	case STATE_IDLE:
+		break;
 	}
 }
 
@@ -1209,8 +1241,7 @@ setup_controllers(worker_config *wc, char **errmsg)
 		controllers[i].config = &wc->controllers[i];
 		if (!setup_controller(wc, &controllers[i], errmsg)) {
 			for (int j = 0; j < i; j++) {
-				nng_http_client_free(controllers[i].client);
-				free(controllers[i].host);
+				controllers[i].ops->teardown(&controllers[i]);
 			}
 			free(controllers);
 			controllers = NULL;
@@ -1218,6 +1249,16 @@ setup_controllers(worker_config *wc, char **errmsg)
 		}
 	}
 	return (true);
+}
+
+static void
+teardown_controllers(worker_config *wc)
+{
+	for (int i = 0; i < wc->ncontrollers; i++) {
+		controllers[i].ops->teardown(&controllers[i]);
+	}
+	free(controllers);
+	controllers = NULL;
 }
 
 static bool
@@ -1304,14 +1345,34 @@ setup_proxy(worker_config *wc, proxy *p, char **errmsg)
 			nng_close(p->survsock);
 			return (false);
 		}
+		p->nworkers++;
 	}
 
 	return (true);
 }
 
+static void
+teardown_proxy(proxy *p)
+{
+	if (p->workers != NULL) {
+		for (int i = 0; i < p->nworkers; i++) {
+			worker *w = &p->workers[i];
+			nng_aio_free(w->aio);
+			nng_http_req_free(w->req);
+			nng_http_res_free(w->res);
+			nng_ctx_close(w->ctx);
+		}
+		free(p->workers);
+	}
+	nng_close(p->survsock);
+	nng_close(p->repsock);
+	nng_aio_free(p->survaio);
+}
+
 static bool
 setup_proxies(worker_config *wc, char **errmsg)
 {
+	int nw = 0;
 	if ((proxies = calloc(sizeof(proxy), wc->nproxies)) == NULL) {
 		ERRF(errmsg, "calloc: %s", strerror(errno));
 		return (false);
@@ -1327,8 +1388,24 @@ setup_proxies(worker_config *wc, char **errmsg)
 			proxies = NULL;
 			return (false);
 		}
+		nw += wc->proxies[i].nworkers;
 	}
+	nng_mtx_lock(mtx);
+	nworkers = nw;
+	nng_mtx_unlock(mtx);
 	return (true);
+}
+
+static void
+teardown_proxies(worker_config *wc)
+{
+	if (proxies != NULL) {
+		for (int i = 0; i < wc->nproxies; i++) {
+			teardown_proxy(&proxies[i]);
+		}
+		free(proxies);
+		proxies = NULL;
+	}
 }
 
 static bool
@@ -1369,6 +1446,15 @@ setup_tls(worker_config *wc, char **errmsg)
 	return (true);
 }
 
+static void
+teardown_tls(void)
+{
+	if (tls != NULL) {
+		nng_tls_config_free(tls);
+		tls = NULL;
+	}
+}
+
 static bool
 apply_config(worker_config *wc, char **errmsg)
 {
@@ -1378,6 +1464,14 @@ apply_config(worker_config *wc, char **errmsg)
 		return (false);
 	}
 	return (true);
+}
+
+static void
+teardown(worker_config *wc)
+{
+	teardown_controllers(wc);
+	teardown_proxies(wc);
+	teardown_tls();
 }
 
 typedef struct worker_ops_entry worker_ops_entry;
@@ -1903,6 +1997,75 @@ validate_config(worker *w, object *params)
 	free_config(wc);
 }
 
+static void
+restart_server(worker *w, object *params)
+{
+	object *       result;
+	char *         errmsg = NULL;
+	worker_config *wc     = NULL;
+
+	if (!get_auth_param(w, params, NULL)) {
+		return;
+	}
+
+	if ((result = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+	if ((wc = load_config(cfgpath, &errmsg)) == NULL) {
+		send_err(w, E_BADCONFIG, errmsg);
+		free(errmsg);
+		return;
+	}
+	free_config(wc);
+	nng_mtx_lock(mtx);
+	reload = true;
+	nidle  = 0;
+	for (int i = 0; i < wc->nproxies; i++) {
+		for (int j = 0; j < proxies[i].nworkers; j++) {
+			worker *w = &proxies[i].workers[j];
+			if (w->state == STATE_RECVING) {
+				nng_aio_cancel(w->aio);
+			}
+		}
+	}
+	nng_mtx_unlock(mtx);
+	send_result(w, result);
+}
+
+static void
+restart_all(void)
+{
+	char *         err;
+	worker_config *newc;
+
+	printf("Restarting...\n");
+
+	nng_mtx_lock(mtx);
+	reload = false;
+	nidle  = 0;
+	nng_mtx_unlock(mtx);
+
+	if (cfg != NULL) {
+		teardown(cfg);
+		free_config(cfg);
+	}
+	if ((newc = load_config(cfgpath, &err)) == NULL) {
+		fprintf(stderr, "Failed to load config: %s\n", err);
+		exit(1);
+	}
+	cfg = newc;
+	if (!apply_config(cfg, &err)) {
+		fprintf(stderr, "Failed to apply config: %s\n", err);
+		exit(1);
+	};
+
+	start_proxies(cfg);
+	if (debug) {
+		printf("Waiting for requests...\n");
+	}
+}
+
 static nng_optspec opts[] = {
 	{ "cfg", 'c', 'c', true },
 	{ "debug", 'd', 'd', false },
@@ -1930,6 +2093,11 @@ main(int argc, char **argv)
 
 	otptest(); // Run an internal self test.  This can be removed later.
 
+	if (((rv = nng_mtx_alloc(&mtx)) != 0) ||
+	    ((rv = nng_cv_alloc(&cv, mtx)) != 0)) {
+		fprintf(stderr, "Failed to alloc mtx: %s", nng_strerror(rv));
+		exit(1);
+	}
 	if ((!worker_register_ops(&controller_zt1_ops)) ||
 	    (!worker_register_ops(&controller_ztcentral_ops))) {
 		fprintf(stderr, "Failed to register worker ops\n");
@@ -1941,6 +2109,7 @@ main(int argc, char **argv)
 		    nng_strerror(rv));
 	}
 
+#if 0
 	if ((cfg = load_config(cfgpath, &err)) == NULL) {
 		fprintf(stderr, "Failed to load config: %s\n", err);
 		exit(1);
@@ -1953,12 +2122,15 @@ main(int argc, char **argv)
 
 	start_proxies(cfg);
 
-	if (debug) {
-		printf("Waiting for requests...\n");
-	}
-
+#endif
+	reload = true;
 	for (;;) {
-		nng_msleep(3600000); // an hour
+		nng_mtx_lock(mtx);
+		while (!(reload && (nidle == nworkers))) {
+			nng_cv_wait(cv);
+		}
+		nng_mtx_unlock(mtx);
+		restart_all();
 	}
 	exit(0);
 }
