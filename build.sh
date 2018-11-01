@@ -29,7 +29,7 @@ repos="mbedtls libzerotiercore nng"
 cf="-DCMAKE_INSTALL_PREFIX=${insdir} -DCMAKE_PREFIX_PATH=${insdir}"
 mbedtls_cf="${cf}"
 libzerotiercore_cf="${cf}"
-nng_cf="${cf} -DNNG_ENABLE_TLS=ON -DNNG_TRANSPORT_ZEROTIER=ON"
+nng_cf="${cf} -DNNG_ENABLE_TLS=ON -DNNG_TRANSPORT_ZEROTIER=ON -DNNG_SETSTACKSIZE=ON"
 
 for repo in $repos
 do
