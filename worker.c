@@ -478,10 +478,11 @@ jsonrpc(worker *w, object *reqobj, const char *meth, object *parm)
 				// working this request, and discard the
 				// repeat.  If we can't dup it, we also
 				// discard.
-				recv_request(w);
 				nng_mtx_unlock(responses_mtx);
+				recv_request(w);
 				return;
 			}
+			nng_mtx_unlock(responses_mtx);
 			w->state = STATE_REPLYING;
 			nng_aio_set_msg(w->aio, msg);
 			nng_ctx_send(w->ctx, w->aio);
