@@ -78,6 +78,20 @@ typedef struct netperm netperm;
 
 nng_tls_config *tls = NULL;
 
+// Response is used to track responses.  We append these to the end of the
+// list, and prune them on expiration.  The purpose is to provide some level
+// of idempotency.  Note that the worker will consume extra memory if this is
+// allowed to grow too fast.  For now we mostly don't worry about that, and
+// use a time based expiration.  (We could keep a count, and reap older ones
+// based on count.)  For now we punt.
+typedef struct response response;
+struct response {
+	response *next;
+	time_t    expire; // We reap items older than this.
+	uint64_t  id;
+	nng_msg * msg;
+};
+
 struct worker {
 	proxy *          proxy;
 	nng_ctx          ctx; // REP context
@@ -87,6 +101,7 @@ struct worker {
 	worker_state     state;
 	nng_http_client *client;
 	uint64_t         id; // request ID of pending request
+	response *       resp;
 	worker_http_cb   http_cb;
 	const char *     method; // RPC method called
 	uint64_t         user_roles;
@@ -132,6 +147,11 @@ nng_cv *    cv;
 static bool reload;
 static int  nidle;
 static int  nworkers;
+
+nng_mtx *        responses_mtx;
+nng_cv *         responses_cv;
+nng_thread *     resp_reaper;
+static response *responses;
 
 // Note that the CTRLR NODE will almost certainly not be the same as the ZT
 // address.  That's because we can create per-process (ephemeral) ZT nodes
@@ -235,6 +255,39 @@ fail:
 }
 
 static void
+stale_reaper(void *notused)
+{
+	nng_mtx_lock(responses_mtx);
+	(void) notused;
+
+	for (;;) {
+		response * resp;
+		response **rpp;
+		time_t     now = time(NULL);
+		for (rpp = &responses; (resp = *rpp) != NULL;
+		     rpp = &resp->next) {
+			if (resp->expire < now) {
+				*rpp = NULL;
+				break;
+			}
+		}
+
+		while (resp != NULL) {
+			response *next = resp->next;
+			nng_msg_free(resp->msg);
+			free(resp);
+			resp = next;
+		}
+		if (responses != NULL) {
+			nng_cv_until(responses_cv, nng_clock() + 10000);
+		} else {
+			nng_cv_wait(responses_cv);
+		}
+	}
+	nng_mtx_unlock(responses_mtx);
+}
+
+static void
 recv_request(worker *w)
 {
 	nng_mtx_lock(mtx);
@@ -253,10 +306,11 @@ recv_request(worker *w)
 static void
 send_resp(worker *w, const char *key, object *obj)
 {
-	nng_msg *msg = NULL;
-	object * res = NULL;
-	char *   str;
-	char     idbuf[32];
+	response *resp;
+	nng_msg * msg = NULL;
+	object *  res = NULL;
+	char *    str;
+	char      idbuf[32];
 
 	snprintf(idbuf, sizeof(idbuf), "%llx", (long long unsigned) w->id);
 
@@ -280,6 +334,16 @@ send_resp(worker *w, const char *key, object *obj)
 		recv_request(w);
 		return;
 	}
+
+	nng_mtx_lock(responses_mtx);
+	resp      = w->resp;
+	resp->msg = msg;
+	if (nng_msg_dup(&msg, msg) != 0) {
+		nng_mtx_unlock(responses_mtx);
+		recv_request(w);
+		return;
+	}
+	nng_mtx_unlock(responses_mtx);
 
 	w->state = STATE_REPLYING;
 	nng_aio_set_msg(w->aio, msg);
@@ -393,6 +457,7 @@ static struct {
 static void
 jsonrpc(worker *w, object *reqobj, const char *meth, object *parm)
 {
+	response *resp;
 	nng_mtx_lock(mtx);
 	if (reload) {
 		send_err(w, 503, "Restart pending");
@@ -401,6 +466,41 @@ jsonrpc(worker *w, object *reqobj, const char *meth, object *parm)
 		return;
 	}
 	nng_mtx_unlock(mtx);
+
+	nng_mtx_lock(responses_mtx);
+	for (resp = responses; resp != NULL; resp = resp->next) {
+		if (resp->id == w->id) {
+			free_obj(reqobj);
+			nng_msg *msg;
+			if ((resp->msg == NULL) ||
+			    (nng_msg_dup(&msg, resp->msg) != 0)) {
+				// If the msg is NULL, then we are already
+				// working this request, and discard the
+				// repeat.  If we can't dup it, we also
+				// discard.
+				recv_request(w);
+				nng_mtx_unlock(responses_mtx);
+				return;
+			}
+			w->state = STATE_REPLYING;
+			nng_aio_set_msg(w->aio, msg);
+			nng_ctx_send(w->ctx, w->aio);
+			return;
+		}
+	}
+	if ((resp = calloc(sizeof(*resp), 1)) == NULL) {
+		send_err(w, E_INTERNAL, "Out of memory");
+		nng_mtx_unlock(responses_mtx);
+		return;
+	}
+	w->resp = resp;
+
+	resp->expire = time(NULL) + 30; // 30 second expiration
+	resp->id     = w->id;
+	resp->next   = responses;
+	responses    = resp;
+	nng_cv_wake(responses_cv);
+	nng_mtx_unlock(responses_mtx);
 
 	// First check the general registered methods
 	for (int i = 0; jsonrpc_methods[i].method != NULL; i++) {
@@ -2094,8 +2194,12 @@ main(int argc, char **argv)
 	otptest(); // Run an internal self test.  This can be removed later.
 
 	if (((rv = nng_mtx_alloc(&mtx)) != 0) ||
-	    ((rv = nng_cv_alloc(&cv, mtx)) != 0)) {
-		fprintf(stderr, "Failed to alloc mtx: %s", nng_strerror(rv));
+	    ((rv = nng_cv_alloc(&cv, mtx)) != 0) ||
+	    ((rv = nng_mtx_alloc(&responses_mtx)) != 0) ||
+	    ((rv = nng_cv_alloc(&responses_cv, responses_mtx)) != 0) ||
+	    ((rv = nng_thread_create(&resp_reaper, stale_reaper, NULL)) !=
+	        0)) {
+		fprintf(stderr, "Failed to alloc synch: %s", nng_strerror(rv));
 		exit(1);
 	}
 	if ((!worker_register_ops(&controller_zt1_ops)) ||
@@ -2109,20 +2213,6 @@ main(int argc, char **argv)
 		    nng_strerror(rv));
 	}
 
-#if 0
-	if ((cfg = load_config(cfgpath, &err)) == NULL) {
-		fprintf(stderr, "Failed to load config: %s\n", err);
-		exit(1);
-	}
-
-	if (!apply_config(cfg, &err)) {
-		fprintf(stderr, "Failed to apply config: %s\n", err);
-		exit(1);
-	};
-
-	start_proxies(cfg);
-
-#endif
 	reload = true;
 	for (;;) {
 		nng_mtx_lock(mtx);
