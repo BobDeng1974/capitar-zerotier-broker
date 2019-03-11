@@ -221,7 +221,7 @@ static nng_optspec opts[] = {
 };
 
 static void
-survey_pipe_cb(nng_pipe p, int ev, void *arg)
+survey_pipe_cb(nng_pipe p, nng_pipe_ev ev, void *arg)
 {
 	// We actually don't care about the arguments for now.
 	// Later we might actually want to print these.  We could also
