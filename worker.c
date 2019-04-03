@@ -215,12 +215,18 @@ survey_cb(void *arg)
 	}
 
 	msg  = nng_aio_get_msg(p->survaio);
+
+	obj = parse_obj(nng_msg_body(msg), nng_msg_len(msg));
+	if (!obj) {
+		obj  = alloc_obj();
+	}
+
 	body = NULL;
 	arr  = alloc_arr();
-	obj  = alloc_obj();
 	nng_msg_clear(msg);
 
 	if (((arr == NULL) || (obj == NULL)) ||
+	    (!add_obj_uint64(obj, "repclock", (int) nng_clock())) ||
 	    (!add_obj_int(obj, "port", (int) p->repport))) {
 		goto fail;
 	}
@@ -238,6 +244,10 @@ survey_cb(void *arg)
 	if (((body = print_obj(obj)) == NULL) ||
 	    (nng_msg_append(msg, body, strlen(body)) != 0)) {
 		goto fail;
+	}
+
+	if (debug > 1) {
+		printf("survey reply %s\n", body);
 	}
 
 	free(body);
@@ -1376,7 +1386,7 @@ setup_proxy(worker_config *wc, proxy *p, char **errmsg)
 	    (((wc->zthome != NULL) &&
 	        (rv = nng_setopt_string(s, NNG_OPT_ZT_HOME, wc->zthome)) !=
 	            0)) ||
-	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_PING_TIME, 1000)) != 0) ||
+	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_PING_TIME, 10000)) != 0) ||
 	    ((rv = nng_listen(s, p->config->rpcurl, &l, 0)) != 0)) {
 		ERRF(errmsg, "rep(%s): %s", p->config->rpcurl,
 		    nng_strerror(rv));
@@ -1414,7 +1424,7 @@ setup_proxy(worker_config *wc, proxy *p, char **errmsg)
 	    (((wc->zthome != NULL) &&
 	        (rv = nng_setopt_string(s, NNG_OPT_ZT_HOME, wc->zthome)) !=
 	            0)) ||
-	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_PING_TIME, 1000)) != 0) ||
+	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_PING_TIME, 10000)) != 0) ||
 	    ((rv = nng_setopt_ms(s, NNG_OPT_ZT_CONN_TIME, 1000)) != 0) ||
 	    ((rv = nng_setopt_ms(s, NNG_OPT_RECONNMINT, 1)) != 0) ||
 	    ((rv = nng_setopt_ms(s, NNG_OPT_RECONNMAXT, 10)) != 0) ||

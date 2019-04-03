@@ -171,7 +171,7 @@ add_controller(nng_sockaddr sa, const char *name, nng_pipe p)
 	if ((nng_setopt_ms(cp->reqsock, NNG_OPT_RECONNMINT, 1) != 0) ||
 	    (nng_setopt_ms(cp->reqsock, NNG_OPT_RECONNMAXT, 1000) != 0) ||
 	    (nng_setopt_ms(cp->reqsock, NNG_OPT_REQ_RESENDTIME, 1000) != 0) ||
-	    (nng_setopt_ms(cp->reqsock, NNG_OPT_ZT_PING_TIME, 1000) != 0) ||
+	    (nng_setopt_ms(cp->reqsock, NNG_OPT_ZT_PING_TIME, 10000) != 0) ||
 	    (nng_setopt_ms(cp->reqsock, NNG_OPT_ZT_CONN_TIME, 1000) != 0) ||
 	    (nng_dial(cp->reqsock, cp->url, NULL, NNG_FLAG_NONBLOCK) != 0)) {
 		nng_mtx_unlock(lock);
@@ -201,7 +201,7 @@ prune_controllers(nng_time stale)
 	nng_mtx_lock(lock);
 	cpp = &controllers;
 	while ((cp = *cpp) != NULL) {
-		if ((cp->stamp + stale) >= nng_clock()) {
+		if (cp->stamp > now) {
 			cpp = &cp->next;
 			continue;
 		}
@@ -236,15 +236,6 @@ survey_pipe_cb(nng_pipe p, nng_pipe_ev ev, void *arg)
 				// Remote peer is removed, mark it stale.
 				// This will force it to be reaped.  Note
 				// that there can be more than one such.
-				//
-				// FIXME There often seem to be false
-				// positives. The peer is removed and
-				// immediately added if the check interval is
-				// short enough. Perhaps change this to double
-				// check peer connectivity.
-				//
-				// Probably this is related to needed fixes in
-				// the ZeroTier transport.
 				//
 				cp->stamp = 0;
 			}
@@ -290,7 +281,7 @@ survey_loop(void)
 	    ((rv = nng_setopt_ms(
 	          survsock, NNG_OPT_SURVEYOR_SURVEYTIME, 3000)) != 0) ||
 	    // survsock, NNG_OPT_SURVEYOR_SURVEYTIME, 100)) != 0) ||
-	    ((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_PING_TIME, 1000)) !=
+	    ((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_PING_TIME, 10000)) !=
 	        0) ||
 	    //((rv = nng_setopt_ms(survsock, NNG_OPT_ZT_PING_TIME, 90)) != 0)
 	    //||
@@ -324,6 +315,28 @@ survey_loop(void)
 			nng_msleep(1000); // try again in a second
 			continue;
 		}
+
+		char * body = NULL;
+		object * arr  = alloc_arr();
+		object * obj  = alloc_obj();
+
+		if (((arr == NULL) || (obj == NULL)) ||
+		    (!add_obj_uint64(obj, "clock", (int) nng_clock())) ||
+		    (!add_obj_string(obj, "survey", "controllers"))) {
+			printf("Cannot create survey msg\n");
+			continue;
+		}
+
+		if (((body = print_obj(obj)) == NULL) ||
+		    (nng_msg_append(msg, body, strlen(body)) != 0)) {
+			printf("Cannot append survey msg\n");
+			continue;
+		}
+
+		//printf("survey msg %s\n", body);
+
+		free(body);
+		free_obj(obj);
 
 		switch (nng_sendmsg(survsock, msg, 0)) {
 		case 0:
@@ -369,6 +382,9 @@ survey_loop(void)
 			}
 
 			obj = parse_obj(nng_msg_body(msg), nng_msg_len(msg));
+
+			//printf("survey reply %s\n", print_obj(obj));
+
 			nng_msg_free(msg);
 
 			if ((obj == NULL) ||
@@ -390,10 +406,10 @@ survey_loop(void)
 		}
 
 	endsurvey:
-		prune_controllers(30000); // Prune anything over 30 secs old
+		prune_controllers(180000); // Prune anything over 180 secs old
 		nng_mtx_lock(survlk);
 		// 10 seconds, or immediately on a pipe change.
-		nng_cv_until(survcv, nng_clock() + 10000);
+		nng_cv_until(survcv, nng_clock() + 2000);
 		nng_mtx_unlock(survlk);
 		nng_msleep(200); // 200 msec for peer to settle.
 	}

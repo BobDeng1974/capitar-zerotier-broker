@@ -179,6 +179,8 @@ central_get_network_cb(worker *w, void *body, size_t len)
 	object *v6am   = NULL;
 	object *routes = NULL;
 
+	//printf("get_network_cb %s\n", (char *) body);
+
 	if (((obj0 = parse_obj(body, len)) == NULL) ||
 	    (!get_obj_obj(obj0, "config", &obj1)) ||
 	    (!get_obj_string(obj1, "id", &id)) ||
