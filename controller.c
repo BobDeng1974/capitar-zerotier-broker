@@ -27,16 +27,8 @@
 
 #include "object.h"
 #include "worker.h"
+#include "controller.h"
 
-struct controller {
-	char *             addr;
-	char *             name;
-	char *             secret;
-	char *             host; // for HTTP
-	nng_http_client *  client;
-	worker_ops *       ops;
-	controller_config *config;
-};
 
 void get_status(worker *, object *);
 void get_networks(worker *, object *);

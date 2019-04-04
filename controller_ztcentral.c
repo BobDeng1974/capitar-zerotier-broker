@@ -28,24 +28,12 @@
 #include "object.h"
 #include "util.h"
 #include "worker.h"
+#include "controller.h"
 
-// This macro makes us do asprintf conditionally.
-#define ERRF(strp, fmt, ...) \
-	if (strp != NULL)    \
-	asprintf(strp, fmt, ##__VA_ARGS__)
 
 extern nng_tls_config *tls;
 extern worker_ops *    find_worker_ops(const char *);
 
-struct controller {
-	char *             addr;
-	char *             name;
-	char *             secret;
-	char *             host; // for HTTP
-	nng_http_client *  client;
-	worker_ops *       ops;
-	controller_config *config;
-};
 
 static bool
 central_init_req(controller *cp, worker *w, const char *fmt, ...)
