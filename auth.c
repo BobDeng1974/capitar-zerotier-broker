@@ -821,12 +821,64 @@ token_created(const token *tok)
 }
 
 bool
+token_has_expired(const token *tok)
+{
+	if ((tok->expire != 0) && (tok->expire < time(NULL))) {
+		return true;
+	}
+	return false;
+}
+
+bool
 token_belongs(const token *tok, const user *u)
 {
 	if ((strcmp(tok->user->name, u->name) == 0) && (tok->tag == u->tag)) {
 		return (true);
 	}
 	return (false);
+}
+
+void
+purge_expired_tokens()
+{
+	const char *fname;
+	int         code;
+	void *      dirh;
+	char        id[128];
+
+
+	if ((wc == NULL) || (wc->userdir == NULL)) {
+		return;
+	}
+
+	if ((dirh = path_opendir(wc->tokendir)) == NULL) {
+		if (dirh == NULL) {
+			return;
+		}
+	}
+
+	while ((fname = path_readdir(dirh)) != NULL) {
+		size_t l;
+		token *tok;
+		snprintf(id, sizeof(id), "%s", fname);
+		if (((l = strlen(id)) < 4) &&
+		    (strcmp(&id[l - 4], ".tok") != 0)) {
+			continue;
+		}
+		id[l - 4] = 0;
+		if ((tok = find_token(id, &code, false)) == NULL) {
+			continue;
+		}
+		if (token_has_expired(tok)) {
+			printf("deleting expired token %s\n", print_obj(tok->json));
+			delete_token(tok);
+		} else {
+			free_token(tok);
+		}
+
+		// Go easy on system
+		nng_msleep(100);
+	}
 }
 
 // Authentication support.  This code is meant for the worker,

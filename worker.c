@@ -152,6 +152,7 @@ nng_mtx *        responses_mtx;
 nng_cv *         responses_cv;
 nng_thread *     resp_reaper;
 static response *responses;
+nng_thread *     house_keeper;
 
 // Note that the CTRLR NODE will almost certainly not be the same as the ZT
 // address.  That's because we can create per-process (ephemeral) ZT nodes
@@ -262,6 +263,18 @@ fail:
 	free(body);
 	free_obj(obj);
 	free_obj(arr);
+}
+
+static void
+house_keeping(void *notused)
+{
+	(void) notused;
+	nng_msleep(3000);
+
+	for (;;) {
+		purge_expired_tokens();
+		nng_msleep(300000);
+	}
 }
 
 static void
@@ -2208,6 +2221,8 @@ main(int argc, char **argv)
 	    ((rv = nng_cv_alloc(&cv, mtx)) != 0) ||
 	    ((rv = nng_mtx_alloc(&responses_mtx)) != 0) ||
 	    ((rv = nng_cv_alloc(&responses_cv, responses_mtx)) != 0) ||
+	    ((rv = nng_thread_create(&house_keeper, house_keeping, NULL)) !=
+		0) ||
 	    ((rv = nng_thread_create(&resp_reaper, stale_reaper, NULL)) !=
 	        0)) {
 		fprintf(stderr, "Failed to alloc synch: %s", nng_strerror(rv));

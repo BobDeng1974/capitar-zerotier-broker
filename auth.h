@@ -62,8 +62,10 @@ extern const char *token_desc(const token *);
 extern bool        token_belongs(const token *, const user *);
 extern double      token_created(const token *);
 extern double      token_expires(const token *);
+extern bool        token_has_expired(const token *);
 extern bool        user_tokens(const user *, token ***, int *);
 extern void        free_tokens(token **, int);
+extern void        purge_expired_tokens();
 
 extern uint64_t    find_role(const char *);
 extern uint64_t    find_role_ext(worker_config *, const char *);
