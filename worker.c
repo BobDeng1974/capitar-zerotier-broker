@@ -42,6 +42,7 @@
 #include "otp.h"
 #include "util.h"
 #include "worker.h"
+#include "controller.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -108,6 +109,7 @@ struct worker {
 	uint64_t         eff_roles; // roles as modified by proxy changes
 };
 
+/*
 struct controller {
 	char *             addr;
 	char *             name;
@@ -117,6 +119,7 @@ struct controller {
 	worker_ops *       ops;
 	controller_config *config;
 };
+*/
 
 struct proxy {
 	nng_socket    survsock;
@@ -269,11 +272,22 @@ static void
 house_keeping(void *notused)
 {
 	(void) notused;
+	int purge_expired_tokens_last;
+	int rv;
+
 	nng_msleep(3000);
 
 	for (;;) {
-		purge_expired_tokens();
-		nng_msleep(300000);
+		if (purge_expired_tokens_last < (nng_clock() + 24*3600*1000)) {
+			purge_expired_tokens_last = nng_clock();
+			nng_thread * purger;
+			if (((rv = nng_thread_create(&purger, purge_expired_tokens, NULL)) != 0)) {
+				fprintf(stderr, "Failed to alloc purger: %s", nng_strerror(rv));
+				exit(1);
+			}
+			nng_thread_destroy(purger);
+		}
+		nng_msleep(1000);
 	}
 }
 
@@ -1362,6 +1376,7 @@ setup_controllers(worker_config *wc, char **errmsg)
 		return (false);
 	}
 	for (int i = 0; i < wc->ncontrollers; i++) {
+		controllers[i].debug = debug;
 		controllers[i].config = &wc->controllers[i];
 		if (!setup_controller(wc, &controllers[i], errmsg)) {
 			for (int j = 0; j < i; j++) {
@@ -2179,6 +2194,7 @@ restart_all(void)
 		exit(1);
 	}
 	cfg = newc;
+	cfg->debug = debug;
 	if (!apply_config(cfg, &err)) {
 		fprintf(stderr, "Failed to apply config: %s\n", err);
 		exit(1);

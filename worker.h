@@ -164,6 +164,7 @@ struct worker_config {
 	char *             tokendir;
 	int                nmoons; // Number of moons
 	moon_config *      moons;  // ZeroTier moon structure
+	int                debug;
 };
 
 extern bool get_controller_param(worker *w, object *params, controller **cpp);

@@ -839,8 +839,9 @@ token_belongs(const token *tok, const user *u)
 }
 
 void
-purge_expired_tokens()
+purge_expired_tokens(void *notused)
 {
+	(void) notused;
 	const char *fname;
 	int         code;
 	void *      dirh;
@@ -849,6 +850,10 @@ purge_expired_tokens()
 
 	if ((wc == NULL) || (wc->userdir == NULL)) {
 		return;
+	}
+
+	if (wc->debug) {
+		printf("purge_expired_tokens()\n");
 	}
 
 	if ((dirh = path_opendir(wc->tokendir)) == NULL) {
@@ -870,7 +875,9 @@ purge_expired_tokens()
 			continue;
 		}
 		if (token_has_expired(tok)) {
-			printf("deleting expired token %s\n", print_obj(tok->json));
+			if (wc->debug) {
+				printf("deleting expired token %s\n", print_obj(tok->json));
+			}
 			delete_token(tok);
 		} else {
 			free_token(tok);

@@ -35,6 +35,7 @@ struct controller {
         nng_http_client *  client;
         worker_ops *       ops;
         controller_config *config;
+	int                debug;
 };
 
 
