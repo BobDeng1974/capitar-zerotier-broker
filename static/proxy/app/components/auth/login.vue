@@ -96,7 +96,12 @@
     v-on:click="logout"
 >Logout</b-btn>
 
+<user-mgmt v-if="creds && creds.token"
+  v-bind:controller="controller"
+  v-bind:creds="creds"
+></user-mgmt>
 
+<!--
 <controller v-if="controller && creds && creds.token && (controller != 'libvirt-poc')"
   v-bind:controller="controller"
   v-bind:creds="creds"
@@ -107,6 +112,7 @@
   v-bind:controller="controller"
   v-bind:creds="creds"
 ></controller-libvirt>
+-->
 
 </div>
 </template>
@@ -124,7 +130,7 @@ module.exports = {
       controller_status: null,
       networks: null,
       nw_filter: "",
-      creds: { username: "", password: "", oath: "", token: null },
+      creds: { username: "test", password: "123456", oath: "", token: null },
     }
   },
   props: [],

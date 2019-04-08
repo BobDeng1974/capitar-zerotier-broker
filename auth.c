@@ -506,14 +506,12 @@ create_user(object *newuser, int *code)
 	}
 	if (!add_obj_uint64(newuser, "created_ms", nng_clock())) {
 		*code = E_NOMEM;
-		free(name);
 		return (NULL);
 	}
 	// Sanity check here to ensure name is safe for files.
 	if ((!safe_filename(name)) ||
 	    ((path = path_join(wc->userdir, name, ".usr")) == NULL)) {
 		*code = E_BADPARAMS;
-		free(name);
 		return (NULL);
 	}
 	if (path_exists(path)) {
@@ -524,7 +522,6 @@ create_user(object *newuser, int *code)
 		*code = E_INTERNAL;
 		free_obj(newuser);
 		free(path);
-		free(name);
 		return (NULL);
 	}
 	free_obj(newuser);
@@ -533,12 +530,10 @@ create_user(object *newuser, int *code)
 	    ((u->json = obj_load(path, NULL)) == NULL) || (!parse_user(u)) ||
 	    (strcmp(u->name, name) != 0)) {
 		free(path);
-		free(name);
 		free_user(u);
 		return (NULL);
 	}
 	free(path);
-	free(name);
 
 	return (u);
 }

@@ -1069,9 +1069,9 @@ rpc_get_user(worker *w, object *params)
 	}
 
 	result = clone_obj(u->json);
+        add_obj_string(result, "passwd", "");
 	send_result(w, result);
 	free_user(u);
-	free(name);
 }
 
 static void
@@ -1091,7 +1091,6 @@ rpc_delete_user(worker *w, object *params)
 
 	if ((u = find_user(name)) == NULL) {
 		send_err(w, E_NOTFOUND, NULL);
-		free(name);
 		return;
 	}
 
@@ -1101,13 +1100,11 @@ rpc_delete_user(worker *w, object *params)
 	    (!add_obj_string(result, "msg", "user deleted"))) {
 		send_err(w, E_NOMEM, NULL);
 		free_user(u);
-		free(name);
 		return;
 	}
 
 	send_result(w, result);
 	free_user(u);
-	free(name);
 }
 
 static void
