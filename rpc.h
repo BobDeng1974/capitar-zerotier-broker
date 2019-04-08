@@ -26,6 +26,8 @@ enum rpc_errors {
 	E_BADREQUEST = -32600, // Invalid Request
 	E_BADMETHOD  = -32601, // Method not found
 	E_BADPARAMS  = -32602, // Invalid params
+	E_EXISTS     = -32603, // Object already exists
+	E_NOTFOUND   = -32603, // Object not found
 	E_INTERNAL   = -32000, // Internal error (see message)
 	E_NOMEM      = -32001, // Out of memory
 	E_BADJSON    = -32002, // Bad JSON from backend
@@ -57,6 +59,10 @@ enum rpc_errors {
 #define METHOD_DELETE_TOTP	"delete-totp"
 #define	METHOD_VALIDATE_CONFIG	"validate-config"
 #define	METHOD_RESTART_SERVICE	"restart-service"
+#define	METHOD_CREATE_USER	"create-user"
+#define	METHOD_DELETE_USER	"delete-user"
+#define METHOD_GET_USER		"get-user"
+#define METHOD_GET_USERNAMES	"get-usernames"
 //clang-format on
 
 #endif // RPC_H

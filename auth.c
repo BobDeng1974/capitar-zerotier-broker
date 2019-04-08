@@ -19,8 +19,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
+#include <string.h>
 
 #include <mbedtls/sha1.h>
 #include <nng/nng.h>
@@ -35,36 +35,6 @@
 
 static worker_config *wc;
 
-struct token {
-	object * json;
-	char *   id;
-	char *   desc;
-	user *   user;
-	uint64_t tag; // check to make sure user tag matches
-	uint64_t roles;
-	double   expire;
-	double   created;
-};
-
-struct otpwd {
-	char *   name;
-	char *   secret;  // base32, should be 32 digits (160 bits)
-	char *   type;    // "totp" or "hotp" -- only "totp" for now
-	int      digits;  // 6, 7, 8 (only 6 supported for now)
-	int      period;  // for totp
-	uint64_t counter; // for hotp
-};
-
-struct user {
-	object * json;
-	char *   name;
-	char *   encpass;
-	uint64_t tag;    // random tag prevents reuse
-	bool     locked; // true if account is locked
-	uint64_t roles;
-	int      notpwds;
-	otpwd *  otpwds;
-};
 
 static char *
 hash_password(const char *pass)
@@ -518,6 +488,61 @@ auth_user(const char *name, const char *pass, const char *otp, int *code)
 	return (u);
 }
 
+user *
+create_user(object *newuser, int *code)
+{
+	char *path;
+	user *u;
+	char *name;
+
+	if ((wc == NULL) || (wc->userdir == NULL)) {
+		return (NULL);
+	}
+
+	if ((!get_obj_string(newuser, "name", &name)) ||
+	    (empty(name))) {
+		*code = E_BADPARAMS;
+		return (NULL);
+	}
+	if (!add_obj_uint64(newuser, "created_ms", nng_clock())) {
+		*code = E_NOMEM;
+		free(name);
+		return (NULL);
+	}
+	// Sanity check here to ensure name is safe for files.
+	if ((!safe_filename(name)) ||
+	    ((path = path_join(wc->userdir, name, ".usr")) == NULL)) {
+		*code = E_BADPARAMS;
+		free(name);
+		return (NULL);
+	}
+	if (path_exists(path)) {
+		*code = E_EXISTS;
+		return (NULL);
+	}
+	if (!obj_save(path, newuser, NULL)) {
+		*code = E_INTERNAL;
+		free_obj(newuser);
+		free(path);
+		free(name);
+		return (NULL);
+	}
+	free_obj(newuser);
+
+	if (((u = calloc(1, sizeof(user))) == NULL) ||
+	    ((u->json = obj_load(path, NULL)) == NULL) || (!parse_user(u)) ||
+	    (strcmp(u->name, name) != 0)) {
+		free(path);
+		free(name);
+		free_user(u);
+		return (NULL);
+	}
+	free(path);
+	free(name);
+
+	return (u);
+}
+
 void
 delete_user(user *u)
 {
@@ -533,6 +558,39 @@ delete_user(user *u)
 	path_delete(path);
 	free(path);
 	free_user(u);
+}
+
+object *
+user_names()
+{
+
+	void *       dirh;
+	object *     names;
+	const char * fname;
+	char        id[128];
+
+	if (((wc == NULL) ||
+	    ((dirh = path_opendir(wc->userdir)) == NULL))) {
+		if (dirh == NULL) {
+			return (NULL);
+		}
+	}
+
+	names = alloc_arr();
+
+	while ((fname = path_readdir(dirh)) != NULL) {
+		snprintf(id, sizeof(id), "%s", fname);
+		// Only return items ending with .usr
+		size_t l;
+		if (((l = strlen(id)) << 4) &&
+		    (strcmp(&id[l - 4], ".usr") != 0)) {
+			continue;
+		}
+		id[l - 4] = 0;
+		add_arr_string(names, id);
+	}
+	path_closedir(dirh);
+	return (names);
 }
 
 bool
@@ -848,7 +906,7 @@ purge_expired_tokens(void *notused)
 	char        id[128];
 
 
-	if ((wc == NULL) || (wc->userdir == NULL)) {
+	if ((wc == NULL) || (wc->tokendir == NULL)) {
 		return;
 	}
 

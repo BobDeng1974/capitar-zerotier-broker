@@ -466,6 +466,10 @@ static void create_own_totp(worker *, object *);
 static void delete_own_totp(worker *, object *);
 static void validate_config(worker *, object *);
 static void restart_server(worker *, object *);
+static void rpc_create_user(worker *, object *);
+static void rpc_delete_user(worker *, object *);
+static void rpc_get_user(worker *, object *);
+static void rpc_get_user_names(worker *, object *);
 
 static struct {
 	const char *method;
@@ -488,6 +492,10 @@ static struct {
 	{ METHOD_DELETE_TOTP, delete_own_totp },
 	{ METHOD_VALIDATE_CONFIG, validate_config },
 	{ METHOD_RESTART_SERVICE, restart_server },
+	{ METHOD_CREATE_USER, rpc_create_user },
+	{ METHOD_DELETE_USER, rpc_delete_user },
+	{ METHOD_GET_USER, rpc_get_user },
+	{ METHOD_GET_USERNAMES, rpc_get_user_names },
 	{ NULL, NULL },
 };
 
@@ -1006,6 +1014,115 @@ get_auth_tokens(worker *w, object *params)
 	free_tokens(toks, ntoks);
 
 	send_result(w, result);
+}
+
+static void
+rpc_create_user(worker *w, object *params)
+{
+	user *   u;
+	object * newuser;
+	int      errcode;
+	object * result;
+
+	if (!get_auth_param(w, params, &u)) {
+		return;
+	}
+
+	if (!get_obj_obj(params, "newuser", &newuser)) {
+		send_err(w, E_BADPARAMS, NULL);
+	}
+
+	if (!add_obj_string(newuser, "created_by", user_name(u))) {
+		send_err(w, E_NOMEM, NULL);
+	}
+
+	if ((u = create_user(newuser, &errcode)) == NULL) {
+		send_err(w, errcode, "Failed to create user");
+		free_user(u);
+		return;
+	}
+
+	result = clone_obj(u->json);
+	send_result(w, result);
+	free_user(u);
+}
+
+static void
+rpc_get_user(worker *w, object *params)
+{
+
+	user *u;
+	char *name;
+	object * result;
+
+	if (!get_auth_param(w, params, &u)) {
+		return;
+	}
+	if (!get_obj_string(params, "name", &name)) {
+		send_err(w, E_BADPARAMS, NULL);
+	}
+
+	if ((u = find_user(name)) == NULL) {
+		send_err(w, E_NOTFOUND, NULL);
+		free(name);
+		return;
+	}
+
+	result = clone_obj(u->json);
+	send_result(w, result);
+	free_user(u);
+	free(name);
+}
+
+static void
+rpc_delete_user(worker *w, object *params)
+{
+
+	user *u;
+	char *name;
+	object *result;
+
+	if (!get_auth_param(w, params, &u)) {
+		return;
+	}
+	if (!get_obj_string(params, "name", &name)) {
+		send_err(w, E_BADPARAMS, NULL);
+	}
+
+	if ((u = find_user(name)) == NULL) {
+		send_err(w, E_NOTFOUND, NULL);
+		free(name);
+		return;
+	}
+
+	delete_user(u);
+
+	if (((result = alloc_obj()) == NULL) ||
+	    (!add_obj_string(result, "msg", "user deleted"))) {
+		send_err(w, E_NOMEM, NULL);
+		free_user(u);
+		free(name);
+		return;
+	}
+
+	send_result(w, result);
+	free_user(u);
+	free(name);
+}
+
+static void
+rpc_get_user_names(worker *w, object *params)
+{
+	object *result;
+	user *  u;
+
+	if (!get_auth_param(w, params, &u)) {
+		return;
+	}
+
+	result = user_names();
+	send_result(w, result);
+	free_user(u);
 }
 
 static void

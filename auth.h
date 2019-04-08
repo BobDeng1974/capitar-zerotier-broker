@@ -27,6 +27,38 @@
 
 typedef struct otpwd otpwd; // one time password
 typedef struct token token; // authentication (bearer) token
+typedef struct user user;
+
+struct token {
+	object * json;
+	char *   id;
+	char *   desc;
+	user *   user;
+	uint64_t tag; // check to make sure user tag matches
+	uint64_t roles;
+	double   expire;
+	double   created;
+};
+
+struct otpwd {
+	char *   name;
+	char *   secret;  // base32, should be 32 digits (160 bits)
+	char *   type;    // "totp" or "hotp" -- only "totp" for now
+	int      digits;  // 6, 7, 8 (only 6 supported for now)
+	int      period;  // for totp
+	uint64_t counter; // for hotp
+};
+
+struct user {
+	object * json;
+	char *   name;
+	char *   encpass;
+	uint64_t tag;    // random tag prevents reuse
+	bool     locked; // true if account is locked
+	uint64_t roles;
+	int      notpwds;
+	otpwd *  otpwds;
+};
 
 // auth_init must be called with a valid configuration at the
 // start of operations, or nothing else will work.
@@ -37,11 +69,13 @@ extern const char *user_name(const user *);
 extern void        free_user(user *);
 extern user *      dup_user(const user *);
 extern user *      find_user(const char *);
-extern user *auth_user(const char *name, const char *, const char *, int *);
-extern void  delete_user(user *);
-extern bool  set_password(user *, const char *);
-extern bool  create_totp(user *, const char *);
-extern bool  delete_totp(user *);
+extern user *      auth_user(const char *name, const char *, const char *, int *);
+extern user *      create_user(object *, int *);
+extern void        delete_user(user *);
+extern object *    user_names();
+extern bool        set_password(user *, const char *);
+extern bool        create_totp(user *, const char *);
+extern bool        delete_totp(user *);
 
 extern int          user_num_otpwds(const user *);
 extern const otpwd *user_otpwd(const user *, int);

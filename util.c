@@ -236,3 +236,13 @@ path_closedir(void *arg)
 	free(fh);
 }
 #endif // HAVE_OPENDIR
+
+bool
+empty(const char *s1)
+{
+	if ((s1 == NULL) || (strcmp(s1, "") == 0)) {
+		return (true);
+	}
+	return (false);
+}
+
