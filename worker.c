@@ -470,6 +470,7 @@ static void rpc_create_user(worker *, object *);
 static void rpc_delete_user(worker *, object *);
 static void rpc_get_user(worker *, object *);
 static void rpc_get_user_names(worker *, object *);
+static void set_own_devices(worker *, object *);
 
 static struct {
 	const char *method;
@@ -492,6 +493,7 @@ static struct {
 	{ METHOD_DELETE_TOTP, delete_own_totp },
 	{ METHOD_VALIDATE_CONFIG, validate_config },
 	{ METHOD_RESTART_SERVICE, restart_server },
+	{ METHOD_SET_DEVICES, set_own_devices },
 	{ METHOD_CREATE_USER, rpc_create_user },
 	{ METHOD_DELETE_USER, rpc_delete_user },
 	{ METHOD_GET_USER, rpc_get_user },
@@ -1147,6 +1149,42 @@ set_own_password(worker *w, object *params)
 		send_err(w, E_NOMEM, NULL); // generally
 		return;
 	}
+	free_user(u);
+	send_result(w, result);
+}
+
+static void
+set_own_devices(worker *w, object *params)
+{
+	user *  u;
+	object *devices;
+	object *result;
+	int     errcode;
+
+	if (!get_auth_param(w, params, &u)) {
+		return;
+	}
+	if (!get_obj_obj(params, "devices", &devices)) {
+		send_err(w, E_BADPARAMS, NULL);
+		return;
+	}
+	if ((result = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+		free_user(u);
+		return;
+	}
+	if (!add_obj_obj(u->json, "devices", devices)) {
+		free_user(u);
+		free_obj(result);
+		send_err(w, E_NOMEM, NULL); // generally
+		return;
+	}
+	if (!save_user(u, &errcode)) {
+		free_user(u);
+		free_obj(result);
+		send_err(w, errcode, NULL);
+		return;
+        }
 	free_user(u);
 	send_result(w, result);
 }

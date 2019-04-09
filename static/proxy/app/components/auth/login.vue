@@ -123,7 +123,7 @@ module.exports = {
       loading: false,
       err_resp: null,
       alert_msg: "",
-      controller: "zerotier",
+      controller: "personal",
       controller_status: null,
       selected: "",
       networks: null,

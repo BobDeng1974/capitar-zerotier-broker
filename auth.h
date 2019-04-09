@@ -71,6 +71,7 @@ extern user *      dup_user(const user *);
 extern user *      find_user(const char *);
 extern user *      auth_user(const char *name, const char *, const char *, int *);
 extern user *      create_user(object *, int *);
+extern bool        save_user(user *, int *);
 extern void        delete_user(user *);
 extern object *    user_names();
 extern bool        set_password(user *, const char *);

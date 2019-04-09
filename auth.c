@@ -538,6 +538,42 @@ create_user(object *newuser, int *code)
 	return (u);
 }
 
+bool
+save_user(user *u, int *code)
+{
+	char *path;
+	char *name;
+
+	if ((wc == NULL) || (wc->userdir == NULL)) {
+		return (false);
+	}
+
+	if ((!get_obj_string(u->json, "name", &name)) ||
+	    (strcmp(u->name, name) != 0)) {
+		*code = E_BADPARAMS;
+		return (false);
+	}
+	if (!add_obj_uint64(u->json, "updated_ms", nng_clock())) {
+		*code = E_NOMEM;
+		return (false);
+	}
+	// Sanity check here to ensure name is safe for files.
+	if ((!safe_filename(name)) ||
+	    ((path = path_join(wc->userdir, name, ".usr")) == NULL)) {
+		*code = E_BADPARAMS;
+		return (false);
+	}
+	if (!obj_save(path, u->json, NULL)) {
+		*code = E_INTERNAL;
+		free(path);
+		return (false);
+	}
+
+	free(path);
+
+	return (true);
+}
+
 void
 delete_user(user *u)
 {

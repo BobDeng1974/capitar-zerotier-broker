@@ -17,9 +17,9 @@
       <b-nav-item class="navbar-link" href="#">Link</b-nav-item>
       <b-nav-item href="#" disabled>Disabled</b-nav-item>
       -->
-      <b-nav-item class="navbar-link" @click="$emit('useradmin')">Users</b-nav-item>
-      <b-nav-item class="navbar-link" @click="$emit('deviceadmin')">Devices</b-nav-item>
-      <b-nav-item class="navbar-link" @click="$emit('networkadmin')">Networks</b-nav-item>
+      <b-nav-item class="navbar-link" @click="$emit('deviceadmin')">My Devices</b-nav-item>
+      <b-nav-item class="navbar-link" @click="$emit('networkadmin')">My Networks</b-nav-item>
+      <b-nav-item class="navbar-link" @click="$emit('useradmin')">User Admin</b-nav-item>
     </b-navbar-nav>
 
     <!-- Right aligned nav items -->
