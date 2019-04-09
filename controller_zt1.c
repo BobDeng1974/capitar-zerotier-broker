@@ -99,6 +99,7 @@ zt1_get_networks_cb(worker *w, void *body, size_t len)
 {
 	object *arr;
 	object *arr2;
+	object *obj2;
 
 	if (((arr = parse_obj(body, len)) == NULL) || (!is_obj_array(arr))) {
 		send_err(w, E_BADJSON, NULL);
@@ -124,9 +125,17 @@ zt1_get_networks_cb(worker *w, void *body, size_t len)
 		if (!nwid_allowed(nwid)) {
 			continue;
 		}
-		if (!add_arr_string(arr2, s)) {
+		if ((obj2 = alloc_obj()) == NULL) {
+		       free_obj(arr);
+		       free_obj(arr2);
+		       send_err(w, E_NOMEM, NULL);
+		       return;
+		}
+		if ((!add_obj_string(obj2, "id", s)) ||
+		    (!add_arr_obj(arr2, obj2))) {
 			free_obj(arr);
 			free_obj(arr2);
+			free_obj(obj2);
 			send_err(w, E_NOMEM, NULL);
 			return;
 		}

@@ -104,6 +104,7 @@ central_get_networks_cb(worker *w, void *body, size_t len)
 {
 	object *arr;
 	object *arr2;
+	object *obj2;
 
 	if (((arr = parse_obj(body, len)) == NULL) || (!is_obj_array(arr))) {
 		send_err(w, E_BADJSON, NULL);
@@ -117,11 +118,17 @@ central_get_networks_cb(worker *w, void *body, size_t len)
 
 	for (int i = 0; i < get_arr_len(arr); i++) {
 		object * obj;
+		object * nwconfig;
 		char *   s;
 		char *   ep;
+		char *   name;
+		char *   description;
 		uint64_t nwid;
 		if ((!get_arr_obj(arr, i, &obj)) ||
 		    (!get_obj_string(obj, "id", &s)) ||
+		    (!get_obj_obj(obj, "config", &nwconfig)) ||
+		    (!get_obj_string(nwconfig, "name", &name)) ||
+		    (!get_obj_string(obj, "description", &description)) ||
 		    ((nwid = strtoull(s, &ep, 16)) == 0) || (*ep != '\0')) {
 			free_obj(arr);
 			free_obj(arr2);
@@ -131,9 +138,19 @@ central_get_networks_cb(worker *w, void *body, size_t len)
 		if (!nwid_allowed(nwid)) {
 			continue;
 		}
-		if (!add_arr_string(arr2, s)) {
+		if ((obj2 = alloc_obj()) == NULL) {
 			free_obj(arr);
 			free_obj(arr2);
+			send_err(w, E_NOMEM, NULL);
+			return;
+		}
+		if ((!add_obj_string(obj2, "id", s)) ||
+                    (!add_obj_string(obj2, "name", name)) ||
+                    (!add_obj_string(obj2, "description", description)) ||
+                    (!add_arr_obj(arr2, obj2))) {
+			free_obj(arr);
+			free_obj(arr2);
+			free_obj(obj2);
 			send_err(w, E_NOMEM, NULL);
 			return;
 		}
