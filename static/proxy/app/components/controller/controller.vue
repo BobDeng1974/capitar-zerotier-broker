@@ -34,9 +34,9 @@
 
   <div v-else-if="networks && networks.length > 0">
     <network
-      v-for="(nwid, index) in networks"
+      v-for="(network, index) in networks"
       v-bind:key="index"
-      v-bind:id="nwid"
+      v-bind:network="network"
       v-bind:controller="controller"
       v-bind:creds="creds"
       v-bind:nw_regex="nw_regex"
@@ -77,7 +77,7 @@ module.exports = {
       if (!this.network_filter) {
         return null
       }
-      return new RegExp(this.network_filter, 'g')
+      return new RegExp(this.network_filter, 'ig')
     }
   },
   mounted () {
@@ -86,6 +86,7 @@ module.exports = {
   },
   methods: {
     clear() {
+      this.loading = true
       this.err_resp = null
       this.alert_msg = ""
     },

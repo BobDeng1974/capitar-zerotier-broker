@@ -7,10 +7,10 @@
        information at the moment, please try back later</p>
   </section>
 
-  <section v-else-if="network">
+  <section v-if="!errored">
 
-    <b-jumbotron :header="networkName" :lead="networkId" >
-     <p>For more information visit website</p>
+    <b-jumbotron :header="nw.name" :lead="nw.id" >
+     <p>{{ nw.description }}</p>
      <b-btn variant="primary" href="#">More Info</b-btn>
     </b-jumbotron>
 
@@ -23,28 +23,21 @@
 <script>
 
 module.exports = {
-
   computed: {
-    networkName() {
-      if (!this.network) {
-        return null
-      }
-      return this.network.name;
-    },
-    networkId() {
-      return this.network.id;
-    },
     show_network() {
-      if (!this.network) {
+      if (!this.nw.id) {
         return false
       }
       if (!this.nw_regex) {
         return true
       }
-      if (this.network.name.match(this.nw_regex)) {
+      if (this.nw.id.match(this.nw_regex)) {
         return true
       }
-      if (this.network.id.match(this.nw_regex)) {
+      if (!this.nw.name) {
+        return false
+      }
+      if (this.nw.name.match(this.nw_regex)) {
         return true
       }
       return false
@@ -53,25 +46,33 @@ module.exports = {
   data () {
     return {
       info: null,
-      loading: true,
+      loading: false,
       errored: false,
-      network: null
+      nw: this.network
     }
   },
-  props: ["id", "index", "networks", "controller", "creds", "nw_regex"],
+  props: ["network", "index", "networks", "controller", "creds", "nw_regex"],
   mounted () {
-    axios
-      .get(this.$restApi + this.controller + "/network/" + this.id, {
-        headers: {'X-ZTC-Token': this.creds.token.id }
-      })
-      .then(response => {
-        this.network = response.data
-      })
-      .catch(error => {
-        console.log(error)
-        this.errored = true
-      })
-      .finally(() => this.loading = false)
+    if (!this.network.name) {
+      this.load()
+    }
+  },
+  methods: {
+    load() {
+      this.loading = true
+      axios
+        .get(this.$restApi + this.controller + "/network/" + this.network.id, {
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+          this.nw = response.data
+        })
+        .catch(error => {
+          console.log(error)
+          this.errored = true
+        })
+        .finally(() => this.loading = false)
+    }
   }
 }
 </script>
