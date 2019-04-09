@@ -2,6 +2,9 @@
 <div>
 
   <div>
+    <b-btn variant="success"
+           v-on:click="newUser()"
+    >Add new user</b-btn>
 
     <b-input-group>
       <div class="input-group-prepend w-25">
@@ -14,7 +17,7 @@
                     v-on:keyup.enter.native="getUsers()"
       ></b-form-input>
       <b-input-group-append>
-        <b-btn variant="success"
+        <b-btn variant="info"
                v-on:click="getUsers()"
         >Search</b-btn>
       </b-input-group-append>

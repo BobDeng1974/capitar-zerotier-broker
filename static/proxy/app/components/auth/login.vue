@@ -1,6 +1,15 @@
 <template>
 <div>
 
+<navbar
+  v-bind:controller="controller"
+  v-bind:creds="creds"
+  v-on:logout="logout"
+  v-on:useradmin="useradmin"
+  v-on:deviceadmin="deviceadmin"
+  v-on:networkadmin="networkadmin"
+></navbar>
+
 <b-jumbotron v-if="!creds.token || !creds.token.id"
              :header="$appName"
              lead="Enter Credentials to Login:" >
@@ -92,27 +101,15 @@
 
 </b-jumbotron>
 
-<b-btn v-if="controller && creds && creds.token" variant="warning"
-    v-on:click="logout"
->Logout</b-btn>
-
-<user-mgmt v-if="creds && creds.token"
+<user-mgmt v-if="selected_useradmin && creds && creds.token"
   v-bind:controller="controller"
   v-bind:creds="creds"
 ></user-mgmt>
 
-<!--
-<controller v-if="controller && creds && creds.token && (controller != 'libvirt-poc')"
+<controller v-if="selected_networkadmin && creds && creds.token"
   v-bind:controller="controller"
   v-bind:creds="creds"
 ></controller>
-
-<controller-libvirt
-  v-if="controller && creds && creds.token && (controller == 'libvirt-poc')"
-  v-bind:controller="controller"
-  v-bind:creds="creds"
-></controller-libvirt>
--->
 
 </div>
 </template>
@@ -128,6 +125,7 @@ module.exports = {
       alert_msg: "",
       controller: "zerotier",
       controller_status: null,
+      selected: "",
       networks: null,
       nw_filter: "",
       creds: { username: "test", password: "123456", oath: "", token: null },
@@ -147,6 +145,21 @@ module.exports = {
         return null
       }
       return this.creds.token.expires - Math.floor(Date.now() / 1000)
+    },
+    selected_useradmin() {
+      if (this.selected == "useradmin") {
+        return true
+      }
+    },
+    selected_deviceadmin() {
+      if (this.selected == "deviceadmin") {
+        return true
+      }
+    },
+    selected_networkadmin() {
+      if (this.selected == "networkadmin") {
+        return true
+      }
     }
   },
   methods: {
@@ -157,7 +170,7 @@ module.exports = {
         headers: {'X-ZTC-Token': this.creds.token.id }
         })
         .then(response => {
-          this.creds = { username: "", password: "", oath: "", token: ""}
+          //this.creds = { username: "", password: "", oath: "", token: ""}
         })
         .catch(error => {
           if ((error.response) && error.response.status ) {
@@ -168,11 +181,22 @@ module.exports = {
           }
         })
         .finally(() => this.loading = false)
+      // Immediately delete token, regardless of result of delete token request
+      this.creds = { username: "", password: "", oath: "", token: ""}
     },
     clear() {
       this.controller_status = null
       this.err_resp = null
       this.alert_msg = ""
+    },
+    useradmin() {
+      this.selected = "useradmin"
+    },
+    deviceadmin() {
+      this.selected = "deviceadmin"
+    },
+    networkadmin() {
+      this.selected = "networkadmin"
     },
     login (event) {
       if ((this.controller == null) || (this.controller == "")) {

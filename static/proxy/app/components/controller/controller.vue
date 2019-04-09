@@ -34,7 +34,8 @@
 
   <div v-else-if="networks && networks.length > 0">
     <network
-      v-for="nwid, index in networks"
+      v-for="(nwid, index) in networks"
+      v-bind:key="index"
       v-bind:id="nwid"
       v-bind:controller="controller"
       v-bind:creds="creds"
