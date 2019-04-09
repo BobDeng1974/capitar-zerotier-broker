@@ -272,13 +272,13 @@ static void
 house_keeping(void *notused)
 {
 	(void) notused;
-	int purge_expired_tokens_last;
+	uint64_t purge_expired_tokens_last;
 	int rv;
 
 	nng_msleep(3000);
 
 	for (;;) {
-		if (purge_expired_tokens_last < (nng_clock() + 24*3600*1000)) {
+		if (purge_expired_tokens_last < nng_clock() - 24*3600*1000) {
 			purge_expired_tokens_last = nng_clock();
 			nng_thread * purger;
 			if (((rv = nng_thread_create(&purger, purge_expired_tokens, NULL)) != 0)) {
