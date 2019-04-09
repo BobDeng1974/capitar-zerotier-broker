@@ -183,6 +183,9 @@ central_get_network_cb(worker *w, void *body, size_t len)
 	    (!get_obj_obj(obj1, "v6AssignMode", &obj3)) ||
 	    ((v6am = clone_obj(obj3)) == NULL) ||
 	    (!get_obj_bool(obj1, "private", &prv))) {
+		if (cp->debug) {
+			printf("get_network_cb badjson %s\n", (char *) body);
+		}
 		free_obj(obj0);
 		free_obj(routes);
 		free_obj(v4am);
