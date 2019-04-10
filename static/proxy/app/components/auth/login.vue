@@ -111,6 +111,11 @@
   v-bind:creds="creds"
 ></controller>
 
+<my-devices v-if="selected_deviceadmin && creds && creds.token"
+  v-bind:controller="controller"
+  v-bind:creds="creds"
+></my-devices>
+
 </div>
 </template>
 
@@ -198,6 +203,24 @@ module.exports = {
     networkadmin() {
       this.selected = "networkadmin"
     },
+    load_user() {
+      axios
+        .post(this.$restApi + this.controller + "/rpc/get-user", {name: this.creds.username}, {
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+          this.creds.user = response.data
+        })
+        .catch(error => {
+          if ((error.response) && error.response.status ) {
+            this.err_resp = error.response
+          }
+          else {
+            console.log("undefined error: ", error)
+          }
+        })
+        .finally(() => this.loading = false)
+    },
     login (event) {
       if ((this.controller == null) || (this.controller == "")) {
         this.alert_msg = "Please enter controller name"
@@ -235,7 +258,10 @@ module.exports = {
             console.log("undefined error: ", error)
           }
         })
-        .finally(() => this.loading = false)
+        .finally(() => {
+          this.loading = false
+          this.load_user()
+        })
     },
     getControllerStatus (event) {
       if ((this.controller == null) || (this.controller == "")) {

@@ -470,7 +470,7 @@ static void rpc_create_user(worker *, object *);
 static void rpc_delete_user(worker *, object *);
 static void rpc_get_user(worker *, object *);
 static void rpc_get_user_names(worker *, object *);
-static void set_own_devices(worker *, object *);
+static void add_own_device(worker *, object *);
 
 static struct {
 	const char *method;
@@ -493,7 +493,7 @@ static struct {
 	{ METHOD_DELETE_TOTP, delete_own_totp },
 	{ METHOD_VALIDATE_CONFIG, validate_config },
 	{ METHOD_RESTART_SERVICE, restart_server },
-	{ METHOD_SET_DEVICES, set_own_devices },
+	{ METHOD_ADD_OWN_DEVICE, add_own_device },
 	{ METHOD_CREATE_USER, rpc_create_user },
 	{ METHOD_DELETE_USER, rpc_delete_user },
 	{ METHOD_GET_USER, rpc_get_user },
@@ -1154,31 +1154,54 @@ set_own_password(worker *w, object *params)
 }
 
 static void
-set_own_devices(worker *w, object *params)
+add_own_device(worker *w, object *params)
 {
-	user *  u;
-	object *devices;
-	object *result;
-	int     errcode;
+	user *    u;
+	object   *device;
+	object   *device2;
+	object   *devices;
+	object   *devices2;
+	object   *result;
+	int       errcode;
+        uint64_t  deviceId;
+        char     *deviceName;
+        char     *deviceDescription;
+	char      idStr[32];
 
 	if (!get_auth_param(w, params, &u)) {
 		return;
 	}
-	if (!get_obj_obj(params, "devices", &devices)) {
+
+	if ((!get_obj_obj(params, "device", &device)) ||
+	    (!get_obj_uint64(device, "id", &deviceId)) ||
+	    (!get_obj_string(device, "name", &deviceName)) ||
+	    (!get_obj_string(device, "description", &deviceDescription))) {
 		send_err(w, E_BADPARAMS, NULL);
 		return;
 	}
+
 	if ((result = alloc_obj()) == NULL) {
 		send_err(w, E_NOMEM, NULL);
 		free_user(u);
 		return;
 	}
-	if (!add_obj_obj(u->json, "devices", devices)) {
+
+	device2 = clone_obj(device);
+
+	// Ensure valid format of deviceId
+	(void) snprintf(idStr, sizeof(idStr), "%llx", (unsigned long long) deviceId);
+	add_obj_string(device2, "id", idStr);
+
+	if ((!get_obj_obj(u->json, "devices", &devices)) ||
+	    ((devices2 = clone_obj(devices)) == NULL) ||
+	    (!add_obj_obj(devices2, idStr, device2)) ||
+	    (!add_obj_obj(u->json, "devices", devices2))) {
 		free_user(u);
 		free_obj(result);
 		send_err(w, E_NOMEM, NULL); // generally
 		return;
 	}
+
 	if (!save_user(u, &errcode)) {
 		free_user(u);
 		free_obj(result);

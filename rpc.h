@@ -59,7 +59,7 @@ enum rpc_errors {
 #define METHOD_DELETE_TOTP	"delete-totp"
 #define	METHOD_VALIDATE_CONFIG	"validate-config"
 #define	METHOD_RESTART_SERVICE	"restart-service"
-#define METHOD_SET_DEVICES	"set-devices"
+#define METHOD_ADD_OWN_DEVICE	"add-own-device"
 #define	METHOD_CREATE_USER	"create-user"
 #define	METHOD_DELETE_USER	"delete-user"
 #define METHOD_GET_USER		"get-user"

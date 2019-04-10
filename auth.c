@@ -563,6 +563,7 @@ save_user(user *u, int *code)
 		*code = E_BADPARAMS;
 		return (false);
 	}
+
 	if (!obj_save(path, u->json, NULL)) {
 		*code = E_INTERNAL;
 		free(path);
