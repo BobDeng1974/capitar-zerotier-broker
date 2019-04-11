@@ -53,26 +53,22 @@
                        <b-col> <h5>{{ device.id }}</h5>
                        </b-col>
 
-                       <b-col>
-                         <div v-if="Object.keys(creds.user.devices).includes(id)">
-                           <b-btn variant="success" v-on:click="authorize_nw_member(device)"
-                             v-if="device.revision && !device.authorized"
-                           >Authorize</b-btn>
-                           <b-btn variant="warning" v-on:click="deauthorize_nw_member(device)"
-                             v-if="device.revision && device.authorized"
-                           >Deauthorize</b-btn>
-                         <div>
+                       <b-col v-if="Object.keys(creds.user.devices).includes(id)">
+                         <b-btn variant="success" v-on:click="authorize_nw_member(device)"
+                           v-if="device.revision && !device.authorized"
+                         >Authorize</b-btn>
+                         <b-btn variant="warning" v-on:click="deauthorize_nw_member(device)"
+                           v-if="device.revision && device.authorized"
+                         >Deauthorize</b-btn>
+                       </b-col>
+
+                       <b-col v-if="Object.keys(creds.user.devices).includes(id)">
+                         <h5>{{ creds.user.devices[id].name }}</h5>
+                         ( {{ creds.user.devices[id].description }} )
                        </b-col>
 
                        <b-col>
-                         <div v-if="Object.keys(creds.user.devices).includes(id)">
-                           <h5>{{ creds.user.devices[id].name }}</h5>
-                           ( {{ creds.user.devices[id].description }} )
-                         <div>
-                       </b-col>
-
-                       <b-col>
-                         ( revision: {{ device.revision }} )
+                         revision: {{ device.revision }}
                        </b-col>
 
                      </b-row>
