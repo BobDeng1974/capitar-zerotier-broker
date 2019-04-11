@@ -1188,8 +1188,8 @@ add_own_device(worker *w, object *params)
 
 	device2 = clone_obj(device);
 
-	// Ensure valid format of deviceId
-	(void) snprintf(idStr, sizeof(idStr), "%llx", (unsigned long long) deviceId);
+	// Ensure valid format of deviceId, must have 10 characters (including leading zeros)
+	(void) snprintf(idStr, sizeof(idStr), "%010llx", (unsigned long long) deviceId);
 	add_obj_string(device2, "id", idStr);
 
 	if ((!get_obj_obj(u->json, "devices", &devices)) ||
