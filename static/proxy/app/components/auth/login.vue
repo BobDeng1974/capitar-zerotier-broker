@@ -136,7 +136,7 @@ module.exports = {
       selected: "",
       networks: null,
       nw_filter: "",
-      creds: { username: "test", password: "123456", oath: "", token: null },
+      creds: { username: "test", password: "123456", oath: "", token: null, ready: false },
     }
   },
   props: [],
@@ -213,6 +213,8 @@ module.exports = {
         })
         .then(response => {
           this.creds.user = response.data
+          this.creds.ready = true
+          this.deviceadmin()
         })
         .catch(error => {
           if ((error.response) && error.response.status ) {

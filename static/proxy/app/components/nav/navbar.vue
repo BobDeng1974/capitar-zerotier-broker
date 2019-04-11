@@ -11,7 +11,7 @@
            class="d-inline-block align-top capitar-logo">
   </b-navbar-brand>
 
-  <b-collapse is-nav id="nav_collapse" v-if="creds.token">
+  <b-collapse is-nav id="nav_collapse" v-if="creds.ready">
     <b-navbar-nav>
       <!--
       <b-nav-item class="navbar-link" href="#">Link</b-nav-item>
