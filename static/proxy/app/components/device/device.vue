@@ -114,7 +114,7 @@ module.exports = {
   },
   mounted () {
     this.device = this.creds.user.devices[this.id]
-    return
+    /*
     axios
       .post(this.$restApi + this.controller + "/rpc/get-device", {id: this.device.id}, {
         headers: {'X-ZTC-Token': this.creds.token.id }
@@ -127,6 +127,7 @@ module.exports = {
         this.errored = true
       })
       .finally(() => this.loading = false)
+    */
   }
 }
 </script>

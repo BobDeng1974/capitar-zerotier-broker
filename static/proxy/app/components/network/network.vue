@@ -171,8 +171,14 @@ module.exports = {
           }.bind(this))
         })
         .catch(error => {
-          console.log(error)
-          this.errored = true
+          if (error = 'Error: "Network Error"') {
+            setTimeout(function () {
+              this.get_nw_members()
+            }.bind(this), 1)
+          } else {
+            console.log('get_nw_members', error)
+            this.errored = true
+          }
         })
     },
     get_nw_member(device) {
@@ -187,8 +193,15 @@ module.exports = {
           }
         })
         .catch(error => {
-          console.log(error)
-          this.errored = true
+          //console.log(error)
+          if (error = 'Error: "Network Error"') {
+            setTimeout(function () {
+              this.get_nw_member(device)
+            }.bind(this), 1)
+          } else {
+            console.log('get_nw_member', error)
+            this.errored = true
+          }
         })
     },
     authorize_nw_member(device) {
