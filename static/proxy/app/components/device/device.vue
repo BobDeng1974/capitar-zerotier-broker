@@ -91,6 +91,7 @@ module.exports = {
           console.log(response)
           if (['delete-own-device'].includes(method)) {
             this.deleted = true
+            this.$parent.$emit('load_user')
           }
         }).catch(error => {
           if ((error.response) && error.response.status ) {

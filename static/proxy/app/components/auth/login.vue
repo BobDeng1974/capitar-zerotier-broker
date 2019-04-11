@@ -104,16 +104,19 @@
 <user-mgmt v-if="selected_useradmin && creds && creds.token"
   v-bind:controller="controller"
   v-bind:creds="creds"
+  v-on:load_user="load_user"
 ></user-mgmt>
 
 <controller v-if="selected_networkadmin && creds && creds.token"
   v-bind:controller="controller"
   v-bind:creds="creds"
+  v-on:load_user="load_user"
 ></controller>
 
 <my-devices v-if="selected_deviceadmin && creds && creds.token"
   v-bind:controller="controller"
   v-bind:creds="creds"
+  v-on:load_user="load_user"
 ></my-devices>
 
 </div>

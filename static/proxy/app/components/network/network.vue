@@ -41,7 +41,7 @@
           </b-col>
           <b-col>
 
-            <h5>Members</h5>
+            <h4>Members</h4>
               <b-list-group :key="nw_member_seq">
                 <b-list-group-item
                   v-for="(device, id) in nw_members"
@@ -50,16 +50,25 @@
                    <b-container>
                      <b-row>
 
-                       <b-col>{{ device.id }}
+                       <b-col> <h5>{{ device.id }}</h5>
                        </b-col>
 
                        <b-col>
-                         <b-btn variant="success" v-on:click="authorize_nw_member(device)"
-                           v-if="device.revision && !device.authorized"
-                         >Authorize</b-btn>
-                         <b-btn variant="warning" v-on:click="deauthorize_nw_member(device)"
-                           v-if="device.revision && device.authorized"
-                         >Deauthorize</b-btn>
+                         <div v-if="Object.keys(creds.user.devices).includes(id)">
+                           <b-btn variant="success" v-on:click="authorize_nw_member(device)"
+                             v-if="device.revision && !device.authorized"
+                           >Authorize</b-btn>
+                           <b-btn variant="warning" v-on:click="deauthorize_nw_member(device)"
+                             v-if="device.revision && device.authorized"
+                           >Deauthorize</b-btn>
+                         <div>
+                       </b-col>
+
+                       <b-col>
+                         <div v-if="Object.keys(creds.user.devices).includes(id)">
+                           <h5>{{ creds.user.devices[id].name }}</h5>
+                           ( {{ creds.user.devices[id].description }} )
+                         <div>
                        </b-col>
 
                        <b-col>
