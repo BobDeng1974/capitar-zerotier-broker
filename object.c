@@ -346,6 +346,28 @@ add_arr_obj(object *obj, object *child)
 	return (true);
 }
 
+bool
+del_arr_item(object *obj, int which)
+{
+
+	if (!cJSON_IsArray(&obj->json)) {
+		return (false);
+	}
+	cJSON_DeleteItemFromArray(&obj->json, which);
+	return (true);
+}
+
+bool
+del_obj_item(object *obj, const char *name)
+{
+
+	if (!cJSON_IsObject(&obj->json)) {
+		return (false);
+	}
+	cJSON_DeleteItemFromObjectCaseSensitive(&obj->json, name);
+	return (true);
+}
+
 char *
 next_obj_key(object *obj, const char *name)
 {

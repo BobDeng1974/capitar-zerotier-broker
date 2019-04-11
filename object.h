@@ -58,5 +58,8 @@ extern bool    add_arr_obj(object *, object *);
 extern bool    is_obj_array(object *);
 extern bool    is_obj_object(object *);
 extern char *  next_obj_key(object *, const char *);
+extern bool    del_arr_item(object *, int);
+extern bool    del_obj_item(object *, const char *);
+
 
 #endif // OBJECT_H
