@@ -103,7 +103,7 @@
       <b-alert class="col-6" show > Searching ... </b-alert>
     </div>
 
-    <div v-else-if="devices && Object.keys(devices).length > 0">
+    <div v-if="!loading && devices && Object.keys(devices).length > 0">
       <device
         v-for="(device, id) in devices"
         v-bind:key="id"
@@ -115,7 +115,7 @@
       </device>
     </div>
 
-    <div v-else-if="devices">
+    <div v-if="!loading && devices && Object.keys(devices).length == 0">
   {{ devices }}
         <b-alert class="col-6" show> No devices found ... </b-alert>
     </div>
@@ -158,7 +158,6 @@ module.exports = {
   mounted () {
     this.device_filter = this.device_filter
     this.devices = this.creds.user.devices
-    //this.getDevices()
   },
   methods: {
     clear() {
@@ -180,7 +179,7 @@ module.exports = {
           headers: {'X-ZTC-Token': this.creds.token.id }
         }).then(response => {
           this.devices[this.newdevice.id] = this.newdevice
-          this.devices = response.data
+          this.$emit('load_user')
         }).catch(error => {
           if ((error.response) && (error.response.status == 404)) {
             this.alert_msg = "No such controller found"
