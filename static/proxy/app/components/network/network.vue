@@ -10,8 +10,71 @@
   <section v-if="!errored">
 
     <b-jumbotron :header="nw.name" :lead="nw.id" >
-     <p>{{ nw.description }}</p>
-     <b-btn variant="primary" href="#">More Info</b-btn>
+      <b-container>
+        <b-row>
+          <b-col>
+            <h5> {{ nw.description }} </h5>
+            <b-btn variant="info" v-on:click="showAddDevice()" v-if="!adding_device"
+            >Add Device</b-btn>
+
+              <div v-if="adding_device">
+
+                <b-form-select v-model="selected_device" class="mb-3">
+                  <option :value="null" disabled>-- Please select device --</option>
+                  <option
+                    v-for="(device, id) in creds.user.devices"
+                    v-bind:key="id"
+                    v-bind:value="id"
+                    v-bind:disabled="Object.keys(nw_members).includes(id)"
+                  > {{ device.id }} : {{ device.name }}
+                  </option>
+                </b-form-select>
+                <b-btn variant="info" v-on:click="cancelAddDevice()"
+                >Cancel</b-btn>
+                <b-btn variant="success"
+                  v-on:click="addDevice(creds.user.devices[selected_device])"
+                  v-if="selected_device"
+                >Add Device</b-btn>
+
+              </div>
+
+          </b-col>
+          <b-col>
+
+            <h5>Members</h5>
+              <b-list-group :key="nw_member_seq">
+                <b-list-group-item
+                  v-for="(device, id) in nw_members"
+                  v-bind:key="device.id"
+                 >
+                   <b-container>
+                     <b-row>
+
+                       <b-col>{{ device.id }}
+                       </b-col>
+
+                       <b-col>
+                         <b-btn variant="success" v-on:click="authorize_nw_member(device)"
+                           v-if="device.revision && !device.authorized"
+                         >Authorize</b-btn>
+                         <b-btn variant="warning" v-on:click="deauthorize_nw_member(device)"
+                           v-if="device.revision && device.authorized"
+                         >Deauthorize</b-btn>
+                       </b-col>
+
+                       <b-col>
+                         ( revision: {{ device.revision }} )
+                       </b-col>
+
+                     </b-row>
+                   </b-container>
+
+                 </b-list-group-item>
+              </b-list-group>
+
+          </b-col>
+        </b-row>
+      </b-container>
     </b-jumbotron>
 
   </section>
@@ -45,33 +108,109 @@ module.exports = {
   },
   data () {
     return {
+      selected_device: null,
+      adding_device: false,
       info: null,
-      loading: false,
       errored: false,
-      nw: this.network
+      nw: this.network,
+      nw_members: {},
+      nw_member_seq: 1
     }
   },
   props: ["network", "index", "networks", "controller", "creds", "nw_regex"],
   mounted () {
-    if (!this.network.name) {
-      this.load()
+    if (!this.nw.name) {
+      this.get_nw()
     }
   },
   methods: {
-    load() {
-      this.loading = true
+    nw_member_seq_inc() {
+      this.nw_member_seq++
+      return this.nw_member_seq
+    },
+    showAddDevice() {
+      this.adding_device = true
+    },
+    cancelAddDevice() {
+      this.adding_device = false
+    },
+    addDevice(device) {
+      this.authorize_nw_member(device)
+      this.adding_device = false
+    },
+    get_nw() {
       axios
-        .get(this.$restApi + this.controller + "/network/" + this.network.id, {
+        .get(this.$restApi + this.controller + "/network/" + this.nw.id, {
           headers: {'X-ZTC-Token': this.creds.token.id }
         })
         .then(response => {
           this.nw = response.data
+          this.get_nw_members()
         })
         .catch(error => {
           console.log(error)
           this.errored = true
         })
-        .finally(() => this.loading = false)
+    },
+    get_nw_members() {
+      axios
+        .get(this.$restApi + this.controller + "/network/" + this.nw.id + "/member", {
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+          this.nw_members = {}
+          response.data.forEach(function (deviceId) {
+            device = {id: deviceId, revision: 0}
+            this.nw_members[deviceId] = device
+            this.get_nw_member(device)
+          }.bind(this))
+        })
+        .catch(error => {
+          console.log(error)
+          this.errored = true
+        })
+    },
+    get_nw_member(device) {
+      axios
+        .get(this.$restApi + this.controller + "/network/" + this.nw.id + "/member/" + device.id, {
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+          this.nw_members[device.id] = response.data
+          if (device.revision != response.data.revision) {
+            this.nw_member_seq_inc()
+          }
+        })
+        .catch(error => {
+          console.log(error)
+          this.errored = true
+        })
+    },
+    authorize_nw_member(device) {
+      axios
+        .post(this.$restApi + this.controller + "/network/" + this.nw.id + "/member/" + device.id + "/authorize", {}, {
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+        })
+        .catch(error => {
+          console.log(error)
+          this.errored = true
+        })
+        .finally(() => this.get_nw_member(device))
+    },
+    deauthorize_nw_member(device) {
+      axios
+        .post(this.$restApi + this.controller + "/network/" + this.nw.id + "/member/" + device.id + "/deauthorize", {}, {
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+        })
+        .catch(error => {
+          console.log(error)
+          this.errored = true
+        })
+        .finally(() => this.get_nw_member(device))
     }
   }
 }
