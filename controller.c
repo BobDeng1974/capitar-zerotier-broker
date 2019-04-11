@@ -71,7 +71,7 @@ get_member_param(worker *w, object *params, controller **cpp, uint64_t *nwidp,
 	uint64_t    nwid;
 	uint64_t    memid;
 
-	if (get_network_param(w, params, &cp, &nwid)) {
+	if (!get_network_param(w, params, &cp, &nwid)) {
 		return (false);
 	}
 	if (!get_obj_uint64(params, "member", &memid)) {
