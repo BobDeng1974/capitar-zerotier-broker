@@ -19,8 +19,8 @@
       </div>
 
       <div v-if="request_confirmation">
-        <b-btn variant="warning" v-on:click="confirm">Yes, {{ confirm_action }}</b-btn>
         <b-btn variant="info" v-on:click="cancel_confirm">No, cancel</b-btn>
+        <b-btn variant="warning" v-on:click="confirm">Yes, {{ confirm_action }}</b-btn>
       </div>
 
     </b-jumbotron>
@@ -89,7 +89,7 @@ module.exports = {
           headers: {'X-ZTC-Token': this.creds.token.id }
         }).then(response => {
           console.log(response)
-          if (['delete-device'].includes(method)) {
+          if (['delete-own-device'].includes(method)) {
             this.deleted = true
           }
         }).catch(error => {
@@ -105,7 +105,7 @@ module.exports = {
         })
     },
     delete_device(event) {
-      this.confirm_action = "delete-device"
+      this.confirm_action = "delete-own-device"
       this.action_data = {id: this.device.id}
       this.request_confirmation = true
       this.busy = true

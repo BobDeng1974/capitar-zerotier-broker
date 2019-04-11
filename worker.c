@@ -471,6 +471,7 @@ static void rpc_delete_user(worker *, object *);
 static void rpc_get_user(worker *, object *);
 static void rpc_get_user_names(worker *, object *);
 static void add_own_device(worker *, object *);
+static void delete_own_device(worker *, object *);
 
 static struct {
 	const char *method;
@@ -494,6 +495,7 @@ static struct {
 	{ METHOD_VALIDATE_CONFIG, validate_config },
 	{ METHOD_RESTART_SERVICE, restart_server },
 	{ METHOD_ADD_OWN_DEVICE, add_own_device },
+	{ METHOD_DELETE_OWN_DEVICE, delete_own_device },
 	{ METHOD_CREATE_USER, rpc_create_user },
 	{ METHOD_DELETE_USER, rpc_delete_user },
 	{ METHOD_GET_USER, rpc_get_user },
@@ -1195,6 +1197,55 @@ add_own_device(worker *w, object *params)
 	if ((!get_obj_obj(u->json, "devices", &devices)) ||
 	    ((devices2 = clone_obj(devices)) == NULL) ||
 	    (!add_obj_obj(devices2, idStr, device2)) ||
+	    (!add_obj_obj(u->json, "devices", devices2))) {
+		free_user(u);
+		free_obj(result);
+		send_err(w, E_NOMEM, NULL); // generally
+		return;
+	}
+
+	if (!save_user(u, &errcode)) {
+		free_user(u);
+		free_obj(result);
+		send_err(w, errcode, NULL);
+		return;
+        }
+	free_user(u);
+	send_result(w, result);
+}
+
+static void
+delete_own_device(worker *w, object *params)
+{
+	user *    u;
+	object   *devices;
+	object   *devices2;
+	object   *result;
+	int       errcode;
+        uint64_t  deviceId;
+	char      idStr[32];
+
+	if (!get_auth_param(w, params, &u)) {
+		return;
+	}
+
+	if (!get_obj_uint64(params, "id", &deviceId)) {
+		send_err(w, E_BADPARAMS, NULL);
+		return;
+	}
+
+	if ((result = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+		free_user(u);
+		return;
+	}
+
+	// Ensure valid format of deviceId, must have 10 characters (including leading zeros)
+	(void) snprintf(idStr, sizeof(idStr), "%010llx", (unsigned long long) deviceId);
+
+	if ((!get_obj_obj(u->json, "devices", &devices)) ||
+	    ((devices2 = clone_obj(devices)) == NULL) ||
+	    (!del_obj_item(devices2, idStr)) ||
 	    (!add_obj_obj(u->json, "devices", devices2))) {
 		free_user(u);
 		free_obj(result);

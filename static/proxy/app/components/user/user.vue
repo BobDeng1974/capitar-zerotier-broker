@@ -18,8 +18,8 @@
       </div>
 
       <div v-if="request_confirmation">
-        <b-btn variant="warning" v-on:click="confirm">Yes, {{ confirm_action }}</b-btn>
         <b-btn variant="info" v-on:click="cancel_confirm">No, cancel</b-btn>
+        <b-btn variant="warning" v-on:click="confirm">Yes, {{ confirm_action }}</b-btn>
       </div>
 
     </b-jumbotron>
