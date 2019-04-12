@@ -98,6 +98,7 @@ zt1_create_network_cb(worker *w, void *body, size_t len)
 	char     *nwid;
 	object   *nw;
 	object   *usernw;
+	object   *usernw2;
 
 	if ((obj = parse_obj(body, len)) == NULL) {
 		send_err(w, E_BADJSON, NULL);
@@ -114,13 +115,18 @@ zt1_create_network_cb(worker *w, void *body, size_t len)
 		return;
 	}
 
-	if (((nw = alloc_obj()) == NULL) ||
+	if (!get_obj_obj(u->json, "owned_networks", &usernw)) {
+		usernw2 = alloc_obj();
+	} else {
+		usernw2 = clone_obj(usernw);
+	}
+
+	if ((usernw2 == NULL) ||
+	    ((nw = alloc_obj()) == NULL) ||
 	    (!get_obj_string(obj, "id", &nwid)) ||
 	    (!add_obj_string(nw, "id", nwid)) ||
-	    ((!get_obj_obj(u->json, "owned_networks", &usernw)) &&
-	      (((usernw = alloc_obj()) == NULL)) ||
-                (!add_obj_obj(u->json, "owned_networks", usernw))) ||
-	    (!add_obj_obj(usernw, nwid, nw)) ||
+	    (!add_obj_obj(usernw2, nwid, nw)) ||
+	    (!add_obj_obj(u->json, "owned_networks", usernw2)) ||
 	    (!save_user(u, &errcode))) {
 		free_user(u);
 		send_err(w, errcode, "Cannot register network to user.");
