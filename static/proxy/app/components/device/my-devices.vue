@@ -64,7 +64,7 @@
   </div>
   <div v-if="!adding_device">
 
-    <b-btn variant="success"
+    <b-btn variant="info"
            v-on:click="showAddDevice()"
     >Add device</b-btn>
 

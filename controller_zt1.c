@@ -29,6 +29,7 @@
 #include "util.h"
 #include "worker.h"
 #include "controller.h"
+#include "auth.h"
 
 
 extern nng_tls_config *tls;
@@ -83,6 +84,80 @@ zt1_get_status_cb(worker *w, void *body, size_t len)
 	}
 
 	send_result(w, obj);
+}
+
+static void
+zt1_create_network_cb(worker *w, void *body, size_t len)
+{
+	object   *obj;
+	object   *session;
+	char     *username;
+	uint64_t  tag;
+        user     *u;
+	int       errcode;
+	char     *nwid;
+	object   *nw;
+	object   *usernw;
+
+	if ((obj = parse_obj(body, len)) == NULL) {
+		send_err(w, E_BADJSON, NULL);
+		return;
+	}
+
+	session = worker_session(w);
+
+	if ((!get_obj_string(session, "network_creator", &username)) ||
+	     (!get_obj_uint64(session, "network_creator_tag", &tag)) ||
+	     ((u = find_user(username)) == NULL) ||
+             (u->tag != tag)) {
+		send_err(w, E_NOTFOUND, "Cannot match network creator with user.");
+		return;
+	}
+
+	if (((nw = alloc_obj()) == NULL) ||
+	    (!get_obj_string(obj, "id", &nwid)) ||
+	    (!add_obj_string(nw, "id", nwid)) ||
+	    ((!get_obj_obj(u->json, "owned_networks", &usernw)) &&
+	      (((usernw = alloc_obj()) == NULL)) ||
+                (!add_obj_obj(u->json, "owned_networks", usernw))) ||
+	    (!add_obj_obj(usernw, nwid, nw)) ||
+	    (!save_user(u, &errcode))) {
+		free_user(u);
+		send_err(w, errcode, "Cannot register network to user.");
+		return;
+	}
+
+	free_user(u);
+	send_result(w, obj);
+}
+
+static void
+zt1_create_network(controller *cp, worker *w, object *params)
+{
+	nng_http_req *req;
+	char         *body;
+	object       *nwconf;
+	char         *name;
+
+	if ((!get_obj_obj(params, "nwconf", &nwconf)) ||
+	    (!get_obj_string(nwconf, "name", &name)) ||
+	    (empty(name))) {
+		send_err(w, E_BADPARAMS, "Name missing");
+		return;
+	}
+
+	if (!zt1_init_req(cp, w, "/controller/network/%010llx______",
+	    (unsigned long long) cp->config->nodeid)) {
+		return;
+	}
+	req = worker_http_req(w);
+	if ((nng_http_req_set_method(req, "POST") != 0) ||
+	    ((body = print_obj(nwconf)) == NULL) ||
+	    (nng_http_req_copy_data(req, body, strlen(body)) != 0)) {
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+	worker_http(w, zt1_create_network_cb);
 }
 
 static void
@@ -528,6 +603,7 @@ worker_ops controller_zt1_ops = {
 	.teardown           = zt1_teardown,
 	.exec_jsonrpc       = zt1_exec_jsonrpc,
 	.get_status         = zt1_get_status,
+	.create_network     = zt1_create_network,
 	.get_networks       = zt1_get_networks,
 	.get_network        = zt1_get_network,
 	.get_members        = zt1_get_members,

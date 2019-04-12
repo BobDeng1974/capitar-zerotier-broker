@@ -28,9 +28,11 @@
 #include "object.h"
 #include "worker.h"
 #include "controller.h"
+#include "auth.h"
 
 
 void get_status(worker *, object *);
+void create_network(worker *, object *);
 void get_networks(worker *, object *);
 void get_network(worker *, object *);
 void get_network_members(worker *, object *);
@@ -96,6 +98,28 @@ get_status(worker *w, object *params)
 			return;
 		}
 		cp->ops->get_status(cp, w);
+	}
+}
+
+void
+create_network(worker *w, object *params)
+{
+	controller *cp;
+	user       *u;
+	object     *session;
+
+	if (((session = worker_session(w)) != NULL) &&
+	    (get_auth_param(w, params, &u)) &&
+	    (get_controller_param(w, params, &cp))) {
+		if (!cp->ops->create_network) {
+			return;
+		}
+		if ((!add_obj_string(session, "network_creator", u->name)) ||
+                   (!add_obj_uint64(session, "network_creator_tag", u->tag))) {
+			send_err(w, E_NOMEM, NULL);
+			return;
+		}
+		cp->ops->create_network(cp, w, params);
 	}
 }
 

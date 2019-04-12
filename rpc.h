@@ -43,6 +43,7 @@ enum rpc_errors {
 
 // clang-format off
 #define METHOD_GET_STATUS		"get-status"
+#define	METHOD_CREATE_NETWORK		"create-network"
 #define	METHOD_LIST_NETWORKS		"get-networks"
 #define	METHOD_GET_NETWORK		"get-network"
 #define	METHOD_LIST_MEMBERS		"get-network-members"

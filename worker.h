@@ -51,6 +51,10 @@ extern bool nwid_allowed(uint64_t);
 extern nng_http_req *worker_http_req(worker *);
 extern nng_http_res *worker_http_res(worker *);
 
+// These functions are used to get and free worker session
+extern object *worker_session(worker *);
+extern void worker_session_free(worker *);
+
 // The callback function is called when the HTTP transaction has completed
 // successfully.
 typedef void (*worker_http_cb)(worker *, void *, size_t);
@@ -68,6 +72,7 @@ struct worker_ops {
 	void (*teardown)(controller *);
 	void (*exec_jsonrpc)(controller *, worker *, const char *, object *);
 	void (*get_status)(controller *, worker *);
+	void (*create_network)(controller *, worker *, object *);
 	void (*get_networks)(controller *, worker *);
 	void (*get_network)(controller *, worker *, uint64_t);
 	void (*get_members)(controller *, worker *, uint64_t);
@@ -123,11 +128,12 @@ struct proxy_config {
 };
 
 struct controller_config {
-	object *json;
-	char *  name;
-	char *  url;
-	char *  secret;
-	char *  type;
+	object  *json;
+	char *   name;
+	char *   url;
+	char *   secret;
+	char *   type;
+	uint64_t nodeid;
 };
 
 struct api_config {

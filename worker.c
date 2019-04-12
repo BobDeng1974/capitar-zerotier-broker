@@ -107,6 +107,7 @@ struct worker {
 	const char *     method; // RPC method called
 	uint64_t         user_roles;
 	uint64_t         eff_roles; // roles as modified by proxy changes
+	object          *session; // session object store
 };
 
 /*
@@ -364,6 +365,7 @@ send_resp(worker *w, const char *key, object *obj)
 
 	str = print_obj(res);
 	free_obj(res);
+	worker_session_free(w);
 
 	if ((str == NULL) || (nng_msg_append(msg, str, strlen(str)) != 0)) {
 		nng_msg_free(msg);
@@ -394,6 +396,8 @@ send_err(worker *w, int code, const char *rsn)
 	object * err = NULL;
 	nng_msg *msg = NULL;
 	char *   str = NULL;
+
+	worker_session_free(w);
 
 	if (rsn == NULL) {
 		switch (code) {
@@ -449,6 +453,7 @@ send_result(worker *w, object *o)
 }
 
 extern void get_status(worker *, object *);
+extern void create_network(worker *, object *);
 extern void get_networks(worker *, object *);
 extern void get_network(worker *, object *);
 extern void get_network_members(worker *, object *);
@@ -478,6 +483,7 @@ static struct {
 	void (*func)(worker *, object *);
 } jsonrpc_methods[] = {
 	{ METHOD_GET_STATUS, get_status },
+	{ METHOD_CREATE_NETWORK, create_network },
 	{ METHOD_LIST_NETWORKS, get_networks },
 	{ METHOD_GET_NETWORK, get_network },
 	{ METHOD_LIST_MEMBERS, get_network_members },
@@ -576,6 +582,27 @@ jsonrpc(worker *w, object *reqobj, const char *meth, object *parm)
 
 	send_err(w, E_BADMETHOD, NULL);
 	free_obj(reqobj);
+}
+
+object *
+worker_session(worker *w)
+{
+	if ((w->session == NULL) &&
+           (((w->session = alloc_obj()) == NULL))) {
+		send_err(w, E_NOMEM, NULL);
+		return (NULL);
+        }
+	return (w->session);
+}
+
+void
+worker_session_free(worker *w)
+{
+	if (w->session == NULL) {
+		return;
+	}
+	free_obj(w->session);
+	w->session = NULL;
 }
 
 nng_http_req *
@@ -1428,6 +1455,7 @@ recv_cb(worker *w)
 	nng_http_req_reset(w->req);
 	nng_http_res_reset(w->res);
 	w->id = 0;
+	worker_session_free(w);
 
 	if (debug > 1) {
 		nng_sockaddr raddr;
@@ -2252,7 +2280,7 @@ load_config(const char *path, char **errmsg)
 			goto error;
 		}
 		cp->json = obj;
-		cp->type = "controller_zt1";
+		cp->type = "zt1";
 		get_obj_string(obj, "type", &cp->type);
 		if (find_worker_ops(cp->type) == NULL) {
 			ERRF(errmsg, "controller %d: unknown type", i);
@@ -2261,6 +2289,12 @@ load_config(const char *path, char **errmsg)
 
 		if (!valid_name(cp->name)) {
 			ERRF(errmsg, "controller %d: invalid name", i);
+			goto error;
+		}
+
+		if ((strcmp(cp->type, "zt1") == 0) &&
+		    (!get_obj_uint64(obj, "nodeid", &cp->nodeid))) {
+			ERRF(errmsg, "controller %s: missing nodeid", cp->name);
 			goto error;
 		}
 

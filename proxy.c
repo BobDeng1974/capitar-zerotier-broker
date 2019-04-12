@@ -810,20 +810,40 @@ do_status(nng_aio *aio, object *auth, const char *method, controller *cp)
 }
 
 static void
-do_networks(nng_aio *aio, object *auth, const char *method, controller *cp)
+do_networks(nng_aio *aio, object *auth, const char *method, controller *cp, object *body)
 {
 	object *params;
-	if (strcmp(method, "GET") != 0) {
-		free_obj(auth);
-		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
-		return;
-	}
+	object *a;
+
 	if ((params = create_controller_params(cp, auth)) == NULL) {
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
 
-	do_rpc(aio, cp, METHOD_LIST_NETWORKS, params);
+	if (strcmp(method, "GET") == 0) {
+		do_rpc(aio, cp, METHOD_LIST_NETWORKS, params);
+	} else if (strcmp(method, "POST") == 0) {
+		if (body == NULL) {
+			rpcerr(aio, NNG_HTTP_STATUS_BAD_REQUEST, "Bad JSON");
+			return;
+		}
+
+		if (get_obj_obj(body, "nwconf", &a)) {
+			object *nwconf;
+			if (((nwconf = clone_obj(a)) == NULL) ||
+			    (!add_obj_obj(params, "nwconf", nwconf))) {
+				free_obj(params);
+				free_obj(nwconf);
+				nng_aio_finish(aio, NNG_ENOMEM);
+				return;
+			}
+		}
+		do_rpc(aio, cp, METHOD_CREATE_NETWORK, params);
+	} else {
+		free_obj(auth);
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+		return;
+	}
 }
 
 static void
@@ -1420,7 +1440,19 @@ proxy_api(nng_aio *aio)
 		return;
 	}
 	if (strcmp(uri, "/network") == 0) {
-		do_networks(aio, auth, method, cp);
+		if (strcmp(method, "POST") == 0) {
+			char *  data;
+			size_t  len;
+			object *body;
+
+			nng_http_req_get_data(req, (void **) &data, &len);
+			body = parse_obj(data, len);
+
+			do_networks(aio, auth, method, cp, body);
+			free_obj(body);
+		} else {
+			do_networks(aio, auth, method, cp, NULL);
+		}
 		return;
 	}
 	if (strncmp(uri, "/network/", strlen("/network/")) == 0) {
