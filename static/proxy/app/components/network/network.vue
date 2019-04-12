@@ -61,10 +61,15 @@
                            v-if="device.revision && device.authorized"
                          >Deauthorize</b-btn>
                        </b-col>
+                       <b-col v-else>
+                       </b-col>
 
                        <b-col v-if="Object.keys(creds.user.devices).includes(id)">
                          <h5>{{ creds.user.devices[id].name }}</h5>
                          ( {{ creds.user.devices[id].description }} )
+                       </b-col>
+                       <b-col v-else>
+                         unkown
                        </b-col>
 
                        <b-col>
