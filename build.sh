@@ -6,7 +6,7 @@
 # dependencies on ZeroTierOne and mbedTLS.
 #
 
-cmake="cmake -GNinja -DBUILD_SHARED_LIBS=OFF"
+cmake="cmake -GNinja -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Debug"
 
 if [ -z "$1" ]
 then
