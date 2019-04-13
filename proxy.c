@@ -317,23 +317,22 @@ survey_loop(void)
 		}
 
 		char * body = NULL;
-		object * arr  = alloc_arr();
 		object * obj  = alloc_obj();
 
-		if (((arr == NULL) || (obj == NULL)) ||
+		if (((obj == NULL)) ||
 		    (!add_obj_uint64(obj, "clock", (int) nng_clock())) ||
 		    (!add_obj_string(obj, "survey", "controllers"))) {
 			printf("Cannot create survey msg\n");
+			free_obj(obj);
 			continue;
 		}
 
 		if (((body = print_obj(obj)) == NULL) ||
 		    (nng_msg_append(msg, body, strlen(body)) != 0)) {
 			printf("Cannot append survey msg\n");
+			free_obj(obj);
 			continue;
 		}
-
-		//printf("survey msg %s\n", body);
 
 		free(body);
 		free_obj(obj);
@@ -403,6 +402,7 @@ survey_loop(void)
 				}
 				add_controller(peer, name, pipe);
 			}
+			free_obj(obj);
 		}
 
 	endsurvey:
