@@ -67,16 +67,6 @@ static worker_config *cfg;
 
 int debug;
 
-typedef enum {
-	STATE_RECVING,
-	STATE_HTTPING,
-	STATE_REPLYING,
-	STATE_IDLE,
-} worker_state;
-
-typedef struct proxy   proxy;
-typedef struct netperm netperm;
-
 nng_tls_config *tls = NULL;
 
 // Response is used to track responses.  We append these to the end of the
@@ -92,35 +82,6 @@ struct response {
 	uint64_t  id;
 	nng_msg * msg;
 };
-
-struct worker {
-	proxy *          proxy;
-	nng_ctx          ctx; // REP context
-	nng_http_req *   req;
-	nng_http_res *   res;
-	nng_aio *        aio;
-	worker_state     state;
-	nng_http_client *client;
-	uint64_t         id; // request ID of pending request
-	response *       resp;
-	worker_http_cb   http_cb;
-	const char *     method; // RPC method called
-	uint64_t         user_roles;
-	uint64_t         eff_roles; // roles as modified by proxy changes
-	object          *session; // session object store
-};
-
-/*
-struct controller {
-	char *             addr;
-	char *             name;
-	char *             secret;
-	char *             host; // for HTTP
-	nng_http_client *  client;
-	worker_ops *       ops;
-	controller_config *config;
-};
-*/
 
 struct proxy {
 	nng_socket    survsock;
@@ -163,24 +124,6 @@ nng_thread *     house_keeper;
 // for the worker, unrelated to the controller.  In fact the controller and
 // the worker need not have any ZT networks in common!
 
-bool
-nwid_allowed(uint64_t nwid)
-{
-	netperm *np;
-
-	// Empty permissions means all allowed.
-	if (netperms == NULL) {
-		return (true);
-	}
-	for (np = netperms; np != NULL; np++) {
-		if ((nwid == np->nwid) || (np->nwid == 0)) {
-			return (np->allow);
-		}
-	}
-
-	// But if not present in a fixed list, then default is deny.
-	return (false);
-}
 
 static void
 survey_cb(void *arg)

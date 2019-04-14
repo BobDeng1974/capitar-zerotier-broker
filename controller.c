@@ -54,7 +54,7 @@ get_network_param(worker *w, object *params, controller **cpp, uint64_t *nwidp)
 		send_err(w, E_BADPARAMS, "network parameter required");
 		return (false);
 	}
-	if (!nwid_allowed(nwid)) {
+	if (!check_nwid_role(nwid, w->eff_roles)) {
 		// Security: Treat network denied as if it does not exist.
 		send_err(w, 404, "no such network");
 		return (false);

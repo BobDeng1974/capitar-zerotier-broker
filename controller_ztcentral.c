@@ -29,6 +29,7 @@
 #include "util.h"
 #include "worker.h"
 #include "controller.h"
+#include "auth.h"
 
 
 extern nng_tls_config *tls;
@@ -135,7 +136,7 @@ central_get_networks_cb(worker *w, void *body, size_t len)
 			send_err(w, E_BADJSON, NULL);
 			return;
 		}
-		if (!nwid_allowed(nwid)) {
+		if (!check_nwid_role(nwid, w->eff_roles)) {
 			continue;
 		}
 		if ((obj2 = alloc_obj()) == NULL) {

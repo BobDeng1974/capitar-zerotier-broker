@@ -27,6 +27,17 @@ typedef struct worker_ops    worker_ops;
 typedef struct worker        worker;
 typedef struct controller    controller;
 typedef struct user          user;
+typedef struct proxy         proxy;
+typedef struct response      response;
+typedef struct netperm netperm;
+
+typedef enum {
+        STATE_RECVING,
+        STATE_HTTPING,
+        STATE_REPLYING,
+        STATE_IDLE,
+} worker_state;
+
 
 // when authenticating a user using username/password, we return the actual
 // user structure.  As we only do this for auth methods, we want the
@@ -40,11 +51,6 @@ extern void send_result(worker *, object *);
 
 // send_err sends an error with the given status code, and reason.
 extern void send_err(worker *, int, const char *);
-
-// nwid_allowed checks if the given the network id is permitted to be
-// shown.  It returns false if the nwid is not to be exposed over the
-// RPC interface.
-extern bool nwid_allowed(uint64_t);
 
 // These functions are intended for the implementation to use when
 // communicating with the HTTP backend controller or central.
@@ -171,6 +177,23 @@ struct worker_config {
 	int                nmoons; // Number of moons
 	moon_config *      moons;  // ZeroTier moon structure
 	int                debug;
+};
+
+struct worker {
+	proxy *          proxy;
+	nng_ctx          ctx; // REP context
+	nng_http_req *   req;
+	nng_http_res *   res;
+	nng_aio *        aio;
+	worker_state     state;
+	nng_http_client *client;
+	uint64_t         id; // request ID of pending request
+	response *       resp;
+	worker_http_cb   http_cb;
+	const char *     method; // RPC method called
+	uint64_t         user_roles;
+	uint64_t         eff_roles; // roles as modified by proxy changes
+	object          *session; // session object store
 };
 
 extern bool get_controller_param(worker *w, object *params, controller **cpp);

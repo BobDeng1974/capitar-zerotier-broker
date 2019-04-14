@@ -203,7 +203,7 @@ zt1_get_networks_cb(worker *w, void *body, size_t len)
 			send_err(w, E_BADJSON, NULL);
 			return;
 		}
-		if (!nwid_allowed(nwid)) {
+		if (!check_nwid_role(nwid, w->eff_roles)) {
 			continue;
 		}
 		if ((obj2 = alloc_obj()) == NULL) {
