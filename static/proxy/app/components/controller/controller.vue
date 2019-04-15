@@ -235,7 +235,7 @@ module.exports = {
           console.log(error)
           this.errored = true
         })
-        .finally(() => this.getNetworks())
+        .finally(() => this.$emit('load_user'))
     },
     getNetworks (event) {
       this.clear()

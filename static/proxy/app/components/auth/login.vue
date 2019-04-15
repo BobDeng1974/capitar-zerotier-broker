@@ -101,19 +101,19 @@
 
 </b-jumbotron>
 
-<user-mgmt v-if="selected_useradmin && creds && creds.token"
+<user-mgmt v-if="!loading && selected_useradmin && creds && creds.token"
   v-bind:controller="controller"
   v-bind:creds="creds"
   v-on:load_user="load_user"
 ></user-mgmt>
 
-<controller v-if="selected_networkadmin && creds && creds.token"
+<controller v-if="!loading && selected_networkadmin && creds && creds.token"
   v-bind:controller="controller"
   v-bind:creds="creds"
   v-on:load_user="load_user"
 ></controller>
 
-<my-devices v-if="selected_deviceadmin && creds && creds.token"
+<my-devices v-if="!loading && selected_deviceadmin && creds && creds.token"
   v-bind:controller="controller"
   v-bind:creds="creds"
   v-on:load_user="load_user"
@@ -207,6 +207,7 @@ module.exports = {
       this.selected = "networkadmin"
     },
     load_user() {
+      this.loading = true
       axios
         .post(this.$restApi + this.controller + "/rpc/get-user", {name: this.creds.username}, {
           headers: {'X-ZTC-Token': this.creds.token.id }
@@ -214,7 +215,19 @@ module.exports = {
         .then(response => {
           this.creds.user = response.data
           this.creds.ready = true
-          this.deviceadmin()
+          switch (this.selected) {
+            case "useradmin":
+              this.useradmin()
+              break
+            case "deviceadmin":
+              this.deviceadmin()
+              break
+            case "networkadmin":
+              this.networkadmin()
+              break
+            default:
+              this.deviceadmin()
+          }
         })
         .catch(error => {
           if ((error.response) && error.response.status ) {
