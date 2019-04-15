@@ -97,8 +97,10 @@ zt1_create_network_cb(worker *w, void *body, size_t len)
 	int       errcode;
 	char     *nwid;
 	object   *nw;
+	object   *nw2;
 	object   *usernw;
 	object   *usernw2;
+	char     *nwtype;
 
 	if ((obj = parse_obj(body, len)) == NULL) {
 		send_err(w, E_BADJSON, NULL);
@@ -111,22 +113,34 @@ zt1_create_network_cb(worker *w, void *body, size_t len)
 	     (!get_obj_uint64(session, "network_creator_tag", &tag)) ||
 	     ((u = find_user(username)) == NULL) ||
              (u->tag != tag)) {
+		if (u != NULL) {
+			free_user(u);
+		}
 		send_err(w, E_NOTFOUND, "Cannot match network creator with user.");
 		return;
 	}
 
-	if (!get_obj_obj(u->json, "owned_networks", &usernw)) {
+	if (!get_obj_obj(u->json, "networks", &usernw)) {
 		usernw2 = alloc_obj();
 	} else {
 		usernw2 = clone_obj(usernw);
 	}
 
+	nwtype = "unknown";
+	if (!get_obj_obj(session, "nwinfo", &nw)) {
+		nw2 = alloc_obj();
+	} else {
+		nw2 = clone_obj(nw);
+		get_obj_string(nw, "type", &nwtype);
+	}
+
 	if ((usernw2 == NULL) ||
-	    ((nw = alloc_obj()) == NULL) ||
+	    (nw2 == NULL) ||
 	    (!get_obj_string(obj, "id", &nwid)) ||
-	    (!add_obj_string(nw, "id", nwid)) ||
-	    (!add_obj_obj(usernw2, nwid, nw)) ||
-	    (!add_obj_obj(u->json, "owned_networks", usernw2)) ||
+	    (!add_obj_obj(usernw2, nwid, nw2)) ||
+	    (!add_obj_bool(nw2, "is_owner", true)) ||
+	    (!add_obj_string(nw2, "type", nwtype)) ||
+	    (!add_obj_obj(u->json, "networks", usernw2)) ||
 	    (!save_user(u, &errcode))) {
 		free_user(u);
 		send_err(w, errcode, "Cannot register network to user.");

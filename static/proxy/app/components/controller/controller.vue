@@ -197,7 +197,10 @@ module.exports = {
       }
       this.check_state_nwconf_name = false
       axios
-        .post(this.$restApi + this.controller + "/network", {nwconf: this.new_nwconf}, {
+        .post(this.$restApi + this.controller + "/network", {
+          nwconf: this.new_nwconf,
+          nwinfo: {"type": "test"}
+        },{
           headers: {'X-ZTC-Token': this.creds.token.id }
         })
         .then(response => {

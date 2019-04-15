@@ -41,6 +41,34 @@ void delete_network_member(worker *, object *);
 void authorize_network_member(worker *, object *);
 void deauthorize_network_member(worker *, object *);
 
+
+bool
+get_auth_param_with_session_networks(worker *w, object *params, user **userp) {
+	object    *session;
+	user      *u;
+	object    *networks;
+
+	if (!get_auth_param(w, params, &u)) {
+		return (false);
+	}
+
+	if ((get_obj_obj(u->json, "networks", &networks)) &&
+	    ((session = worker_session(w)) != NULL) &&
+	    (!add_obj_obj(session, "user_networks", clone_obj(networks)))) {
+		free_user(u);
+		send_err(w, E_NOMEM, NULL);
+		return (false);
+	}
+
+	if (userp != NULL) {
+		*userp = u;
+	} else {
+		free_user(u);
+	}
+
+	return (true);
+}
+
 bool
 get_network_param(worker *w, object *params, controller **cpp, uint64_t *nwidp)
 {
@@ -107,18 +135,28 @@ create_network(worker *w, object *params)
 	controller *cp;
 	user       *u;
 	object     *session;
+	object     *nwinfo;
 
 	if (((session = worker_session(w)) != NULL) &&
-	    (get_auth_param(w, params, &u)) &&
+	    (get_auth_param_with_session_networks(w, params, &u)) &&
 	    (get_controller_param(w, params, &cp))) {
 		if (!cp->ops->create_network) {
+			free_user(u);
 			return;
 		}
 		if ((!add_obj_string(session, "network_creator", u->name)) ||
                    (!add_obj_uint64(session, "network_creator_tag", u->tag))) {
+			free_user(u);
 			send_err(w, E_NOMEM, NULL);
 			return;
 		}
+		if ((get_obj_obj(params, "nwinfo", &nwinfo)) &&
+		    (!add_obj_obj(session, "nwinfo", clone_obj(nwinfo)))) {
+			free_user(u);
+			send_err(w, E_NOMEM, NULL);
+			return;
+		}
+		free_user(u);
 		cp->ops->create_network(cp, w, params);
 	}
 }
@@ -128,7 +166,7 @@ get_networks(worker *w, object *params)
 {
 	controller *cp;
 
-	if (get_auth_param(w, params, NULL) &&
+	if (get_auth_param_with_session_networks(w, params, NULL) &&
 	    get_controller_param(w, params, &cp)) {
 		if (!cp->ops->get_networks) {
 			return;
@@ -143,7 +181,7 @@ get_network(worker *w, object *params)
 	controller *cp;
 	uint64_t    nwid;
 
-	if (get_auth_param(w, params, NULL) &&
+	if (get_auth_param_with_session_networks(w, params, NULL) &&
 	    get_network_param(w, params, &cp, &nwid)) {
 		if (!cp->ops->get_network) {
 			return;
@@ -158,7 +196,7 @@ get_network_members(worker *w, object *params)
 	controller *cp;
 	uint64_t    nwid;
 
-	if (get_auth_param(w, params, NULL) &&
+	if (get_auth_param_with_session_networks(w, params, NULL) &&
 	    get_network_param(w, params, &cp, &nwid)) {
 		if (!cp->ops->get_members) {
 			return;
@@ -174,7 +212,7 @@ get_network_member(worker *w, object *params)
 	uint64_t    nwid;
 	uint64_t    member;
 
-	if (get_auth_param(w, params, NULL) &&
+	if (get_auth_param_with_session_networks(w, params, NULL) &&
 	    get_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->get_member) {
 			return;
@@ -190,7 +228,7 @@ delete_network_member(worker *w, object *params)
 	uint64_t    nwid;
 	uint64_t    member;
 
-	if (get_auth_param(w, params, NULL) &&
+	if (get_auth_param_with_session_networks(w, params, NULL) &&
 	    get_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->delete_member) {
 			return;
@@ -206,7 +244,7 @@ authorize_network_member(worker *w, object *params)
 	uint64_t    nwid;
 	uint64_t    member;
 
-	if (get_auth_param(w, params, NULL) &&
+	if (get_auth_param_with_session_networks(w, params, NULL) &&
 	    get_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->authorize_member) {
 			return;
@@ -222,7 +260,7 @@ deauthorize_network_member(worker *w, object *params)
 	uint64_t    nwid;
 	uint64_t    member;
 
-	if (get_auth_param(w, params, NULL) &&
+	if (get_auth_param_with_session_networks(w, params, NULL) &&
 	    get_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->deauthorize_member) {
 			return;

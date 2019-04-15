@@ -838,6 +838,16 @@ do_networks(nng_aio *aio, object *auth, const char *method, controller *cp, obje
 				return;
 			}
 		}
+		if (get_obj_obj(body, "nwinfo", &a)) {
+			object *nwinfo;
+			if (((nwinfo = clone_obj(a)) == NULL) ||
+			    (!add_obj_obj(params, "nwinfo", nwinfo))) {
+				free_obj(params);
+				free_obj(nwinfo);
+				nng_aio_finish(aio, NNG_ENOMEM);
+				return;
+			}
+		}
 		do_rpc(aio, cp, METHOD_CREATE_NETWORK, params);
 	} else {
 		free_obj(auth);
