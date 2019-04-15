@@ -118,7 +118,9 @@ module.exports = {
       new_nwconf: null,
       check_state_nwconf_name: false,
       creating_network: false,
-      nwids: []
+      nwids: [],
+      device_enroll_nws: {},
+      tried_creating_device_enroll_nw: false
     }
   },
   props: ["controller", "creds", "nw_filter"],
@@ -212,6 +214,28 @@ module.exports = {
         })
         .finally(() => this.getNetworks())
     },
+    createDeviceEnrollNetwork() {
+      if (this.tried_creating_device_enroll_nw) {
+        console.log("Already tried creating device enroll network")
+      }
+      this.tried_creating_device_enroll_nw = true
+      new_nwconf = this.zt1_nw_template()
+      new_nwconf.name = "Device Enroll Network " + this.creds.user.name
+      axios
+        .post(this.$restApi + this.controller + "/network", {
+          nwconf: new_nwconf,
+          nwinfo: {"type": "device_enroll"}
+        },{
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+        })
+        .catch(error => {
+          console.log(error)
+          this.errored = true
+        })
+        .finally(() => this.getNetworks())
+    },
     getNetworks (event) {
       this.clear()
       axios
@@ -227,7 +251,13 @@ module.exports = {
             if(!this.nwids.includes(nwId)) {
               this.networks.push({id: nwId})
             }
+            if (this.creds.user.networks[nwId].type == "device_enroll") {
+              this.device_enroll_nws[nwId] = this.creds.user.networks[nwId]
+            }
           }.bind(this))
+          if (Object.keys(this.device_enroll_nws).length == 0) {
+            this.createDeviceEnrollNetwork()
+          }
         }).catch(error => {
           if ((error.response) && (error.response.status == 404)) {
             this.alert_msg = "No such controller found"
