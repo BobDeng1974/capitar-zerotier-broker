@@ -84,7 +84,7 @@
       <b-alert class="col-6" show > Searching ... </b-alert>
     </div>
 
-    <div v-else-if="networks && networks.length > 0">
+    <div v-if="!loading && networks && networks.length > 0">
       <network
         v-for="(network, index) in networks"
         v-bind:key="index"
@@ -94,9 +94,9 @@
         v-bind:nw_regex="nw_regex"
       >
       </network>
-    </
+    </div>
 
-    <div v-else-if="networks">
+    <div v-if="!loading && networks && networks.length == 0">
         <b-alert class="col-6" show> No networks found ... </b-alert>
     </div>
   </div>
