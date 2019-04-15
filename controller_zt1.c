@@ -380,6 +380,10 @@ zt1_get_member_cb(worker *w, void *body, size_t len)
 	bool    bridge;
 	bool    auth;
 	int     rev;
+	int     vMajor;
+	int     vMinor;
+	int     vRev;
+	int     vProto;
 	object *ipassign = NULL;
 
 	if (((obj1 = parse_obj(body, len)) == NULL) ||
@@ -387,6 +391,10 @@ zt1_get_member_cb(worker *w, void *body, size_t len)
 	    (!get_obj_string(obj1, "nwid", &nwid)) ||
 	    (!get_obj_bool(obj1, "authorized", &auth)) ||
 	    (!get_obj_int(obj1, "revision", &rev)) ||
+	    (!get_obj_int(obj1, "vMajor", &vMajor)) ||
+	    (!get_obj_int(obj1, "vMinor", &vMinor)) ||
+	    (!get_obj_int(obj1, "vRev", &vRev)) ||
+	    (!get_obj_int(obj1, "vProto", &vProto)) ||
 	    (!get_obj_obj(obj1, "ipAssignments", &obj3)) ||
 	    ((ipassign = clone_obj(obj3)) == NULL) ||
 	    (!get_obj_bool(obj1, "activeBridge", &bridge))) {
@@ -402,6 +410,10 @@ zt1_get_member_cb(worker *w, void *body, size_t len)
 	    (!add_obj_bool(obj2, "authorized", auth)) ||
 	    (!add_obj_bool(obj2, "activeBridge", bridge)) ||
 	    (!add_obj_int(obj2, "revision", rev)) ||
+	    (!add_obj_int(obj2, "vMajor", vMajor)) ||
+	    (!add_obj_int(obj2, "vMinor", vMinor)) ||
+	    (!add_obj_int(obj2, "vRev", vRev)) ||
+	    (!add_obj_int(obj2, "vProto", vProto)) ||
 	    (!add_obj_obj(obj2, "ipAssignments", ipassign))) {
 		free_obj(obj1);
 		free_obj(obj2);
