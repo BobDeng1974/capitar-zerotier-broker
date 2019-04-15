@@ -217,6 +217,7 @@ module.exports = {
     createDeviceEnrollNetwork() {
       if (this.tried_creating_device_enroll_nw) {
         console.log("Already tried creating device enroll network")
+        return
       }
       this.tried_creating_device_enroll_nw = true
       new_nwconf = this.zt1_nw_template()
@@ -244,6 +245,7 @@ module.exports = {
         }).then(response => {
           this.networks = response.data
           this.nwids = []
+          this.device_enroll_nws = {}
           response.data.forEach(function (nw) {
             this.nwids.push(nw.id)
           }.bind(this))

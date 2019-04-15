@@ -116,7 +116,6 @@
     </div>
 
     <div v-if="!loading && devices && Object.keys(devices).length == 0">
-  {{ devices }}
         <b-alert class="col-6" show> No devices found ... </b-alert>
     </div>
   </div>
