@@ -70,6 +70,25 @@ get_auth_param_with_session_networks(worker *w, object *params, user **userp) {
 }
 
 bool
+is_user_network_owner(worker *w, uint64_t nwid)
+{
+	object   *session;
+	object   *ses1;
+	bool      is_owner = false;
+	char      str[32];
+
+	(void) snprintf(str, sizeof(str), "%016llx", (unsigned long long) nwid);
+	if ((w != NULL) &&
+	    ((session = worker_session(w)) != NULL) &&
+	    (get_obj_obj(session, "user_networks", &ses1)) &&
+	    (get_obj_obj(ses1, str, &ses1)) &&
+	    (get_obj_bool(ses1, "is_owner", &is_owner)) &&
+	    (is_owner)) {
+		return (true);
+	}
+}
+
+bool
 get_network_param(worker *w, object *params, controller **cpp, uint64_t *nwidp)
 {
 	controller *cp;
@@ -82,7 +101,8 @@ get_network_param(worker *w, object *params, controller **cpp, uint64_t *nwidp)
 		send_err(w, E_BADPARAMS, "network parameter required");
 		return (false);
 	}
-	if (!check_nwid_role(nwid, w->eff_roles)) {
+	if ((!check_nwid_role(nwid, w->eff_roles)) &&
+	    (!is_user_network_owner(w, nwid))) {
 		// Security: Treat network denied as if it does not exist.
 		send_err(w, 404, "no such network");
 		return (false);

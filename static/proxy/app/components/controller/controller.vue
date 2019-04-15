@@ -117,7 +117,8 @@ module.exports = {
       network_filter: "",
       new_nwconf: null,
       check_state_nwconf_name: false,
-      creating_network: false
+      creating_network: false,
+      nwids: []
     }
   },
   props: ["controller", "creds", "nw_filter"],
@@ -218,6 +219,15 @@ module.exports = {
           headers: {'X-ZTC-Token': this.creds.token.id }
         }).then(response => {
           this.networks = response.data
+          this.nwids = []
+          response.data.forEach(function (nw) {
+            this.nwids.push(nw.id)
+          }.bind(this))
+          Object.keys(this.creds.user.networks).forEach(function (nwId) {
+            if(!this.nwids.includes(nwId)) {
+              this.networks.push({id: nwId})
+            }
+          }.bind(this))
         }).catch(error => {
           if ((error.response) && (error.response.status == 404)) {
             this.alert_msg = "No such controller found"
