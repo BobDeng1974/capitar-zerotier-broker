@@ -140,6 +140,8 @@ struct controller_config {
 	char *   secret;
 	char *   type;
 	uint64_t nodeid;
+	uint64_t allow; // mask of allowed roles
+	uint64_t deny;  // mask of denied roles
 };
 
 struct api_config {

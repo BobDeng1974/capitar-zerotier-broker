@@ -32,6 +32,7 @@
 #include "otp.h"
 #include "util.h"
 #include "worker.h"
+#include "controller.h"
 
 static worker_config *wc;
 
@@ -862,6 +863,14 @@ create_token(user *u, const char *desc, double expire, uint64_t roles)
 			return (NULL);
 		}
 	}
+	// If present in user role, %admin role may also be assigned to the token
+	if ((roles & ROLE_ADMIN) != 0) {
+	        if (!add_arr_string(a, role_name(ROLE_ADMIN))) {
+	                free_token(t);
+	                free_obj(a);
+			return (NULL);
+	        }
+	}
 	if (!add_obj_obj(t->json, "roles", a)) {
 		free_obj(a);
 		free_token(t);
@@ -1086,6 +1095,15 @@ check_api_role(const char *method, uint64_t roles)
 	if ((roles & deny) != 0) {
 		return (false);
 	}
+
+	// For unauthenticated requests (without token)
+	if ((allow & ROLE_ALL) != 0) {
+		return (true);
+	}
+	if ((deny & ROLE_ALL) != 0) {
+		return (false);
+	}
+
 	// default is permissive
 	return (true);
 }
@@ -1116,7 +1134,61 @@ check_nwid_role(uint64_t nwid, uint64_t roles)
 	if ((roles & deny) != 0) {
 		return (false);
 	}
+
+	// For unauthenticated requests (without token)
+	if ((allow & ROLE_ALL) != 0) {
+		return (true);
+	}
+	if ((deny & ROLE_ALL) != 0) {
+		return (false);
+	}
+
 	// default is permissive
+	return (true);
+}
+
+bool
+check_controller_role(controller *cp, uint64_t roles)
+{
+
+	if ((roles & ROLE_ADMIN) != 0) {
+		if (cp->debug > 1) {
+			printf("controller_role %s user ROLE_ADMIN\n", cp->config->name);
+		}
+		return (true);
+	}
+
+	if ((roles & cp->config->allow) != 0) {
+		if (cp->debug > 1) {
+			printf("controller_role %s allow\n", cp->config->name);
+		}
+		return (true);
+	}
+	if ((roles & cp->config->deny) != 0) {
+		if (cp->debug > 1) {
+			printf("controller_role %s deny\n", cp->config->name);
+		}
+		return (false);
+	}
+
+	// For unauthenticated requests (without token)
+	if ((cp->config->allow & ROLE_ALL) != 0) {
+		if (cp->debug > 1) {
+			printf("controller_role %s allow ROLE_ALL\n", cp->config->name);
+		}
+		return (true);
+	}
+	if ((cp->config->deny & ROLE_ALL) != 0) {
+		if (cp->debug > 1) {
+			printf("controller_role %s deny ROLE_ALL\n", cp->config->name);
+		}
+		return (false);
+	}
+
+	// default is permissive
+	if (cp->debug > 1) {
+		printf("controller_role %s default permissive\n", cp->config->name);
+	}
 	return (true);
 }
 

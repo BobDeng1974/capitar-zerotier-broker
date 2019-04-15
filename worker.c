@@ -309,6 +309,8 @@ send_resp(worker *w, const char *key, object *obj)
 	str = print_obj(res);
 	free_obj(res);
 	worker_session_free(w);
+	w->eff_roles = 0;
+	w->user_roles = 0;
 
 	if ((str == NULL) || (nng_msg_append(msg, str, strlen(str)) != 0)) {
 		nng_msg_free(msg);
@@ -341,6 +343,8 @@ send_err(worker *w, int code, const char *rsn)
 	char *   str = NULL;
 
 	worker_session_free(w);
+	w->eff_roles = 0;
+	w->user_roles = 0;
 
 	if (rsn == NULL) {
 		switch (code) {
@@ -646,6 +650,12 @@ get_controller_param(worker *w, object *params, controller **cpp)
 	}
 	if ((cp = find_controller(w, name)) == NULL) {
 		send_err(w, E_NOCTRLR, NULL);
+		return (false);
+	}
+
+	if (!check_controller_role(cp, w->eff_roles)) {
+		// Security: Treat controller denied as if it does not exist.
+		send_err(w, 404, "no such controller");
 		return (false);
 	}
 
@@ -1399,6 +1409,8 @@ recv_cb(worker *w)
 	nng_http_res_reset(w->res);
 	w->id = 0;
 	worker_session_free(w);
+	w->eff_roles = 0;
+	w->user_roles = 0;
 
 	if (debug > 1) {
 		nng_sockaddr raddr;
@@ -2214,6 +2226,7 @@ load_config(const char *path, char **errmsg)
 	for (int i = 0; i < wc->ncontrollers; i++) {
 		controller_config *cp = &wc->controllers[i];
 		char *             ct;
+		object *           roles;
 
 		if ((!get_arr_obj(arr, i, &obj)) ||
 		    (!get_obj_string(obj, "address", &cp->url)) ||
@@ -2223,6 +2236,8 @@ load_config(const char *path, char **errmsg)
 			goto error;
 		}
 		cp->json = obj;
+		cp->allow = 0;
+		cp->deny = 0;
 		cp->type = "zt1";
 		get_obj_string(obj, "type", &cp->type);
 		if (find_worker_ops(cp->type) == NULL) {
@@ -2240,6 +2255,18 @@ load_config(const char *path, char **errmsg)
 			ERRF(errmsg, "controller %s: missing nodeid", cp->name);
 			goto error;
 		}
+
+		if ((get_obj_obj(obj, "allow", &roles)) &&
+	                    (!parse_roles(
+	                wc, roles, &cp->allow, errmsg))) {
+	                goto error;
+	        }
+
+	        if ((get_obj_obj(obj, "deny", &roles)) &&
+	            (!parse_roles(
+	                wc, roles, &cp->deny, errmsg))) {
+	                goto error;
+	        }
 
 		for (int j = 0; j < i; j++) {
 			if (strcmp(cp->name, wc->controllers[j].name) == 0) {

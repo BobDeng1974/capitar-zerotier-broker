@@ -107,8 +107,10 @@ extern uint64_t    find_role_ext(worker_config *, const char *);
 extern const char *role_name(uint64_t);
 extern bool        check_api_role(const char *, uint64_t);
 extern bool        check_nwid_role(uint64_t, uint64_t);
+extern bool        check_controller_role(controller *, uint64_t);
 
 #define ROLE_ADMIN (1ULL << 63) // %admin - implicitly can do everything
 #define ROLE_TOKEN (1ULL << 62) // %token - applies to users using API token
-#define ROLE_ALL (1ULL << 61)   // %all - applies to everyone
+#define ROLE_ALL (1ULL << 61)   // %all - applies to everyone (including anonymous)
+
 #endif
