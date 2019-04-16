@@ -136,9 +136,10 @@ module.exports = {
       alert_msg: "",
       devices: null,
       newdevice: null,
+      device_filter: ""
     }
   },
-  props: ["controller", "creds", "device_filter"],
+  props: ["controller", "creds"],
   computed: {
     // Number of seconds the token will expire in, if expire time is set
     tokenExpiresIn() {
@@ -155,7 +156,6 @@ module.exports = {
     }
   },
   mounted () {
-    this.device_filter = this.device_filter
     this.devices = this.creds.user.devices
   },
   methods: {
