@@ -8,56 +8,56 @@
     >Cancel</b-btn>
 
 
-<b-jumbotron 
-             header="Add device"
-             lead="Enter device details:" >
-  <div class="col-6">
+    <b-jumbotron 
+               header="Add device"
+               lead="Enter device details:" >
+      <div class="col-6">
 
-    <b-input-group>
-      <div class="input-group-prepend w-25">
-        <span class="input-group-text w-100" id="id">Device ID</span>
+        <b-input-group>
+          <div class="input-group-prepend w-25">
+            <span class="input-group-text w-100" id="id">Device ID</span>
+          </div>
+          <b-form-input 
+                        type="text"
+                        v-model="newdevice.id"
+                        placeholder="Enter device ID"
+                        v-on:keyup.enter.native="addDevice()"
+          ></b-form-input>
+        </b-input-group>
+
+        <b-input-group>
+          <div class="input-group-prepend w-25">
+            <span class="input-group-text w-100" id="id">Device name</span>
+          </div>
+          <b-form-input 
+                        type="text"
+                        v-model="newdevice.name"
+                        placeholder="Enter device name"
+                        v-on:keyup.enter.native="addDevice()"
+          ></b-form-input>
+        </b-input-group>
+
+        <b-input-group>
+          <div class="input-group-prepend w-25">
+            <span class="input-group-text w-100" id="id">Device description</span>
+          </div>
+          <b-form-input 
+                        type="text"
+                        v-model="newdevice.description"
+                        placeholder="Enter device description"
+                        v-on:keyup.enter.native="addDevice()"
+          ></b-form-input>
+
+          <b-input-group-append>
+            <b-btn variant="success"
+                   v-on:click="addDevice()"
+            >Add device</b-btn>
+          </b-input-group-append>
+        </b-input-group>
+
       </div>
-      <b-form-input 
-                    type="text"
-                    v-model="newdevice.id"
-                    placeholder="Enter device ID"
-                    v-on:keyup.enter.native="addDevice()"
-      ></b-form-input>
-    </b-input-group>
 
-    <b-input-group>
-      <div class="input-group-prepend w-25">
-        <span class="input-group-text w-100" id="id">Device name</span>
-      </div>
-      <b-form-input 
-                    type="text"
-                    v-model="newdevice.name"
-                    placeholder="Enter device name"
-                    v-on:keyup.enter.native="addDevice()"
-      ></b-form-input>
-    </b-input-group>
-
-    <b-input-group>
-      <div class="input-group-prepend w-25">
-        <span class="input-group-text w-100" id="id">Device description</span>
-      </div>
-      <b-form-input 
-                    type="text"
-                    v-model="newdevice.description"
-                    placeholder="Enter device description"
-                    v-on:keyup.enter.native="addDevice()"
-      ></b-form-input>
-
-      <b-input-group-append>
-        <b-btn variant="success"
-               v-on:click="addDevice()"
-        >Add device</b-btn>
-      </b-input-group-append>
-    </b-input-group>
-
-  </div>
-
-</b-jumbotron>
+    </b-jumbotron>
 
 
 
