@@ -212,7 +212,7 @@ module.exports = {
           console.log(error)
           this.errored = true
         })
-        .finally(() => this.getNetworks())
+        .finally(() => this.$emit('load_user'))
     },
     createDeviceEnrollNetwork() {
       if (this.tried_creating_device_enroll_nw) {
