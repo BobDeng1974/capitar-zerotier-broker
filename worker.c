@@ -1060,6 +1060,7 @@ rpc_create_user(worker *w, object *params)
 	if (!add_obj_string(newuser, "created_by", user_name(u))) {
 		send_err(w, E_NOMEM, NULL);
 	}
+	free_user(u);
 
 	if ((u = create_user(newuser, &errcode)) == NULL) {
 		send_err(w, errcode, "Failed to create user");

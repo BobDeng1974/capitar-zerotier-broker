@@ -1,10 +1,107 @@
 <template>
 <div>
 
-  <div>
-    <b-btn variant="success"
-           v-on:click="newUser()"
-    >Add new user</b-btn>
+  <div v-if="adding_user">
+
+    <b-btn variant="info"
+           v-on:click="cancelAddUser()"
+    >Cancel</b-btn>
+
+
+    <b-jumbotron
+               header="Add user"
+               lead="Enter user details:" >
+      <div class="col-6">
+
+        <b-input-group>
+          <div class="input-group-prepend w-25">
+            <span class="input-group-text w-100" id="id">User email</span>
+          </div>
+          <b-form-input
+                        type="text"
+                        v-model="newuser.name"
+                        placeholder="Enter user email adress (login)"
+                        v-on:keyup.enter.native="addUser()"
+          ></b-form-input>
+        </b-input-group>
+
+        <b-input-group>
+          <div class="input-group-prepend w-25">
+            <span class="input-group-text w-100" id="id">User password</span>
+          </div>
+          <b-form-input
+                        type="password"
+                        v-model="newuser.passwd1"
+                        placeholder="Enter user password"
+                        v-on:keyup.enter.native="addUser()"
+          ></b-form-input>
+        </b-input-group>
+
+        <b-input-group>
+          <div class="input-group-prepend w-25">
+            <span class="input-group-text w-100" id="id">User password verify</span>
+          </div>
+          <b-form-input
+                        type="password"
+                        v-model="newuser.passwd2"
+                        placeholder="Enter user password"
+                        v-on:keyup.enter.native="addUser()"
+          ></b-form-input>
+        </b-input-group>
+
+        <b-input-group>
+          <div class="input-group-prepend w-25">
+            <span class="input-group-text w-100" id="id">First name</span>
+          </div>
+          <b-form-input
+                        type="text"
+                        v-model="newuser.firstname"
+                        placeholder="Enter first name"
+                        v-on:keyup.enter.native="addUser()"
+          ></b-form-input>
+        </b-input-group>
+
+        <b-input-group>
+          <div class="input-group-prepend w-25">
+            <span class="input-group-text w-100" id="id">Last name</span>
+          </div>
+          <b-form-input
+                        type="text"
+                        v-model="newuser.lastname"
+                        placeholder="Enter last name"
+                        v-on:keyup.enter.native="addUser()"
+          ></b-form-input>
+        </b-input-group>
+
+        <b-input-group>
+          <div class="input-group-prepend w-25">
+            <span class="input-group-text w-100" id="id">User description</span>
+          </div>
+          <b-form-input
+                        type="text"
+                        v-model="newuser.description"
+                        placeholder="Enter user description"
+                        v-on:keyup.enter.native="addUser()"
+          ></b-form-input>
+
+          <b-input-group-append>
+            <b-btn variant="success"
+                   v-on:click="addUser()"
+            >Add user</b-btn>
+          </b-input-group-append>
+        </b-input-group>
+
+      </div>
+
+    </b-jumbotron>
+
+  </div>
+
+  <div v-if="!adding_user">
+
+    <b-btn variant="info"
+           v-on:click="showAddUser()"
+    >Add user</b-btn>
 
     <b-input-group>
       <div class="input-group-prepend w-25">
@@ -31,24 +128,27 @@
   >
   </error-axios>
 
-  <div v-if="loading">
-    <b-alert class="col-6" show > Searching ... </b-alert>
-  </div>
+  <div v-if="!adding_user">
 
-  <div v-else-if="users && users.length > 0">
-    <user
-      v-for="(name, index) in users"
-      v-bind:key="index"
-      v-bind:name="name"
-      v-bind:creds="creds"
-      v-bind:controller="controller"
-      v-bind:user_regex="user_regex"
-    >
-    </user>
-  </div>
+    <div v-if="loading">
+      <b-alert class="col-6" show > Searching ... </b-alert>
+    </div>
 
-  <div v-else-if="users">
-      <b-alert class="col-6" show> No users found ... </b-alert>
+    <div v-else-if="!loading && users && users.length > 0">
+      <user
+        v-for="(name, index) in users"
+        v-bind:key="index"
+        v-bind:name="name"
+        v-bind:creds="creds"
+        v-bind:controller="controller"
+        v-bind:user_regex="user_regex"
+      >
+      </user>
+    </div>
+
+    <div v-if="!loading && users">
+        <b-alert class="col-6" show> No users found ... </b-alert>
+    </div>
   </div>
 
 </div>
@@ -59,14 +159,17 @@
 module.exports = {
   data () {
     return {
+      adding_user: false,
       info: null,
       loading: true,
       err_resp: null,
       alert_msg: "",
-      user: []
+      users: [],
+      newuser: null,
+      user_filter: ""
     }
   },
-  props: ["controller", "creds", "user_filter"],
+  props: ["controller", "creds"],
   computed: {
     // Number of seconds the token will expire in, if expire time is set
     tokenExpiresIn() {
@@ -79,11 +182,10 @@ module.exports = {
       if (!this.user_filter) {
         return null
       }
-      return new RegExp(this.user_filter, 'g')
+      return new RegExp(this.user_filter, 'ig')
     }
   },
   mounted () {
-    this.user_filter = this.user_filter
     this.getUsers()
   },
   methods: {
@@ -91,6 +193,45 @@ module.exports = {
       this.loading = true
       this.err_resp = null
       this.alert_msg = ""
+    },
+    showAddUser() {
+      this.newuser = {
+        name: "",
+        email: "", // should usually be the same as name
+        passwd: "",
+        passwd1: "",
+        passwd2: "",
+        firstname: "",
+        lastname: "",
+        tag:  Math.floor(Math.random() * 100000),
+        description: "",
+        devices: {},
+        networks: {}
+      }
+      this.adding_user = true
+    },
+    cancelAddUser() {
+      this.adding_user = false
+    },
+    addUser() {
+      axios
+        .post(this.$restApi + this.controller + "/rpc/create-user", {
+          newuser: this.newuser}, {
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        }).then(response => {
+          this.users.push(response.data)
+        }).catch(error => {
+          if ((error.response) && (error.response.status == 404)) {
+            this.alert_msg = "No such controller found"
+          }
+          if ((error.response) && error.response.status ) {
+            this.err_resp = error.response
+          }
+          else {
+            console.log("undefined error: ", error)
+          }
+        })
+        .finally(() => this.adding_user = false)
     },
     getUsers (event) {
       this.clear()
