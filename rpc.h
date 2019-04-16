@@ -62,6 +62,7 @@ enum rpc_errors {
 #define	METHOD_RESTART_SERVICE		"restart-service"
 #define METHOD_ADD_OWN_DEVICE		"add-own-device"
 #define METHOD_DELETE_OWN_DEVICE	"delete-own-device"
+#define METHOD_ENROLL_OWN_DEVICE	"enroll-own-device"
 #define	METHOD_CREATE_USER		"create-user"
 #define	METHOD_DELETE_USER		"delete-user"
 #define METHOD_GET_USER			"get-user"

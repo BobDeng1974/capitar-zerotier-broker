@@ -31,6 +31,9 @@ typedef struct proxy         proxy;
 typedef struct response      response;
 typedef struct netperm netperm;
 
+typedef void (*result_callback)(worker *, object *);
+typedef void (*error_callback)(worker *, int, const char *);
+
 typedef enum {
         STATE_RECVING,
         STATE_HTTPING,
@@ -58,8 +61,10 @@ extern nng_http_req *worker_http_req(worker *);
 extern nng_http_res *worker_http_res(worker *);
 
 // These functions are used to get and free worker session
-extern object *worker_session(worker *);
+extern bool valid_worker_session(worker *);
 extern void worker_session_free(worker *);
+extern bool set_worker_session_user(worker *, user *);
+extern user * get_worker_session_user(worker *);
 
 // The callback function is called when the HTTP transaction has completed
 // successfully.
@@ -196,6 +201,8 @@ struct worker {
 	uint64_t         user_roles;
 	uint64_t         eff_roles; // roles as modified by proxy changes
 	object          *session; // session object store
+	result_callback   on_result;
+	error_callback    on_error;
 };
 
 extern bool get_controller_param(worker *w, object *params, controller **cpp);

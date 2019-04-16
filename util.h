@@ -36,4 +36,5 @@ extern void *      path_opendir(const char *);
 extern void        path_closedir(void *);
 extern const char *path_readdir(void *);
 extern bool        empty(const char *);
+extern bool        samestr(const char *, const char *);
 #endif // UTIL_H

@@ -29,6 +29,7 @@
 #include "worker.h"
 #include "controller.h"
 #include "auth.h"
+#include "util.h"
 
 
 void get_status(worker *, object *);
@@ -40,21 +41,23 @@ void get_network_member(worker *, object *);
 void delete_network_member(worker *, object *);
 void authorize_network_member(worker *, object *);
 void deauthorize_network_member(worker *, object *);
+void enroll_own_device(worker *, object *);
 
 
 bool
 get_auth_param_with_session_networks(worker *w, object *params, user **userp) {
-	object    *session;
 	user      *u;
 	object    *networks;
 
 	if (!get_auth_param(w, params, &u)) {
 		return (false);
 	}
+	if (!valid_worker_session(w)) {
+		return (false);
+	}
 
 	if ((get_obj_obj(u->json, "networks", &networks)) &&
-	    ((session = worker_session(w)) != NULL) &&
-	    (!add_obj_obj(session, "user_networks", clone_obj(networks)))) {
+	    (!add_obj_obj(w->session, "user_networks", clone_obj(networks)))) {
 		free_user(u);
 		send_err(w, E_NOMEM, NULL);
 		return (false);
@@ -72,15 +75,14 @@ get_auth_param_with_session_networks(worker *w, object *params, user **userp) {
 bool
 is_user_network_owner(worker *w, uint64_t nwid)
 {
-	object   *session;
 	object   *ses1;
 	bool      is_owner = false;
 	char      str[32];
 
 	(void) snprintf(str, sizeof(str), "%016llx", (unsigned long long) nwid);
 	if ((w != NULL) &&
-	    ((session = worker_session(w)) != NULL) &&
-	    (get_obj_obj(session, "user_networks", &ses1)) &&
+	    (w->session != NULL) &&
+	    (get_obj_obj(w->session, "user_networks", &ses1)) &&
 	    (get_obj_obj(ses1, str, &ses1)) &&
 	    (get_obj_bool(ses1, "is_owner", &is_owner)) &&
 	    (is_owner)) {
@@ -154,24 +156,22 @@ create_network(worker *w, object *params)
 {
 	controller *cp;
 	user       *u;
-	object     *session;
 	object     *nwinfo;
 
-	if (((session = worker_session(w)) != NULL) &&
-	    (get_auth_param_with_session_networks(w, params, &u)) &&
+	if ((get_auth_param_with_session_networks(w, params, &u)) &&
 	    (get_controller_param(w, params, &cp))) {
 		if (!cp->ops->create_network) {
 			free_user(u);
 			return;
 		}
-		if ((!add_obj_string(session, "network_creator", u->name)) ||
-                   (!add_obj_uint64(session, "network_creator_tag", u->tag))) {
+		if ((!add_obj_string(w->session, "network_creator", u->name)) ||
+                   (!add_obj_uint64(w->session, "network_creator_tag", u->tag))) {
 			free_user(u);
 			send_err(w, E_NOMEM, NULL);
 			return;
 		}
 		if ((get_obj_obj(params, "nwinfo", &nwinfo)) &&
-		    (!add_obj_obj(session, "nwinfo", clone_obj(nwinfo)))) {
+		    (!add_obj_obj(w->session, "nwinfo", clone_obj(nwinfo)))) {
 			free_user(u);
 			send_err(w, E_NOMEM, NULL);
 			return;
@@ -287,4 +287,162 @@ deauthorize_network_member(worker *w, object *params)
 		}
 		cp->ops->deauthorize_member(cp, w, nwid, member);
 	}
+}
+
+void
+enroll_own_device_next2(worker *w, object *result)
+{
+	int       vProto;
+	char     *username;
+	uint64_t  tag;
+	user     *u;
+	object   *obj1;
+	char     *member;
+	int       errcode;
+
+	if ((!valid_worker_session(w)) ||
+	    (!get_obj_obj(w->session, "params", &obj1)) ||
+	    (!get_obj_string(obj1, "member", &member))) {
+		send_err(w, E_INTERNAL, "No session params");
+		free_obj(result);
+		return;
+	}
+
+	if ((!get_obj_int(result, "vProto", &vProto)) ||
+	    (vProto == -1)) {
+		send_err(w, E_NOTFOUND, "Device has not joined the enroll network");
+		free_obj(result);
+		return;
+	}
+	if ((u = get_worker_session_user(w)) == NULL) {
+                send_err(w, E_NOTFOUND, "Cannot match session user");
+		free_obj(result);
+		return;
+        }
+
+	if ((!get_obj_obj(u->json, "devices", &obj1)) ||
+	    (!get_obj_obj(obj1, member, &obj1)) ||
+	    (!add_obj_bool(obj1, "enrolled", true))) {
+		free_user(u);
+		free_obj(result);
+		send_err(w, 404, "No such device");
+		return;
+	}
+
+	if (!save_user(u, &errcode)) {
+		free_user(u);
+		free_obj(result);
+		send_err(w, errcode, NULL);
+		return;
+        }
+	free_user(u);
+	send_result(w, result);
+}
+
+void
+enroll_own_device_next(worker *w, object *result)
+{
+	controller *cp;
+        uint64_t  deviceId;
+        uint64_t  nwid;
+	object   *params;
+
+	free_obj(result);
+
+	if (!valid_worker_session(w)) {
+		return;
+	}
+
+	if ((!get_obj_obj(w->session, "params", &params))) {
+		send_err(w, E_INTERNAL, "No session params");
+	}
+
+	if (w->on_result == NULL) {
+		w->on_result = enroll_own_device_next2;
+	}
+
+	if (get_member_param(w, params, &cp, &nwid, &deviceId)) {
+		if (!cp->ops->get_member) {
+			return;
+		}
+		cp->ops->get_member(cp, w, nwid, deviceId);
+	}
+}
+
+void
+enroll_own_device(worker *w, object *params)
+{
+	user *    u;
+	controller *cp;
+	object   *obj1;
+	object   *device;
+	object   *nw;
+	int       errcode;
+        uint64_t  deviceId;
+        uint64_t  nwid;
+	char      deviceIdStr[32];
+	char      nwidStr[32];
+	char     *nwtype;
+
+	if (!valid_worker_session(w)) {
+		return;
+	}
+
+	if (w->on_result == NULL) {
+		w->on_result = enroll_own_device_next;
+		add_obj_obj(w->session, "params", clone_obj(params));
+	}
+
+	if (!get_auth_param_with_session_networks(w, params, &u)) {
+		return;
+	}
+
+	if ((!get_obj_uint64(params, "member", &deviceId)) ||
+	    (!get_obj_uint64(params, "network", &nwid))) {
+		send_err(w, E_BADPARAMS, "Wrong parameters");
+		return;
+	}
+
+	// Ensure valid format of deviceId, must have 10 characters (including leading zeros)
+	(void) snprintf(deviceIdStr, sizeof(deviceIdStr), "%010llx", (unsigned long long) deviceId);
+
+	// Ensure valid format of nwid, must have 16 characters (including leading zeros)
+	(void) snprintf(nwidStr, sizeof(nwidStr), "%016llx", (unsigned long long) nwid);
+
+	if ((!get_obj_obj(u->json, "devices", &obj1)) ||
+	    (!get_obj_obj(obj1, deviceIdStr, &device))) {
+		free_user(u);
+		send_err(w, 404, "No such device");
+		return;
+
+	}
+	if ((!get_obj_obj(u->json, "networks", &obj1)) ||
+	    (!get_obj_obj(obj1, nwidStr, &nw))) {
+		free_user(u);
+		send_err(w, 404, "No such enroll network");
+		return;
+	}
+
+	if ((!get_obj_string(nw, "type", &nwtype)) ||
+	    (!samestr(nwtype, "device_enroll"))) {
+		send_err(w, E_FORBIDDEN, "Not an enroll network");
+		free_user(u);
+		return;
+	}
+
+	if (!set_worker_session_user(w, u)) {
+		send_err(w, E_NOMEM, NULL);
+		free_user(u);
+		return;
+	}
+
+	free_user(u);
+
+	if (get_member_param(w, params, &cp, &nwid, &deviceId)) {
+		if (!cp->ops->authorize_member) {
+			return;
+		}
+		cp->ops->authorize_member(cp, w, nwid, deviceId);
+	}
+
 }

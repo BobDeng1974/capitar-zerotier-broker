@@ -246,3 +246,14 @@ empty(const char *s1)
 	return (false);
 }
 
+// better than strcmp because it is NULL safe, and uses more natural booleans.
+// (returns false if either is NULL, or strcmp != 0).
+bool
+samestr(const char *s1, const char *s2)
+{
+	if ((s1 == NULL) || (s2 == NULL) || (strcmp(s1, s2) != 0)) {
+		return (false);
+	}
+	return (true);
+}
+

@@ -309,8 +309,6 @@ send_resp(worker *w, const char *key, object *obj)
 	str = print_obj(res);
 	free_obj(res);
 	worker_session_free(w);
-	w->eff_roles = 0;
-	w->user_roles = 0;
 
 	if ((str == NULL) || (nng_msg_append(msg, str, strlen(str)) != 0)) {
 		nng_msg_free(msg);
@@ -342,9 +340,14 @@ send_err(worker *w, int code, const char *rsn)
 	nng_msg *msg = NULL;
 	char *   str = NULL;
 
-	worker_session_free(w);
-	w->eff_roles = 0;
-	w->user_roles = 0;
+	error_callback func;
+
+	if (w->on_error != NULL) {
+		func = w->on_error;
+		w->on_error = NULL;
+		func(w, code, rsn);
+		return;
+	}
 
 	if (rsn == NULL) {
 		switch (code) {
@@ -387,6 +390,7 @@ send_err(worker *w, int code, const char *rsn)
 	    (!add_obj_int(err, "code", code)) ||
 	    (!add_obj_string(err, "message", rsn))) {
 		free_obj(err);
+		worker_session_free(w);
 		recv_request(w);
 		return;
 	}
@@ -396,6 +400,15 @@ send_err(worker *w, int code, const char *rsn)
 void
 send_result(worker *w, object *o)
 {
+	result_callback func;
+
+	if (w->on_result != NULL) {
+		func = w->on_result;
+		w->on_result = NULL;
+		func(w, o);
+		return;
+	}
+
 	send_resp(w, "result", o);
 }
 
@@ -408,6 +421,7 @@ extern void get_network_member(worker *, object *);
 extern void delete_network_member(worker *, object *);
 extern void authorize_network_member(worker *, object *);
 extern void deauthorize_network_member(worker *, object *);
+extern void enroll_own_device(worker *, object *);
 
 static void create_auth_token(worker *, object *);
 static void delete_auth_token(worker *, object *);
@@ -449,6 +463,7 @@ static struct {
 	{ METHOD_RESTART_SERVICE, restart_server },
 	{ METHOD_ADD_OWN_DEVICE, add_own_device },
 	{ METHOD_DELETE_OWN_DEVICE, delete_own_device },
+	{ METHOD_ENROLL_OWN_DEVICE, enroll_own_device },
 	{ METHOD_CREATE_USER, rpc_create_user },
 	{ METHOD_DELETE_USER, rpc_delete_user },
 	{ METHOD_GET_USER, rpc_get_user },
@@ -497,6 +512,8 @@ jsonrpc(worker *w, object *reqobj, const char *meth, object *parm)
 		return;
 	}
 	w->resp = resp;
+	w->on_result = NULL;
+	w->on_error = NULL;
 
 	resp->expire = time(NULL) + 30; // 30 second expiration
 	resp->id     = w->id;
@@ -531,25 +548,60 @@ jsonrpc(worker *w, object *reqobj, const char *meth, object *parm)
 	free_obj(reqobj);
 }
 
-object *
-worker_session(worker *w)
+bool
+valid_worker_session(worker *w)
 {
 	if ((w->session == NULL) &&
            (((w->session = alloc_obj()) == NULL))) {
-		send_err(w, E_NOMEM, NULL);
-		return (NULL);
+		return (false);
         }
-	return (w->session);
+	return (true);
 }
 
 void
 worker_session_free(worker *w)
 {
+
+	w->eff_roles = 0;
+	w->user_roles = 0;
+	w->on_result = NULL;
+	w->on_error = NULL;
+
 	if (w->session == NULL) {
 		return;
 	}
 	free_obj(w->session);
 	w->session = NULL;
+}
+
+bool
+set_worker_session_user(worker *w, user *u) {
+	if ((w->session != NULL) &&
+	    (add_obj_string(w->session, "username", u->name)) &&
+	    (add_obj_uint64(w->session, "usertag", u->tag))) {
+		return (true);
+	}
+	return (false);
+}
+
+user *
+get_worker_session_user(worker *w) {
+	char     *username;
+	uint64_t  tag;
+	user      *u;
+
+	if ((w->session != NULL) &&
+	    (get_obj_string(w->session, "username", &username)) &&
+	    (!empty(username)) &&
+	    (get_obj_uint64(w->session, "usertag", &tag)) &&
+	    ((u = find_user(username)) != NULL) &&
+	    (u->tag == tag)) {
+		return (u);
+	}
+	if (u != NULL) {
+		free_user(u);
+	}
+	return (NULL);
 }
 
 nng_http_req *
@@ -583,17 +635,6 @@ worker_http(worker *w, worker_http_cb cb)
 	}
 
 	nng_http_client_transact(w->client, w->req, w->res, w->aio);
-}
-
-// better than strcmp because it is NULL safe, and uses more natural booleans.
-// (returns false if either is NULL, or strcmp != 0).
-bool
-samestr(const char *s1, const char *s2)
-{
-	if ((s1 == NULL) || (s2 == NULL) || (strcmp(s1, s2) != 0)) {
-		return (false);
-	}
-	return (true);
 }
 
 controller *
@@ -1409,8 +1450,6 @@ recv_cb(worker *w)
 	nng_http_res_reset(w->res);
 	w->id = 0;
 	worker_session_free(w);
-	w->eff_roles = 0;
-	w->user_roles = 0;
 
 	if (debug > 1) {
 		nng_sockaddr raddr;

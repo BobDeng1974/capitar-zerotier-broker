@@ -90,7 +90,6 @@ static void
 zt1_create_network_cb(worker *w, void *body, size_t len)
 {
 	object   *obj;
-	object   *session;
 	char     *username;
 	uint64_t  tag;
         user     *u;
@@ -107,10 +106,12 @@ zt1_create_network_cb(worker *w, void *body, size_t len)
 		return;
 	}
 
-	session = worker_session(w);
+	if (!valid_worker_session(w)) {
+		return;
+	}
 
-	if ((!get_obj_string(session, "network_creator", &username)) ||
-	     (!get_obj_uint64(session, "network_creator_tag", &tag)) ||
+	if ((!get_obj_string(w->session, "network_creator", &username)) ||
+	     (!get_obj_uint64(w->session, "network_creator_tag", &tag)) ||
 	     ((u = find_user(username)) == NULL) ||
              (u->tag != tag)) {
 		if (u != NULL) {
@@ -127,7 +128,7 @@ zt1_create_network_cb(worker *w, void *body, size_t len)
 	}
 
 	nwtype = "unknown";
-	if (!get_obj_obj(session, "nwinfo", &nw)) {
+	if (!get_obj_obj(w->session, "nwinfo", &nw)) {
 		nw2 = alloc_obj();
 	} else {
 		nw2 = clone_obj(nw);

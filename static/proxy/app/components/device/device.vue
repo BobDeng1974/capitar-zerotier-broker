@@ -9,12 +9,19 @@
 
   <section v-if="!errored">
 
-    <b-jumbotron :header="device.id" :lead="device.name" >
+    <b-jumbotron :header="device_header" :lead="device_lead" >
       <p>{{ device.description }}</p>
-      <div v-if="!deleted">
-          <b-btn variant="warning" :disabled="busy" v-on:click="delete_device">Delete</b-btn>
+      <div v-if="!deleted && !busy">
+
+          <b-btn variant="success" :disabled="busy" v-on:click="enroll_device"
+            v-if="!device.enrolled && enroll_nwid"
+            >Enroll</b-btn>
+
+          <b-btn variant="warning" :disabled="busy" v-on:click="delete_device"
+            >Delete</b-btn>
+
       </div>
-      <div v-else="deleted">
+      <div v-if="deleted">
           <i>Deleted</i>
       </div>
 
@@ -27,6 +34,11 @@
 
   </section>
 
+  <error-axios
+    v-bind:err_resp="err_resp"
+  ></error-axios>
+
+
 </div>
 
 </template>
@@ -36,6 +48,15 @@
 module.exports = {
 
   computed: {
+    device_header() {
+      if (!this.device.enrolled) {
+        return this.device.id
+      }
+      return this.device.id + " (enrolled)"
+    },
+    device_lead() {
+      return this.device.name
+    },
     show_device() {
       if (!this.device) {
         return false
@@ -63,10 +84,19 @@ module.exports = {
       deleted: false,
       busy: false,
       device: null,
+      enroll_nwid: "",
+      err_resp: null
     }
   },
   props: ["id", "controller", "creds", "device_regex"],
   methods: {
+    set_enroll_network() {
+      Object.keys(this.creds.user.networks).forEach(function (nwId) {
+        if (this.creds.user.networks[nwId].type == "device_enroll") {
+          this.enroll_nwid = nwId
+        }
+      }.bind(this))
+    },
     clear() {
       this.err_resp = null
       this.alert_msg = ""
@@ -93,6 +123,9 @@ module.exports = {
             this.deleted = true
             this.$parent.$emit('load_user')
           }
+          if (['enroll-own-device'].includes(method)) {
+            this.$parent.$emit('load_user')
+          }
         }).catch(error => {
           if ((error.response) && error.response.status ) {
             this.err_resp = error.response
@@ -110,10 +143,21 @@ module.exports = {
       this.action_data = {id: this.device.id}
       this.request_confirmation = true
       this.busy = true
+    },
+    enroll_device(event) {
+      if (!this.enroll_nwid) {
+        console.log("No enroll network")
+        return
+      }
+      this.confirm_action = "enroll-own-device"
+      this.action_data = {member: this.device.id, network: this.enroll_nwid}
+      this.request_confirmation = true
+      this.busy = true
     }
   },
   mounted () {
     this.device = this.creds.user.devices[this.id]
+    this.set_enroll_network()
     /*
     axios
       .post(this.$restApi + this.controller + "/rpc/get-device", {id: this.device.id}, {
