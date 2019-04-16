@@ -25,7 +25,7 @@
                     v-for="(device, id) in creds.user.devices"
                     v-bind:key="id"
                     v-bind:value="id"
-                    v-bind:disabled="Object.keys(nw_members).includes(id)"
+                    v-bind:disabled="Object.keys(nw_members).includes(id) || !device.enrolled"
                   > {{ device.id }} : {{ device.name }}
                   </option>
                 </b-form-select>
