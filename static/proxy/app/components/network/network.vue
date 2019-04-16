@@ -9,7 +9,9 @@
 
   <section v-if="!errored">
 
-    <b-jumbotron :header="nw.name" :lead="nw.id" >
+    <b-jumbotron :header="nw.name" :lead="nw.id"
+      v-observe-visibility="visibilityChanged"
+    >
       <b-container>
         <b-row>
           <b-col>
@@ -134,6 +136,11 @@ module.exports = {
     }
   },
   methods: {
+    visibilityChanged(changed) {
+      if (changed && !this.nw.name) {
+        this.get_nw_members()
+      }
+    },
     nw_member_seq_inc() {
       this.nw_member_seq++
       return this.nw_member_seq
@@ -155,7 +162,6 @@ module.exports = {
         })
         .then(response => {
           this.nw = response.data
-          this.get_nw_members()
         })
         .catch(error => {
           console.log(error)
