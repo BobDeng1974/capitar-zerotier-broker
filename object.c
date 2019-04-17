@@ -499,11 +499,12 @@ obj_load(const char *path, char **err)
 	fclose(f);
 
 	tree = parse_obj(buf, i);
-	free(buf);
 	if (tree == NULL) {
-		errf(err, "%s: Parse error", path);
+		errf(err, "%s: Parse error\n%s", path, buf);
+		free(buf);
 		return (NULL);
 	}
+	free(buf);
 	return (tree);
 }
 

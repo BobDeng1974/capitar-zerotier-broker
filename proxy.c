@@ -1676,7 +1676,7 @@ load_config(const char *path)
 	char *  emsg;
 
 	// The configuration will leak, but we only ever exit abnormally.
-	if ((cfg = obj_load(path, &emsg)) == NULL) {
+	if ((cfg = obj_load(path, &emsg, 0)) == NULL) {
 		fprintf(stderr, "%s\n", emsg == NULL ? "Out of memory" : emsg);
 		exit(1);
 	}

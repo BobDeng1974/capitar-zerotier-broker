@@ -223,7 +223,7 @@ find_user(const char *name)
 		return (NULL);
 	}
 	if (((u = calloc(1, sizeof(user))) == NULL) ||
-	    ((u->json = obj_load(path, NULL)) == NULL) || (!parse_user(u)) ||
+	    ((u->json = obj_load(path, NULL, 0)) == NULL) || (!parse_user(u)) ||
 	    (strcmp(u->name, name1) != 0)) {
 		free(path);
 		free_user(u);
@@ -546,7 +546,7 @@ create_user(object *newuser, int *code)
 	free_obj(newuser);
 
 	if (((u = calloc(1, sizeof(user))) == NULL) ||
-	    ((u->json = obj_load(path, NULL)) == NULL) || (!parse_user(u)) ||
+	    ((u->json = obj_load(path, NULL, 0)) == NULL) || (!parse_user(u)) ||
 	    (strcmp(u->name, name1) != 0)) {
 		free(path);
 		free_user(u);
@@ -795,7 +795,7 @@ find_token(const char *id, int *code, bool validate)
 		*code = E_NOMEM;
 		return (NULL);
 	}
-	if ((t->json = obj_load(path, NULL)) == NULL) {
+	if ((t->json = obj_load(path, NULL, 0)) == NULL) {
 		*code = E_AUTHTOKEN;
 		free(path);
 		free_token(t);
