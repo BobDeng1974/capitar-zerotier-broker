@@ -209,7 +209,7 @@ module.exports = {
     load_user() {
       this.loading = true
       axios
-        .post(this.$restApi + this.controller + "/rpc/get-user", {name: this.creds.username}, {
+        .post(this.$restApi + this.controller + "/rpc/get-own-user", {}, {
           headers: {'X-ZTC-Token': this.creds.token.id }
         })
         .then(response => {

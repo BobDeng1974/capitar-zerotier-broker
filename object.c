@@ -418,7 +418,7 @@ errf(char **eptr, const char *fmt, ...)
 }
 
 object *
-obj_load(const char *path, char **err)
+obj_load(const char *path, char **err, int debug)
 {
 	FILE *  f;
 	object *tree;
@@ -500,7 +500,11 @@ obj_load(const char *path, char **err)
 
 	tree = parse_obj(buf, i);
 	if (tree == NULL) {
-		errf(err, "%s: Parse error\n%s", path, buf);
+		if (debug > 2) {
+			errf(err, "%s: Parse error\n%s", path, buf);
+		} else {
+			errf(err, "%s: Parse error", path);
+		}
 		free(buf);
 		return (NULL);
 	}

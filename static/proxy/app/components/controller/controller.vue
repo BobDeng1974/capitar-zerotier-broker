@@ -84,10 +84,10 @@
       <b-alert class="col-6" show > Searching ... </b-alert>
     </div>
 
-    <div v-if="!loading && networks && networks.length > 0">
+    <div v-if="!loading && networks && Object.keys(networks).length > 0">
       <network
-        v-for="(network, index) in networks"
-        v-bind:key="index"
+        v-for="(network, id) in networks"
+        v-bind:key="id"
         v-bind:network="network"
         v-bind:controller="controller"
         v-bind:creds="creds"
@@ -96,7 +96,7 @@
       </network>
     </div>
 
-    <div v-if="!loading && networks && networks.length == 0">
+    <div v-if="!loading && networks && Object.keys(networks).length == 0">
         <b-alert class="col-6" show> No networks found ... </b-alert>
     </div>
   </div>
@@ -113,12 +113,11 @@ module.exports = {
       loading: true,
       err_resp: null,
       alert_msg: "",
-      networks: [],
+      networks: {},
       network_filter: "",
       new_nwconf: null,
       check_state_nwconf_name: false,
       creating_network: false,
-      nwids: [],
       device_enroll_nws: {},
       tried_creating_device_enroll_nw: false
     }
@@ -243,18 +242,25 @@ module.exports = {
         .get(this.$restApi + this.controller + "/network", {
           headers: {'X-ZTC-Token': this.creds.token.id }
         }).then(response => {
-          this.networks = response.data
-          this.nwids = []
+          this.networks = {}
           this.device_enroll_nws = {}
           response.data.forEach(function (nw) {
-            this.nwids.push(nw.id)
+            nw.user_network = null
+            nw.system_network = true
+            this.networks[nw.id] = nw
           }.bind(this))
-          Object.keys(this.creds.user.networks).forEach(function (nwId) {
-            if(!this.nwids.includes(nwId)) {
-              this.networks.push({id: nwId})
+          Object.keys(this.creds.user.networks).forEach(function (nwid) {
+            if(!Object.keys(this.networks).includes(nwid)) {
+              this.networks[nwid] = {
+                id: nwid,
+                user_network: this.creds.user.networks[nwid],
+                system_network: false,
+              }
+            } else {
+              this.networks[nwid].user_network = this.creds.user.networks[nwid]
             }
-            if (this.creds.user.networks[nwId].type == "device_enroll") {
-              this.device_enroll_nws[nwId] = this.creds.user.networks[nwId]
+            if (this.creds.user.networks[nwid].type == "device_enroll") {
+              this.device_enroll_nws[nwid] = this.creds.user.networks[nwid]
             }
           }.bind(this))
           if (Object.keys(this.device_enroll_nws).length == 0) {

@@ -91,6 +91,8 @@ struct worker_ops {
 	void (*delete_member)(controller *, worker *, uint64_t, uint64_t);
 	void (*authorize_member)(controller *, worker *, uint64_t, uint64_t);
 	void (*deauthorize_member)(controller *, worker *, uint64_t, uint64_t);
+	// Device owners
+	void (*get_own_members)(controller *, worker *, uint64_t);
 };
 
 #define WORKER_OPS_VERSION 1
@@ -208,5 +210,25 @@ struct worker {
 extern bool get_controller_param(worker *w, object *params, controller **cpp);
 
 extern bool get_auth_param(worker *w, object *params, user **userp);
+
+
+// Worker methods
+extern void create_auth_token(worker *, object *);
+extern void delete_auth_token(worker *, object *);
+extern void get_auth_token(worker *, object *);
+extern void get_auth_tokens(worker *, object *);
+extern void set_own_password(worker *, object *);
+extern void create_own_totp(worker *, object *);
+extern void delete_own_totp(worker *, object *);
+extern void validate_config(worker *, object *);
+extern void restart_server(worker *, object *);
+extern void rpc_create_user(worker *, object *);
+extern void rpc_delete_user(worker *, object *);
+extern void rpc_get_user(worker *, object *);
+extern void rpc_get_user_names(worker *, object *);
+extern void rpc_get_own_user(worker *, object *);
+extern void add_own_device(worker *, object *);
+extern void delete_own_device(worker *, object *);
+
 
 #endif // WORKER_H

@@ -39,4 +39,27 @@ struct controller {
 };
 
 
+extern void get_status(worker *, object *);
+extern void create_network(worker *, object *);
+extern void get_networks(worker *, object *);
+extern void get_network(worker *, object *);
+extern void get_network_members(worker *, object *);
+extern void get_network_member(worker *, object *);
+extern void delete_network_member(worker *, object *);
+extern void authorize_network_member(worker *, object *);
+extern void deauthorize_network_member(worker *, object *);
+// Network owners
+extern void get_own_network_members(worker *, object *);
+extern void get_own_network_member(worker *, object *);
+extern void delete_own_network_member(worker *, object *);
+extern void authorize_own_network_member(worker *, object *);
+extern void deauthorize_own_network_member(worker *, object *);
+// Device owners
+extern void get_network_own_members(worker *, object *);
+extern void get_network_own_member(worker *, object *);
+extern void delete_network_own_member(worker *, object *);
+extern void authorize_network_own_member(worker *, object *);
+extern void deauthorize_network_own_member(worker *, object *);
+extern void enroll_own_device(worker *, object *);
+
 #endif // CONTROLLER_H

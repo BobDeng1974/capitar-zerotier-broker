@@ -126,18 +126,19 @@ module.exports = {
       errored: false,
       nw: this.network,
       nw_members: {},
-      nw_member_seq: 1
+      nw_member_seq: 1,
+      requested_members: false
     }
   },
   props: ["network", "index", "networks", "controller", "creds", "nw_regex"],
   mounted () {
-    if (!this.nw.name) {
+    if (this.nw.system_network && !this.nw.name) {
       this.get_nw()
     }
   },
   methods: {
     visibilityChanged(changed) {
-      if (changed && !this.nw.name) {
+      if (changed && !this.requested_members) {
         this.get_nw_members()
       }
     },
@@ -169,6 +170,7 @@ module.exports = {
         })
     },
     get_nw_members() {
+      this.requested_members = true
       axios
         .get(this.$restApi + this.controller + "/network/" + this.nw.id + "/member", {
           headers: {'X-ZTC-Token': this.creds.token.id }
@@ -182,7 +184,8 @@ module.exports = {
           }.bind(this))
         })
         .catch(error => {
-          if (error = 'Error: "Network Error"') {
+          //if (error = 'Error: "Network Error"') {
+          if (0) {
             setTimeout(function () {
               this.get_nw_members()
             }.bind(this), 1)
@@ -205,7 +208,8 @@ module.exports = {
         })
         .catch(error => {
           //console.log(error)
-          if (error = 'Error: "Network Error"') {
+          //if (error = 'Error: "Network Error"') {
+          if (0) {
             setTimeout(function () {
               this.get_nw_member(device)
             }.bind(this), 1)

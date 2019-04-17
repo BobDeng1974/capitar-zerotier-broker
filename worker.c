@@ -412,33 +412,6 @@ send_result(worker *w, object *o)
 	send_resp(w, "result", o);
 }
 
-extern void get_status(worker *, object *);
-extern void create_network(worker *, object *);
-extern void get_networks(worker *, object *);
-extern void get_network(worker *, object *);
-extern void get_network_members(worker *, object *);
-extern void get_network_member(worker *, object *);
-extern void delete_network_member(worker *, object *);
-extern void authorize_network_member(worker *, object *);
-extern void deauthorize_network_member(worker *, object *);
-extern void enroll_own_device(worker *, object *);
-
-static void create_auth_token(worker *, object *);
-static void delete_auth_token(worker *, object *);
-static void get_auth_token(worker *, object *);
-static void get_auth_tokens(worker *, object *);
-static void set_own_password(worker *, object *);
-static void create_own_totp(worker *, object *);
-static void delete_own_totp(worker *, object *);
-static void validate_config(worker *, object *);
-static void restart_server(worker *, object *);
-static void rpc_create_user(worker *, object *);
-static void rpc_delete_user(worker *, object *);
-static void rpc_get_user(worker *, object *);
-static void rpc_get_user_names(worker *, object *);
-static void add_own_device(worker *, object *);
-static void delete_own_device(worker *, object *);
-
 static struct {
 	const char *method;
 	void (*func)(worker *, object *);
@@ -468,6 +441,7 @@ static struct {
 	{ METHOD_DELETE_USER, rpc_delete_user },
 	{ METHOD_GET_USER, rpc_get_user },
 	{ METHOD_GET_USERNAMES, rpc_get_user_names },
+	{ METHOD_GET_OWN_USER, rpc_get_own_user },
 	{ NULL, NULL },
 };
 
@@ -796,7 +770,7 @@ get_auth_param(worker *w, object *params, user **userp)
 	return (true);
 }
 
-static void
+void
 create_auth_token(worker *w, object *params)
 {
 	uint64_t authroles, reqroles, mask;
@@ -896,7 +870,7 @@ create_auth_token(worker *w, object *params)
 	send_result(w, result);
 }
 
-static void
+void
 get_auth_token(worker *w, object *params)
 {
 	uint64_t roles;
@@ -970,7 +944,7 @@ get_auth_token(worker *w, object *params)
 	send_result(w, result);
 }
 
-static void
+void
 delete_auth_token(worker *w, object *params)
 {
 	user *  u;
@@ -1006,7 +980,7 @@ delete_auth_token(worker *w, object *params)
 	send_result(w, result);
 }
 
-static void
+void
 get_auth_tokens(worker *w, object *params)
 {
 	user *  u;
@@ -1041,7 +1015,7 @@ get_auth_tokens(worker *w, object *params)
 	send_result(w, result);
 }
 
-static void
+void
 rpc_create_user(worker *w, object *params)
 {
 	user *   u;
@@ -1099,7 +1073,7 @@ rpc_create_user(worker *w, object *params)
 	send_result(w, result);
 }
 
-static void
+void
 rpc_get_user(worker *w, object *params)
 {
 
@@ -1125,7 +1099,25 @@ rpc_get_user(worker *w, object *params)
 	free_user(u);
 }
 
-static void
+void
+rpc_get_own_user(worker *w, object *params)
+{
+
+	user *u;
+	char *name;
+	object * result;
+
+	if (!get_auth_param(w, params, &u)) {
+		return;
+	}
+
+	result = clone_obj(u->json);
+        add_obj_string(result, "passwd", "");
+	send_result(w, result);
+	free_user(u);
+}
+
+void
 rpc_delete_user(worker *w, object *params)
 {
 
@@ -1158,7 +1150,7 @@ rpc_delete_user(worker *w, object *params)
 	free_user(u);
 }
 
-static void
+void
 rpc_get_user_names(worker *w, object *params)
 {
 	object *result;
@@ -1173,7 +1165,7 @@ rpc_get_user_names(worker *w, object *params)
 	free_user(u);
 }
 
-static void
+void
 set_own_password(worker *w, object *params)
 {
 	user *  u;
@@ -1202,7 +1194,7 @@ set_own_password(worker *w, object *params)
 	send_result(w, result);
 }
 
-static void
+void
 add_own_device(worker *w, object *params)
 {
 	user *    u;
@@ -1261,7 +1253,7 @@ add_own_device(worker *w, object *params)
 	send_result(w, result);
 }
 
-static void
+void
 delete_own_device(worker *w, object *params)
 {
 	user *    u;
@@ -1351,7 +1343,7 @@ urlencode(const char *in)
 	return (buf);
 }
 
-static void
+void
 create_own_totp(worker *w, object *params)
 {
 	user *       u;
@@ -1420,7 +1412,7 @@ create_own_totp(worker *w, object *params)
 	send_result(w, result);
 }
 
-static void
+void
 delete_own_totp(worker *w, object *params)
 {
 	user *       u;
@@ -1996,7 +1988,7 @@ load_config(const char *path, char **errmsg)
 		ERRF(errmsg, "calloc: %s", strerror(errno));
 		return (NULL);
 	}
-	if ((wc->json = obj_load(path, errmsg)) == NULL) {
+	if ((wc->json = obj_load(path, errmsg, debug)) == NULL) {
 		goto error;
 	}
 
@@ -2407,7 +2399,7 @@ error:
 	return (NULL);
 }
 
-static void
+void
 validate_config(worker *w, object *params)
 {
 	object *       result;
@@ -2431,7 +2423,7 @@ validate_config(worker *w, object *params)
 	free_config(wc);
 }
 
-static void
+void
 restart_server(worker *w, object *params)
 {
 	object *       result;
