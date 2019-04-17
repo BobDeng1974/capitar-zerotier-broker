@@ -37,7 +37,7 @@
 static worker_config *wc;
 
 
-static char *
+char *
 hash_password(const char *pass)
 {
 	mbedtls_sha1_context ctx;
@@ -206,23 +206,32 @@ find_user(const char *name)
 {
 	char *path;
 	user *u;
+	char *name1;
 
 	if ((wc == NULL) || (wc->userdir == NULL)) {
 		return (NULL);
 	}
+
+	// ensure name is lower case, so name auth can be case insensitive
+	name1 = strdup(name);
+	to_lower(name1);
+
 	// Sanity check here to ensure name is safe for files.
-	if ((!safe_filename(name)) ||
-	    ((path = path_join(wc->userdir, name, ".usr")) == NULL)) {
+	if ((!safe_filename(name1)) ||
+	    ((path = path_join(wc->userdir, name1, ".usr")) == NULL)) {
+		free(name1);
 		return (NULL);
 	}
 	if (((u = calloc(1, sizeof(user))) == NULL) ||
 	    ((u->json = obj_load(path, NULL)) == NULL) || (!parse_user(u)) ||
-	    (strcmp(u->name, name) != 0)) {
+	    (strcmp(u->name, name1) != 0)) {
 		free(path);
 		free_user(u);
+		free(name1);
 		return (NULL);
 	}
 	free(path);
+	free(name1);
 
 	return (u);
 }
@@ -495,6 +504,7 @@ create_user(object *newuser, int *code)
 	char *path;
 	user *u;
 	char *name;
+	char *name1;
 
 	if ((wc == NULL) || (wc->userdir == NULL)) {
 		return (NULL);
@@ -505,13 +515,20 @@ create_user(object *newuser, int *code)
 		*code = E_BADPARAMS;
 		return (NULL);
 	}
-	if (!add_obj_uint64(newuser, "created_ms", nng_clock())) {
+
+	// ensure name is lower case, so name auth can be case insensitive
+	name1 = strdup(name);
+	to_lower(name1);
+
+	if ((!add_obj_string(newuser, "name", name1)) ||
+	    (!add_obj_uint64(newuser, "created_ms", nng_clock()))) {
 		*code = E_NOMEM;
 		return (NULL);
 	}
+
 	// Sanity check here to ensure name is safe for files.
-	if ((!safe_filename(name)) ||
-	    ((path = path_join(wc->userdir, name, ".usr")) == NULL)) {
+	if ((!safe_filename(name1)) ||
+	    ((path = path_join(wc->userdir, name1, ".usr")) == NULL)) {
 		*code = E_BADPARAMS;
 		return (NULL);
 	}
@@ -519,6 +536,7 @@ create_user(object *newuser, int *code)
 		*code = E_EXISTS;
 		return (NULL);
 	}
+
 	if (!obj_save(path, newuser, NULL)) {
 		*code = E_INTERNAL;
 		free_obj(newuser);
@@ -529,7 +547,7 @@ create_user(object *newuser, int *code)
 
 	if (((u = calloc(1, sizeof(user))) == NULL) ||
 	    ((u->json = obj_load(path, NULL)) == NULL) || (!parse_user(u)) ||
-	    (strcmp(u->name, name) != 0)) {
+	    (strcmp(u->name, name1) != 0)) {
 		free(path);
 		free_user(u);
 		return (NULL);

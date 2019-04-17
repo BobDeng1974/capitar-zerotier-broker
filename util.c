@@ -257,3 +257,9 @@ samestr(const char *s1, const char *s2)
 	return (true);
 }
 
+void
+to_lower(char *str) {
+	for(int i = 0; str[i]; i++){
+		str[i] = tolower(str[i]);
+	}
+}

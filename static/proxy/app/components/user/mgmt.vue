@@ -46,8 +46,13 @@
                         v-model="newuser.passwd2"
                         placeholder="Enter user password"
                         v-on:keyup.enter.native="addUser()"
+                        :state="state_newuser_passwd2"
           ></b-form-input>
         </b-input-group>
+
+        <b-form-invalid-feedback>
+          Password does not match
+        </b-form-invalid-feedback>
 
         <b-input-group>
           <div class="input-group-prepend w-25">
@@ -146,7 +151,7 @@
       </user>
     </div>
 
-    <div v-if="!loading && users">
+    <div v-if="!loading && users && users.length == 0">
         <b-alert class="col-6" show> No users found ... </b-alert>
     </div>
   </div>
@@ -183,6 +188,14 @@ module.exports = {
         return null
       }
       return new RegExp(this.user_filter, 'ig')
+    },
+    state_newuser_passwd2 () {
+      if (this.newuser.passwd1 != this.newuser.passwd2) {
+          return false
+      }
+      if (this.newuser.passwd1) {
+        return true
+      }
     }
   },
   mounted () {
@@ -198,15 +211,13 @@ module.exports = {
       this.newuser = {
         name: "",
         email: "", // should usually be the same as name
-        passwd: "",
+        plainpasswd: "",
         passwd1: "",
         passwd2: "",
         firstname: "",
         lastname: "",
-        tag:  Math.floor(Math.random() * 100000),
         description: "",
-        devices: {},
-        networks: {}
+        roles: []
       }
       this.adding_user = true
     },
@@ -214,12 +225,17 @@ module.exports = {
       this.adding_user = false
     },
     addUser() {
+      if (this.newuser.passwd1) {
+        this.newuser.plainpasswd = this.newuser.passwd1
+      }
+      Vue.delete(this.newuser, "passwd1")
+      Vue.delete(this.newuser, "passwd2")
       axios
         .post(this.$restApi + this.controller + "/rpc/create-user", {
           newuser: this.newuser}, {
           headers: {'X-ZTC-Token': this.creds.token.id }
         }).then(response => {
-          this.users.push(response.data)
+          this.users.push(response.data.name)
         }).catch(error => {
           if ((error.response) && (error.response.status == 404)) {
             this.alert_msg = "No such controller found"

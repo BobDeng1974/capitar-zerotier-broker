@@ -1048,6 +1048,10 @@ rpc_create_user(worker *w, object *params)
 	object * newuser;
 	int      errcode;
 	object * result;
+	char    *plainpasswd;
+	char    *passwd;
+	bool     locked = false;
+	object  *roles;
 
 	if (!get_auth_param(w, params, &u)) {
 		return;
@@ -1055,22 +1059,44 @@ rpc_create_user(worker *w, object *params)
 
 	if (!get_obj_obj(params, "newuser", &newuser)) {
 		send_err(w, E_BADPARAMS, NULL);
+		return;
 	}
 
-	if (!add_obj_string(newuser, "created_by", user_name(u))) {
+	get_obj_bool(newuser, "locked", &locked);
+
+	if (((newuser = clone_obj(newuser)) == NULL) ||
+            (!add_obj_uint64(newuser, "tag", nng_random())) ||
+            (!add_obj_obj(newuser, "otpwds", alloc_arr())) ||
+            (!add_obj_obj(newuser, "networks", alloc_obj())) ||
+            (!add_obj_obj(newuser, "devices", alloc_obj())) ||
+	    (!add_obj_bool(newuser, "locked", locked)) ||
+            (!add_obj_string(newuser, "created_by", user_name(u)))) {
 		send_err(w, E_NOMEM, NULL);
+		return;
 	}
+
+	if ((get_obj_string(newuser, "plainpasswd", &plainpasswd)) &&
+	    (!empty(plainpasswd))) {
+		if (((passwd = hash_password(plainpasswd)) == NULL) ||
+		    (!add_obj_string(newuser, "passwd", passwd)) ||
+		    (!del_obj_item(newuser, "plainpasswd"))) {
+			send_err(w, E_NOMEM, NULL);
+			return;
+		}
+	} else {
+		add_obj_string(newuser, "passwd", "");
+	}
+
 	free_user(u);
 
 	if ((u = create_user(newuser, &errcode)) == NULL) {
 		send_err(w, errcode, "Failed to create user");
-		free_user(u);
 		return;
 	}
 
 	result = clone_obj(u->json);
-	send_result(w, result);
 	free_user(u);
+	send_result(w, result);
 }
 
 static void
@@ -1090,7 +1116,6 @@ rpc_get_user(worker *w, object *params)
 
 	if ((u = find_user(name)) == NULL) {
 		send_err(w, E_NOTFOUND, NULL);
-		free(name);
 		return;
 	}
 

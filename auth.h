@@ -77,6 +77,7 @@ extern object *    user_names();
 extern bool        set_password(user *, const char *);
 extern bool        create_totp(user *, const char *);
 extern bool        delete_totp(user *);
+extern char *      hash_password(const char *pass);
 
 extern int          user_num_otpwds(const user *);
 extern const otpwd *user_otpwd(const user *, int);
