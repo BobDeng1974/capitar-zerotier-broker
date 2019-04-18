@@ -370,6 +370,50 @@ zt1_get_members(controller *cp, worker *w, uint64_t nwid)
 }
 
 static void
+zt1_get_own_members_cb(worker *w, void *body, size_t len)
+{
+	object  *obj;
+	object  *arr;
+	char *   name;
+	uint64_t memid;
+
+	if ((obj = parse_obj(body, len)) == NULL) {
+		send_err(w, E_BADJSON, NULL);
+		return;
+	}
+
+	if ((arr = alloc_arr()) == NULL) {
+		free_obj(obj);
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+	name = NULL;
+	while (((name = next_obj_key(obj, name)) != NULL) &&
+	    ((memid = strtoull(name, NULL, 0) != 0)) &&
+	    (is_user_member_owner(w, memid))) {
+		if (!add_arr_string(arr, name)) {
+			free_obj(arr);
+			free_obj(obj);
+			send_err(w, E_NOMEM, NULL);
+			return;
+		}
+	}
+	free_obj(obj);
+
+	send_result(w, arr);
+}
+
+static void
+zt1_get_own_members(controller *cp, worker *w, uint64_t nwid)
+{
+	if (!zt1_init_req(cp, w, "/controller/network/%016llx/member", nwid)) {
+		return;
+	}
+
+	worker_http(w, zt1_get_own_members_cb);
+}
+
+static void
 zt1_get_member_cb(worker *w, void *body, size_t len)
 {
 	object *obj1;

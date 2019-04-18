@@ -93,6 +93,7 @@ struct worker_ops {
 	void (*deauthorize_member)(controller *, worker *, uint64_t, uint64_t);
 	// Device owners
 	void (*get_own_members)(controller *, worker *, uint64_t);
+	void (*get_own_member)(controller *, worker *, uint64_t);
 };
 
 #define WORKER_OPS_VERSION 1

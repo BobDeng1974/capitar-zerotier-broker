@@ -373,6 +373,21 @@ deauthorize_network_member(worker *w, object *params)
 }
 
 void
+get_own_network(worker *w, object *params)
+{
+	controller *cp;
+	uint64_t    nwid;
+
+	if (get_auth_param_with_session(w, params, NULL) &&
+	    get_own_network_param(w, params, &cp, &nwid)) {
+		if (!cp->ops->get_network) {
+			return;
+		}
+		cp->ops->get_network(cp, w, nwid);
+	}
+}
+
+void
 get_own_network_members(worker *w, object *params)
 {
 	controller *cp;

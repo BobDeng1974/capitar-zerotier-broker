@@ -425,6 +425,20 @@ static struct {
 	{ METHOD_DELETE_MEMBER, delete_network_member },
 	{ METHOD_AUTH_MEMBER, authorize_network_member },
 	{ METHOD_DEAUTH_MEMBER, deauthorize_network_member },
+
+	{ METHOD_GET_OWN_NETWORK, get_own_network },
+	{ METHOD_LIST_OWN_NETWORK_MEMBERS, get_own_network_members },
+	{ METHOD_GET_OWN_NETWORK_MEMBER, get_own_network_member },
+	{ METHOD_DELETE_OWN_NETWORK_MEMBER, delete_own_network_member },
+	{ METHOD_AUTH_OWN_NETWORK_MEMBER, authorize_own_network_member },
+	{ METHOD_DEAUTH_OWN_NETWORK_MEMBER, deauthorize_own_network_member },
+
+	{ METHOD_LIST_NETWORK_OWN_MEMBERS, get_network_own_members },
+	{ METHOD_GET_NETWORK_OWN_MEMBER, get_network_own_member },
+	{ METHOD_DELETE_NETWORK_OWN_MEMBER, delete_network_own_member },
+	{ METHOD_AUTH_NETWORK_OWN_MEMBER, authorize_network_own_member },
+	{ METHOD_DEAUTH_NETWORK_OWN_MEMBER, deauthorize_network_own_member },
+
 	{ METHOD_CREATE_TOKEN, create_auth_token },
 	{ METHOD_DELETE_TOKEN, delete_auth_token },
 	{ METHOD_GET_TOKEN, get_auth_token },

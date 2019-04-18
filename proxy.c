@@ -857,7 +857,7 @@ do_networks(nng_aio *aio, object *auth, const char *method, controller *cp, obje
 }
 
 static void
-do_get_network(nng_aio *aio, object *auth, controller *cp, uint64_t nwid)
+do_get_network(nng_aio *aio, object *auth, controller *cp, uint64_t nwid, bool own_network)
 {
 	object *params;
 
@@ -866,12 +866,17 @@ do_get_network(nng_aio *aio, object *auth, controller *cp, uint64_t nwid)
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
-	do_rpc(aio, cp, METHOD_GET_NETWORK, params);
+	if (!own_network) {
+		do_rpc(aio, cp, METHOD_GET_NETWORK, params);
+	} else {
+		do_rpc(aio, cp, METHOD_GET_OWN_NETWORK, params);
+	}
 }
 
 static void
 do_get_network_members(
-    nng_aio *aio, object *auth, controller *cp, uint64_t nwid)
+    nng_aio *aio, object *auth, controller *cp, uint64_t nwid,
+    bool own_network, bool own_member)
 {
 	object *params;
 
@@ -880,12 +885,19 @@ do_get_network_members(
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
-	do_rpc(aio, cp, METHOD_LIST_MEMBERS, params);
+	if (!own_network && !own_member ) {
+		do_rpc(aio, cp, METHOD_LIST_MEMBERS, params);
+	} else if (own_network) {
+		do_rpc(aio, cp, METHOD_LIST_OWN_NETWORK_MEMBERS, params);
+	} else {
+		do_rpc(aio, cp, METHOD_LIST_NETWORK_OWN_MEMBERS, params);
+	}
 }
 
 static void
 do_get_member(
-    nng_aio *aio, object *auth, controller *cp, uint64_t nwid, uint64_t nodeid)
+    nng_aio *aio, object *auth, controller *cp, uint64_t nwid, uint64_t nodeid,
+    bool own_network, bool own_member)
 {
 	object *params;
 
@@ -896,12 +908,19 @@ do_get_member(
 		free_obj(auth);
 		return;
 	}
-	do_rpc(aio, cp, METHOD_GET_MEMBER, params);
+	if (!own_network && !own_member) {
+		do_rpc(aio, cp, METHOD_GET_MEMBER, params);
+	} else if (own_network) {
+		do_rpc(aio, cp, METHOD_GET_OWN_NETWORK_MEMBER, params);
+	} else {
+		do_rpc(aio, cp, METHOD_GET_NETWORK_OWN_MEMBER, params);
+	}
 }
 
 static void
 do_delete_member(
-    nng_aio *aio, object *auth, controller *cp, uint64_t nwid, uint64_t nodeid)
+    nng_aio *aio, object *auth, controller *cp, uint64_t nwid, uint64_t nodeid,
+    bool own_network, bool own_member)
 {
 	object *params;
 
@@ -911,12 +930,19 @@ do_delete_member(
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
-	do_rpc(aio, cp, METHOD_DELETE_MEMBER, params);
+	if (!own_network && !own_member) {
+		do_rpc(aio, cp, METHOD_DELETE_MEMBER, params);
+	} else if (own_network) {
+		do_rpc(aio, cp, METHOD_DELETE_OWN_NETWORK_MEMBER, params);
+	} else {
+		do_rpc(aio, cp, METHOD_DELETE_NETWORK_OWN_MEMBER, params);
+	}
 }
 
 static void
 do_authorize_member(
-    nng_aio *aio, object *auth, controller *cp, uint64_t nwid, uint64_t nodeid)
+    nng_aio *aio, object *auth, controller *cp, uint64_t nwid, uint64_t nodeid,
+    bool own_network, bool own_member)
 {
 	object *params;
 
@@ -926,12 +952,19 @@ do_authorize_member(
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
-	do_rpc(aio, cp, METHOD_AUTH_MEMBER, params);
+	if (!own_network && !own_member) {
+		do_rpc(aio, cp, METHOD_AUTH_MEMBER, params);
+	} else if (own_network) {
+		do_rpc(aio, cp, METHOD_AUTH_OWN_NETWORK_MEMBER, params);
+	} else {
+		do_rpc(aio, cp, METHOD_AUTH_NETWORK_OWN_MEMBER, params);
+	}
 }
 
 static void
 do_deauthorize_member(
-    nng_aio *aio, object *auth, controller *cp, uint64_t nwid, uint64_t nodeid)
+    nng_aio *aio, object *auth, controller *cp, uint64_t nwid, uint64_t nodeid,
+    bool own_network, bool own_member)
 {
 	object *params;
 
@@ -941,20 +974,27 @@ do_deauthorize_member(
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
 	}
-	do_rpc(aio, cp, METHOD_DEAUTH_MEMBER, params);
+	if (!own_network && !own_member) {
+		do_rpc(aio, cp, METHOD_DEAUTH_MEMBER, params);
+	} else if (own_network) {
+		do_rpc(aio, cp, METHOD_DEAUTH_OWN_NETWORK_MEMBER, params);
+	} else {
+		do_rpc(aio, cp, METHOD_DEAUTH_NETWORK_OWN_MEMBER, params);
+	}
 }
 
 static void
 do_network_member(nng_aio *aio, object *auth, const char *method,
-    controller *cp, uint64_t nwid, uint64_t nodeid, const char *uri)
+    controller *cp, uint64_t nwid, uint64_t nodeid, const char *uri,
+    bool own_network, bool own_member)
 {
 	if (strcmp(uri, "") == 0) {
 		if (strcmp(method, "GET") == 0) {
-			do_get_member(aio, auth, cp, nwid, nodeid);
+			do_get_member(aio, auth, cp, nwid, nodeid, own_network, own_member);
 			return;
 		}
 		if (strcmp(method, "DELETE") == 0) {
-			do_delete_member(aio, auth, cp, nwid, nodeid);
+			do_delete_member(aio, auth, cp, nwid, nodeid, own_network, own_member);
 			return;
 		}
 		// In the future we could support POST for creating
@@ -968,7 +1008,7 @@ do_network_member(nng_aio *aio, object *auth, const char *method,
 	}
 	if (strcmp(uri, "/authorize") == 0) {
 		if (strcmp(method, "POST") == 0) {
-			do_authorize_member(aio, auth, cp, nwid, nodeid);
+			do_authorize_member(aio, auth, cp, nwid, nodeid, own_network, own_member);
 			return;
 		}
 		free_obj(auth);
@@ -977,7 +1017,7 @@ do_network_member(nng_aio *aio, object *auth, const char *method,
 	}
 	if (strcmp(uri, "/deauthorize") == 0) {
 		if (strcmp(method, "POST") == 0) {
-			do_deauthorize_member(aio, auth, cp, nwid, nodeid);
+			do_deauthorize_member(aio, auth, cp, nwid, nodeid, own_network, own_member);
 			return;
 		}
 		free_obj(auth);
@@ -990,7 +1030,7 @@ do_network_member(nng_aio *aio, object *auth, const char *method,
 
 static void
 do_network(nng_aio *aio, object *auth, const char *method, controller *cp,
-    uint64_t nwid, const char *uri)
+    uint64_t nwid, const char *uri, bool own_network)
 {
 	// The subcommand can be:
 	//
@@ -1001,7 +1041,7 @@ do_network(nng_aio *aio, object *auth, const char *method, controller *cp,
 
 	if (strcmp(uri, "") == 0) {
 		if (strcmp(method, "GET") == 0) {
-			do_get_network(aio, auth, cp, nwid);
+			do_get_network(aio, auth, cp, nwid, own_network);
 			return;
 		}
 		free_obj(auth);
@@ -1010,7 +1050,16 @@ do_network(nng_aio *aio, object *auth, const char *method, controller *cp,
 	}
 	if (strcmp(uri, "/member") == 0) {
 		if (strcmp(method, "GET") == 0) {
-			do_get_network_members(aio, auth, cp, nwid);
+			do_get_network_members(aio, auth, cp, nwid, own_network, false);
+			return;
+		}
+		free_obj(auth);
+		rpcerr(aio, NNG_HTTP_STATUS_METHOD_NOT_ALLOWED, NULL);
+		return;
+	}
+	if (strcmp(uri, "/own_member") == 0) {
+		if (strcmp(method, "GET") == 0) {
+			do_get_network_members(aio, auth, cp, nwid, false, true);
 			return;
 		}
 		free_obj(auth);
@@ -1025,7 +1074,22 @@ do_network(nng_aio *aio, object *auth, const char *method, controller *cp,
 		nodeid = strtoull(uri, &ep, 16);
 		if ((ep != uri) && ((*ep == '\0') || (*ep == '/'))) {
 			do_network_member(
-			    aio, auth, method, cp, nwid, nodeid, ep);
+			    aio, auth, method, cp, nwid, nodeid, ep, own_network, false);
+			return;
+		}
+		free_obj(auth);
+		rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
+		return;
+	}
+	if (strncmp(uri, "/own_member/", strlen("/own_member/")) == 0) {
+		uint64_t nodeid;
+		char *   ep;
+
+		uri += strlen("/own_member/");
+		nodeid = strtoull(uri, &ep, 16);
+		if ((ep != uri) && ((*ep == '\0') || (*ep == '/'))) {
+			do_network_member(
+			    aio, auth, method, cp, nwid, nodeid, ep, false, true);
 			return;
 		}
 		free_obj(auth);
@@ -1471,7 +1535,19 @@ proxy_api(nng_aio *aio)
 		uri += strlen("/network/");
 		nwid = strtoull(uri, &ep, 16);
 		if ((*ep == '/') || (*ep == '\0')) {
-			do_network(aio, auth, method, cp, nwid, ep);
+			do_network(aio, auth, method, cp, nwid, ep, false);
+			return;
+		}
+		rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);
+		return;
+	}
+	if (strncmp(uri, "/own_network/", strlen("/own_network/")) == 0) {
+		uint64_t nwid;
+
+		uri += strlen("/own_network/");
+		nwid = strtoull(uri, &ep, 16);
+		if ((*ep == '/') || (*ep == '\0')) {
+			do_network(aio, auth, method, cp, nwid, ep, true);
 			return;
 		}
 		rpcerr(aio, NNG_HTTP_STATUS_NOT_FOUND, NULL);

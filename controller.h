@@ -38,7 +38,13 @@ struct controller {
 	int                debug;
 };
 
+// w->session user_networks
+extern bool is_user_network_owner(worker *, uint64_t);
+// w->session user_devices
+extern bool is_user_member_owner(worker *, uint64_t);
 
+
+// RPC
 extern void get_status(worker *, object *);
 extern void create_network(worker *, object *);
 extern void get_networks(worker *, object *);
@@ -49,6 +55,7 @@ extern void delete_network_member(worker *, object *);
 extern void authorize_network_member(worker *, object *);
 extern void deauthorize_network_member(worker *, object *);
 // Network owners
+extern void get_own_network(worker *, object *);
 extern void get_own_network_members(worker *, object *);
 extern void get_own_network_member(worker *, object *);
 extern void delete_own_network_member(worker *, object *);

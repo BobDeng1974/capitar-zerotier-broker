@@ -132,7 +132,7 @@ module.exports = {
   },
   props: ["network", "index", "networks", "controller", "creds", "nw_regex"],
   mounted () {
-    if (this.nw.system_network && !this.nw.name) {
+    if (!this.nw.name) {
       this.get_nw()
     }
   },
@@ -157,8 +157,13 @@ module.exports = {
       this.adding_device = false
     },
     get_nw() {
+      if (this.nw.system_network) {
+        path = "/network/"
+      } else {
+        path = "/own_network/"
+      }
       axios
-        .get(this.$restApi + this.controller + "/network/" + this.nw.id, {
+        .get(this.$restApi + this.controller + path + this.nw.id, {
           headers: {'X-ZTC-Token': this.creds.token.id }
         })
         .then(response => {
@@ -171,8 +176,15 @@ module.exports = {
     },
     get_nw_members() {
       this.requested_members = true
+      if (this.nw.system_network) {
+        path = "/network/" + this.nw.id + "/member"
+      } else if (this.nw.user_network) {
+        path = "/own_network/" + this.nw.id + "/member"
+      } else {
+        path = "/network/" + this.nw.id + "/own_member"
+      }
       axios
-        .get(this.$restApi + this.controller + "/network/" + this.nw.id + "/member", {
+        .get(this.$restApi + this.controller + path, {
           headers: {'X-ZTC-Token': this.creds.token.id }
         })
         .then(response => {
