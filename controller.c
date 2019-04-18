@@ -553,11 +553,14 @@ enroll_own_device_next2(worker *w, object *result)
 	uint64_t  tag;
 	user     *u;
 	object   *obj1;
+	char     *network;
 	char     *member;
 	int       errcode;
+	char     *errmsg;
 
 	if ((!valid_worker_session(w)) ||
 	    (!get_obj_obj(w->session, "params", &obj1)) ||
+	    (!get_obj_string(obj1, "network", &network)) ||
 	    (!get_obj_string(obj1, "member", &member))) {
 		send_err(w, E_INTERNAL, "No session params");
 		free_obj(result);
@@ -566,7 +569,8 @@ enroll_own_device_next2(worker *w, object *result)
 
 	if ((!get_obj_int(result, "vProto", &vProto)) ||
 	    (vProto == -1)) {
-		send_err(w, E_NOTFOUND, "Device has not joined the enroll network");
+		ERRF(&errmsg, "Device %s has not joined the enroll network %s", member, network);
+		send_err(w, E_NOTFOUND, errmsg);
 		free_obj(result);
 		return;
 	}

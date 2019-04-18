@@ -21,8 +21,15 @@
             >Delete</b-btn>
 
       </div>
+
       <div v-if="deleted">
           <i>Deleted</i>
+      </div>
+
+      <div v-if="enrolling">
+          <h5><b>Important:</b>
+            before continueing, your device must have joined your personal
+            device enroll network: {{ enroll_nwid }} </h5>
       </div>
 
       <div v-if="request_confirmation">
@@ -85,6 +92,7 @@ module.exports = {
       busy: false,
       device: null,
       enroll_nwid: "",
+      enrolling: false,
       err_resp: null
     }
   },
@@ -109,6 +117,7 @@ module.exports = {
       this.request_confirmation = false
       this.confirm_action = ''
       this.busy = false
+      this.enrolling = false
     },
     rpc(event, method, data) {
       this.clear()
@@ -124,9 +133,13 @@ module.exports = {
             this.$parent.$emit('load_user')
           }
           if (['enroll-own-device'].includes(method)) {
+            this.enrolling = false
             this.$parent.$emit('load_user')
           }
         }).catch(error => {
+          if (['enroll-own-device'].includes(method)) {
+            this.enrolling = false
+          }
           if ((error.response) && error.response.status ) {
             this.err_resp = error.response
           }
@@ -139,20 +152,24 @@ module.exports = {
         })
     },
     delete_device(event) {
+      this.clear()
       this.confirm_action = "delete-own-device"
       this.action_data = {id: this.device.id}
       this.request_confirmation = true
       this.busy = true
     },
     enroll_device(event) {
+      this.clear()
       if (!this.enroll_nwid) {
         console.log("No enroll network")
+        this.err_resp.statusText = "No enroll network"
         return
       }
       this.confirm_action = "enroll-own-device"
       this.action_data = {member: this.device.id, network: this.enroll_nwid}
       this.request_confirmation = true
       this.busy = true
+      this.enrolling = true
     }
   },
   mounted () {
