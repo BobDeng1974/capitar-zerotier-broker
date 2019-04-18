@@ -127,11 +127,18 @@ module.exports = {
       nw: this.network,
       nw_members: {},
       nw_member_seq: 1,
-      requested_members: false
+      requested_members: false,
+      system_network: true,
+      user_network: null,
     }
   },
   props: ["network", "index", "networks", "controller", "creds", "nw_regex"],
   mounted () {
+    if (!this.nw.system_network) {
+      this.system_network = false
+    } else {
+      this.system_network = true
+    }
     if (!this.nw.name) {
       this.get_nw()
     }
@@ -157,10 +164,10 @@ module.exports = {
       this.adding_device = false
     },
     get_nw() {
-      if (this.nw.system_network) {
-        path = "/network/"
-      } else {
+      if (!this.system_network) {
         path = "/own_network/"
+      } else {
+        path = "/network/"
       }
       axios
         .get(this.$restApi + this.controller + path + this.nw.id, {
@@ -168,6 +175,7 @@ module.exports = {
         })
         .then(response => {
           this.nw = response.data
+          this.nw.system_network = this.system_network
         })
         .catch(error => {
           console.log(error)
@@ -176,12 +184,10 @@ module.exports = {
     },
     get_nw_members() {
       this.requested_members = true
-      if (this.nw.system_network) {
-        path = "/network/" + this.nw.id + "/member"
-      } else if (this.nw.user_network) {
+      if (!this.system_network) {
         path = "/own_network/" + this.nw.id + "/member"
       } else {
-        path = "/network/" + this.nw.id + "/own_member"
+        path = "/network/" + this.nw.id + "/member"
       }
       axios
         .get(this.$restApi + this.controller + path, {
@@ -208,8 +214,17 @@ module.exports = {
         })
     },
     get_nw_member(device) {
+      if (!this.system_network) {
+        path = "/own_network/" + this.nw.id + "/member/"
+      } else {
+        if (!Object.keys(this.creds.user.devices).includes(device)) {
+          path = "/network/" + this.nw.id + "/member/"
+        } else {
+          path = "/network/" + this.nw.id + "/own_member/"
+        }
+      }
       axios
-        .get(this.$restApi + this.controller + "/network/" + this.nw.id + "/member/" + device.id, {
+        .get(this.$restApi + this.controller + path + device.id, {
           headers: {'X-ZTC-Token': this.creds.token.id }
         })
         .then(response => {

@@ -254,7 +254,7 @@ module.exports = {
               this.networks[nwid] = {
                 id: nwid,
                 user_network: this.creds.user.networks[nwid],
-                system_network: false,
+                system_network: false
               }
             } else {
               this.networks[nwid].user_network = this.creds.user.networks[nwid]
