@@ -9,11 +9,13 @@
 
   <section v-if="!errored">
 
-    <b-jumbotron :header="userName" :lead="userName" >
-      <div v-if="!deleted">
+    <b-jumbotron :header="userName" :lead="userName"
+      v-observe-visibility="visibilityChanged"
+    >
+      <div v-if="user && !deleted">
           <b-btn variant="warning" :disabled="busy" v-on:click="delete_user">Delete</b-btn>
       </div>
-      <div v-else="deleted">
+      <div v-if="user && deleted">
           <i>Deleted</i>
       </div>
 
@@ -36,19 +38,13 @@ module.exports = {
 
   computed: {
     userName() {
-      if (!this.user) {
-        return this.name
-      }
-      return this.user.name
+      return this.name
     },
     show_user() {
-      if (!this.user) {
-        return false
-      }
       if (!this.user_regex) {
         return true
       }
-      if (this.user.name.match(this.user_regex)) {
+      if (this.name.match(this.user_regex)) {
         return true
       }
       return false
@@ -69,6 +65,11 @@ module.exports = {
   },
   props: ["name", "controller", "creds", "user_regex"],
   methods: {
+    visibilityChanged(changed) {
+      if (changed && !this.user) {
+        this.get_user()
+      }
+    },
     clear() {
       this.err_resp = null
       this.alert_msg = ""
@@ -111,21 +112,21 @@ module.exports = {
       this.action_data = {name: this.user.name}
       this.request_confirmation = true
       this.busy = true
+    },
+    get_user () {
+      axios
+        .post(this.$restApi + this.controller + "/rpc/get-user", {name: this.name}, {
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+          this.user = response.data
+        })
+        .catch(error => {
+          console.log(error)
+          this.errored = true
+        })
+        .finally(() => this.loading = false)
     }
-  },
-  mounted () {
-    axios
-      .post(this.$restApi + this.controller + "/rpc/get-user", {name: this.name}, {
-        headers: {'X-ZTC-Token': this.creds.token.id }
-      })
-      .then(response => {
-        this.user = response.data
-      })
-      .catch(error => {
-        console.log(error)
-        this.errored = true
-      })
-      .finally(() => this.loading = false)
   }
 }
 </script>

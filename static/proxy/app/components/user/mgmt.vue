@@ -19,10 +19,16 @@
           </div>
           <b-form-input
                         type="text"
-                        v-model="newuser.name"
+                        v-model="newuser.email"
                         placeholder="Enter user email adress (login)"
                         v-on:keyup.enter.native="addUser()"
+                        :state="state_newuser_email"
           ></b-form-input>
+
+          <b-form-invalid-feedback>
+            Valid email address is required for login name
+          </b-form-invalid-feedback>
+
         </b-input-group>
 
         <b-input-group>
@@ -48,11 +54,12 @@
                         v-on:keyup.enter.native="addUser()"
                         :state="state_newuser_passwd2"
           ></b-form-input>
-        </b-input-group>
 
-        <b-form-invalid-feedback>
-          Password does not match
-        </b-form-invalid-feedback>
+          <b-form-invalid-feedback>
+            Password does not match
+          </b-form-invalid-feedback>
+
+        </b-input-group>
 
         <b-input-group>
           <div class="input-group-prepend w-25">
@@ -166,7 +173,7 @@ module.exports = {
     return {
       adding_user: false,
       info: null,
-      loading: true,
+      loading: false,
       err_resp: null,
       alert_msg: "",
       users: [],
@@ -189,6 +196,10 @@ module.exports = {
       }
       return new RegExp(this.user_filter, 'ig')
     },
+    state_newuser_email () {
+      re = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+    return re.test(String(this.newuser.email).toLowerCase())
+    },
     state_newuser_passwd2 () {
       if (this.newuser.passwd1 != this.newuser.passwd2) {
           return false
@@ -203,11 +214,11 @@ module.exports = {
   },
   methods: {
     clear() {
-      this.loading = true
       this.err_resp = null
       this.alert_msg = ""
     },
     showAddUser() {
+      this.clear()
       this.newuser = {
         name: "",
         email: "", // should usually be the same as name
@@ -225,6 +236,8 @@ module.exports = {
       this.adding_user = false
     },
     addUser() {
+      this.clear()
+      this.newuser.name = this.newuser.email
       if (this.newuser.passwd1) {
         this.newuser.plainpasswd = this.newuser.passwd1
       }
@@ -251,6 +264,7 @@ module.exports = {
     },
     getUsers (event) {
       this.clear()
+      this.loading = true
       axios
         .post(this.$restApi + this.controller + "/rpc/get-usernames", {}, {
           headers: {'X-ZTC-Token': this.creds.token.id }
