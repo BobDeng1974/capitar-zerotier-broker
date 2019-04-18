@@ -206,12 +206,12 @@ module.exports = {
           headers: {'X-ZTC-Token': this.creds.token.id }
         })
         .then(response => {
+          this.$emit('load_user')
         })
         .catch(error => {
           console.log(error)
           this.errored = true
         })
-        .finally(() => this.$emit('load_user'))
     },
     createDeviceEnrollNetwork() {
       if (this.tried_creating_device_enroll_nw) {
@@ -229,12 +229,12 @@ module.exports = {
           headers: {'X-ZTC-Token': this.creds.token.id }
         })
         .then(response => {
+          this.$emit('load_user')
         })
         .catch(error => {
           console.log(error)
           this.errored = true
         })
-        .finally(() => this.$emit('load_user'))
     },
     getNetworks (event) {
       this.clear()
