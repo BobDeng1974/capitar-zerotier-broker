@@ -617,7 +617,7 @@ enroll_own_device_next(worker *w, object *result)
 		w->on_result = enroll_own_device_next2;
 	}
 
-	if (get_member_param(w, params, &cp, &nwid, &deviceId)) {
+	if (get_own_network_member_param(w, params, &cp, &nwid, &deviceId)) {
 		if (!cp->ops->get_member) {
 			return;
 		}
@@ -694,7 +694,7 @@ enroll_own_device(worker *w, object *params)
 
 	free_user(u);
 
-	if (get_member_param(w, params, &cp, &nwid, &deviceId)) {
+	if (get_own_network_member_param(w, params, &cp, &nwid, &deviceId)) {
 		if (!cp->ops->authorize_member) {
 			return;
 		}
