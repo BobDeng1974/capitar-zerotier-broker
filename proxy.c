@@ -874,6 +874,23 @@ do_get_network(nng_aio *aio, object *auth, controller *cp, uint64_t nwid, bool o
 }
 
 static void
+do_delete_network(nng_aio *aio, object *auth, controller *cp, uint64_t nwid, bool own_network)
+{
+	object *params;
+
+	if (((params = create_controller_params(cp, auth)) == NULL) ||
+	    (!add_obj_uint64(params, "network", nwid))) {
+		nng_aio_finish(aio, NNG_ENOMEM);
+		return;
+	}
+	if (!own_network) {
+		do_rpc(aio, cp, METHOD_DELETE_NETWORK, params);
+	} else {
+		do_rpc(aio, cp, METHOD_DELETE_OWN_NETWORK, params);
+	}
+}
+
+static void
 do_get_network_members(
     nng_aio *aio, object *auth, controller *cp, uint64_t nwid,
     bool own_network, bool own_member)
@@ -1042,6 +1059,10 @@ do_network(nng_aio *aio, object *auth, const char *method, controller *cp,
 	if (strcmp(uri, "") == 0) {
 		if (strcmp(method, "GET") == 0) {
 			do_get_network(aio, auth, cp, nwid, own_network);
+			return;
+		}
+		if (strcmp(method, "DELETE") == 0) {
+			do_delete_network(aio, auth, cp, nwid, own_network);
 			return;
 		}
 		free_obj(auth);

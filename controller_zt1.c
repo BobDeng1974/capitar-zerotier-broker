@@ -93,6 +93,7 @@ zt1_create_network_cb(worker *w, void *body, size_t len)
 	char     *username;
 	uint64_t  tag;
         user     *u;
+        char     *owner;
 	int       errcode;
 	char     *nwid;
 	object   *nw;
@@ -120,19 +121,29 @@ zt1_create_network_cb(worker *w, void *body, size_t len)
 		send_err(w, E_NOTFOUND, "Cannot match network creator with user.");
 		return;
 	}
+	free_user(u);
 
-	if (!get_obj_obj(u->json, "networks", &usernw)) {
-		usernw2 = alloc_obj();
-	} else {
-		usernw2 = clone_obj(usernw);
-	}
-
+	owner = strdup(username);
 	nwtype = "unknown";
 	if (!get_obj_obj(w->session, "nwinfo", &nw)) {
 		nw2 = alloc_obj();
 	} else {
 		nw2 = clone_obj(nw);
 		get_obj_string(nw, "type", &nwtype);
+		get_obj_string(nw, "owner", &owner);
+	}
+
+	if ((samestr(username, owner)) ||
+	    (!check_api_role("create-user", w->eff_roles)) ||
+	    ((u = find_user(owner)) == NULL)) {
+		// Cannot set to intended user, so set to self
+		u = find_user(username);
+	}
+
+	if (!get_obj_obj(u->json, "networks", &usernw)) {
+		usernw2 = alloc_obj();
+	} else {
+		usernw2 = clone_obj(usernw);
 	}
 
 	if ((usernw2 == NULL) ||
@@ -327,6 +338,37 @@ zt1_get_network(controller *cp, worker *w, uint64_t nwid)
 
 	worker_http(w, zt1_get_network_cb);
 }
+
+static void
+zt1_delete_network_cb(worker *w, void *body, size_t len)
+{
+	object *obj;
+
+	// Delete has no body text.
+	if ((obj = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+	} else {
+		send_result(w, obj);
+	}
+}
+
+static void
+zt1_delete_network(controller *cp, worker *w, uint64_t nwid)
+{
+	nng_http_req *req;
+
+	if (!zt1_init_req(cp, w, "/controller/network/%016llx",
+	        nwid)) {
+		return;
+	}
+	req = worker_http_req(w);
+	if (nng_http_req_set_method(req, "DELETE") != 0) {
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+	worker_http(w, zt1_delete_network_cb);
+}
+
 
 static void
 zt1_get_members_cb(worker *w, void *body, size_t len)
@@ -683,6 +725,7 @@ worker_ops controller_zt1_ops = {
 	.create_network     = zt1_create_network,
 	.get_networks       = zt1_get_networks,
 	.get_network        = zt1_get_network,
+	.delete_network     = zt1_delete_network,
 	.get_members        = zt1_get_members,
 	.get_member         = zt1_get_member,
 	.delete_member      = zt1_delete_member,

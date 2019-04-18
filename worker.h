@@ -86,6 +86,7 @@ struct worker_ops {
 	void (*create_network)(controller *, worker *, object *);
 	void (*get_networks)(controller *, worker *);
 	void (*get_network)(controller *, worker *, uint64_t);
+	void (*delete_network)(controller *, worker *, uint64_t);
 	void (*get_members)(controller *, worker *, uint64_t);
 	void (*get_member)(controller *, worker *, uint64_t, uint64_t);
 	void (*delete_member)(controller *, worker *, uint64_t, uint64_t);

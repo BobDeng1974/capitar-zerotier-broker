@@ -14,6 +14,7 @@
     >
       <div v-if="user && !deleted">
           <b-btn variant="warning" :disabled="busy" v-on:click="delete_user">Delete</b-btn>
+          <b-btn variant="success" :disabled="busy" v-on:click="createDeviceEnrollNetwork()">Create device enroll network</b-btn>
       </div>
       <div v-if="user && deleted">
           <i>Deleted</i>
@@ -69,6 +70,56 @@ module.exports = {
       if (changed && !this.user) {
         this.get_user()
       }
+    },
+    zt1_enroll_nw_template() {
+      return {
+        "authTokens":   [{
+                }],
+        "capabilities": [],
+        "enableBroadcast":      false,
+        "ipAssignmentPools":    [],
+        "mtu":  2800,
+        "multicastLimit":       32,
+        "name": "",
+        "private":      true,
+        "remoteTraceLevel":     0,
+        "remoteTraceTarget":    null,
+        "routes":       [],
+        "rules":        [{
+                        "not":  false,
+                        "or":   false,
+                        "type": "ACTION_DROP"
+                }],
+        "tags": [],
+        "v4AssignMode": {
+                "zt":   false
+        },
+        "v6AssignMode": {
+                "6plane":       false,
+                "rfc4193":      false,
+                "zt":   false
+        }
+      }
+    },
+    createDeviceEnrollNetwork() {
+      this.busy = true
+      new_nwconf = this.zt1_enroll_nw_template()
+      new_nwconf.name = "Device Enroll Network " + this.user.name
+      axios
+        .post(this.$restApi + this.controller + "/network", {
+          nwconf: new_nwconf,
+          nwinfo: {"type": "device_enroll", "owner": this.user.name}
+        },{
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+          this.$emit('load_user')
+        })
+        .catch(error => {
+          console.log(error)
+          this.errored = true
+        })
+        .finally(() => {this.busy = false})
     },
     clear() {
       this.err_resp = null

@@ -16,29 +16,37 @@
         <b-row>
           <b-col>
             <h5> {{ nw.description }} </h5>
-            <b-btn variant="info" v-on:click="showAddDevice()" v-if="!adding_device"
+            <b-btn variant="info" v-on:click="showAddDevice()" v-if="!adding_device && !deleting_network"
             >Add Device</b-btn>
+            <b-btn variant="danger" v-on:click="show_delete_network()" v-if="!adding_device && !deleting_network"
+            >Delete network</b-btn>
 
-              <div v-if="adding_device">
 
-                <b-form-select v-model="selected_device" class="mb-3">
-                  <option :value="null" disabled>-- Please select device --</option>
-                  <option
-                    v-for="(device, id) in creds.user.devices"
-                    v-bind:key="id"
-                    v-bind:value="id"
-                    v-bind:disabled="Object.keys(nw_members).includes(id) || !device.enrolled"
-                  > {{ device.id }} : {{ device.name }}
-                  </option>
-                </b-form-select>
-                <b-btn variant="info" v-on:click="cancelAddDevice()"
-                >Cancel</b-btn>
-                <b-btn variant="success"
-                  v-on:click="addDevice(creds.user.devices[selected_device])"
-                  v-if="selected_device"
-                >Add Device</b-btn>
+           <div v-if="deleting_network">
+             <b-btn variant="info" v-on:click="cancel_delete_network()">No, cancel</b-btn>
+             <b-btn variant="danger" v-on:click="delete_network()">Yes, delete</b-btn>
+           </div>
 
-              </div>
+            <div v-if="adding_device">
+
+              <b-form-select v-model="selected_device" class="mb-3">
+                <option :value="null" disabled>-- Please select device --</option>
+                <option
+                  v-for="(device, id) in creds.user.devices"
+                  v-bind:key="id"
+                  v-bind:value="id"
+                  v-bind:disabled="Object.keys(nw_members).includes(id) || !device.enrolled"
+                > {{ device.id }} : {{ device.name }}
+                </option>
+              </b-form-select>
+              <b-btn variant="info" v-on:click="cancelAddDevice()"
+              >Cancel</b-btn>
+              <b-btn variant="success"
+                v-on:click="addDevice(creds.user.devices[selected_device])"
+                v-if="selected_device"
+              >Add Device</b-btn>
+
+            </div>
 
           </b-col>
           <b-col>
@@ -100,6 +108,9 @@
 module.exports = {
   computed: {
     show_network() {
+      if (!this.nw) {
+        return false
+      }
       if (!this.nw.id) {
         return false
       }
@@ -130,6 +141,7 @@ module.exports = {
       requested_members: false,
       system_network: true,
       user_network: null,
+      deleting_network: false
     }
   },
   props: ["network", "index", "networks", "controller", "creds", "nw_regex"],
@@ -162,6 +174,32 @@ module.exports = {
     addDevice(device) {
       this.authorize_nw_member(device)
       this.adding_device = false
+    },
+    show_delete_network() {
+      this.deleting_network = true
+    },
+    cancel_delete_network() {
+      this.deleting_network = false
+    },
+    delete_network() {
+      if (!this.system_network) {
+        path = "/own_network/"
+      } else {
+        path = "/network/"
+      }
+      axios
+        .delete(this.$restApi + this.controller + path + this.nw.id, {
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+          this.nw = null
+          this.deleting_network = false
+        })
+        .catch(error => {
+          console.log(error)
+          this.errored = true
+          this.deleting_network = false
+        })
     },
     get_nw() {
       if (!this.system_network) {

@@ -46,6 +46,7 @@ enum rpc_errors {
 #define	METHOD_CREATE_NETWORK			"create-network"
 #define	METHOD_LIST_NETWORKS			"get-networks"
 #define	METHOD_GET_NETWORK			"get-network"
+#define	METHOD_DELETE_NETWORK			"delete-network"
 #define	METHOD_LIST_MEMBERS			"get-network-members"
 #define	METHOD_GET_MEMBER			"get-network-member"
 #define	METHOD_DELETE_MEMBER			"delete-network-member"
@@ -53,6 +54,7 @@ enum rpc_errors {
 #define METHOD_DEAUTH_MEMBER			"deauthorize-network-member"
 
 // Network owners
+#define	METHOD_DELETE_OWN_NETWORK		"delete-own-network"
 #define	METHOD_GET_OWN_NETWORK			"get-own-network"
 #define	METHOD_LIST_OWN_NETWORK_MEMBERS		"get-own-network-members"
 #define	METHOD_GET_OWN_NETWORK_MEMBER		"get-own-network-member"

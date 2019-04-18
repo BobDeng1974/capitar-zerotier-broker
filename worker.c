@@ -420,6 +420,7 @@ static struct {
 	{ METHOD_CREATE_NETWORK, create_network },
 	{ METHOD_LIST_NETWORKS, get_networks },
 	{ METHOD_GET_NETWORK, get_network },
+	{ METHOD_DELETE_NETWORK, delete_network },
 	{ METHOD_LIST_MEMBERS, get_network_members },
 	{ METHOD_GET_MEMBER, get_network_member },
 	{ METHOD_DELETE_MEMBER, delete_network_member },
@@ -427,6 +428,7 @@ static struct {
 	{ METHOD_DEAUTH_MEMBER, deauthorize_network_member },
 
 	{ METHOD_GET_OWN_NETWORK, get_own_network },
+	{ METHOD_DELETE_OWN_NETWORK, delete_own_network },
 	{ METHOD_LIST_OWN_NETWORK_MEMBERS, get_own_network_members },
 	{ METHOD_GET_OWN_NETWORK_MEMBER, get_own_network_member },
 	{ METHOD_DELETE_OWN_NETWORK_MEMBER, delete_own_network_member },

@@ -44,6 +44,8 @@ get_auth_param_with_session(worker *w, object *params, user **userp) {
 		return (false);
 	}
 
+	add_obj_string(w->session, "username", strdup(u->name));
+
 	if ((get_obj_obj(u->json, "networks", &obj1)) &&
 	    (!add_obj_obj(w->session, "user_networks", clone_obj(obj1)))) {
 		free_user(u);
@@ -290,6 +292,67 @@ get_network(worker *w, object *params)
 			return;
 		}
 		cp->ops->get_network(cp, w, nwid);
+	}
+}
+
+void
+delete_network_on_result(worker *w, object *result) {
+	user     *u;
+	char     *username;
+	uint64_t nwid;
+	object   *obj1;
+	char     str[32];
+	int      errcode;
+
+	if ((get_obj_string(w->session, "username", &username)) &&
+	    (get_obj_uint64(w->session, "nwid", &nwid)) &&
+	    ((u = find_user(username)) != NULL) &&
+	    (get_obj_obj(u->json, "networks", &obj1))) {
+		(void) snprintf(str, sizeof(str), "%016llx", (long long) nwid);
+		del_obj_item(obj1, str);
+		if (!save_user(u, &errcode)) {
+			send_err(w, errcode, NULL);
+			return;
+		}
+	}
+	send_result(w, result);
+}
+
+void
+delete_network(worker *w, object *params)
+{
+	controller *cp;
+	uint64_t    nwid;
+
+	if ((get_auth_param_with_session(w, params, NULL)) &&
+	    get_network_param(w, params, &cp, &nwid)) {
+		if (!cp->ops->delete_network) {
+			return;
+		}
+		if (w->on_result == NULL) {
+			w->on_result = delete_network_on_result;
+			add_obj_uint64(w->session, "nwid", nwid);
+		}
+		cp->ops->delete_network(cp, w, nwid);
+	}
+}
+
+void
+delete_own_network(worker *w, object *params)
+{
+	controller *cp;
+	uint64_t    nwid;
+
+	if (get_auth_param_with_session(w, params, NULL) &&
+	    get_own_network_param(w, params, &cp, &nwid)) {
+		if (!cp->ops->delete_network) {
+			return;
+		}
+		if (w->on_result == NULL) {
+			w->on_result = delete_network_on_result;
+			add_obj_uint64(w->session, "nwid", nwid);
+		}
+		cp->ops->delete_network(cp, w, nwid);
 	}
 }
 

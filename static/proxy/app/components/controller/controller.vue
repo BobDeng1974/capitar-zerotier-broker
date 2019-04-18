@@ -213,29 +213,6 @@ module.exports = {
           this.errored = true
         })
     },
-    createDeviceEnrollNetwork() {
-      if (this.tried_creating_device_enroll_nw) {
-        console.log("Already tried creating device enroll network")
-        return
-      }
-      this.tried_creating_device_enroll_nw = true
-      new_nwconf = this.zt1_nw_template()
-      new_nwconf.name = "Device Enroll Network " + this.creds.user.name
-      axios
-        .post(this.$restApi + this.controller + "/network", {
-          nwconf: new_nwconf,
-          nwinfo: {"type": "device_enroll"}
-        },{
-          headers: {'X-ZTC-Token': this.creds.token.id }
-        })
-        .then(response => {
-          this.$emit('load_user')
-        })
-        .catch(error => {
-          console.log(error)
-          this.errored = true
-        })
-    },
     getNetworks (event) {
       this.clear()
       axios
@@ -263,9 +240,6 @@ module.exports = {
               this.device_enroll_nws[nwid] = this.creds.user.networks[nwid]
             }
           }.bind(this))
-          if (Object.keys(this.device_enroll_nws).length == 0) {
-            this.createDeviceEnrollNetwork()
-          }
         }).catch(error => {
           if ((error.response) && (error.response.status == 404)) {
             this.alert_msg = "No such controller found"

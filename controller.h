@@ -49,6 +49,7 @@ extern void get_status(worker *, object *);
 extern void create_network(worker *, object *);
 extern void get_networks(worker *, object *);
 extern void get_network(worker *, object *);
+extern void delete_network(worker *, object *);
 extern void get_network_members(worker *, object *);
 extern void get_network_member(worker *, object *);
 extern void delete_network_member(worker *, object *);
@@ -56,6 +57,7 @@ extern void authorize_network_member(worker *, object *);
 extern void deauthorize_network_member(worker *, object *);
 // Network owners
 extern void get_own_network(worker *, object *);
+extern void delete_own_network(worker *, object *);
 extern void get_own_network_members(worker *, object *);
 extern void get_own_network_member(worker *, object *);
 extern void delete_own_network_member(worker *, object *);
