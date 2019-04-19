@@ -136,7 +136,7 @@ module.exports = {
       selected: "",
       networks: null,
       nw_filter: "",
-      creds: { username: "test", password: "123456", oath: "", token: null, ready: false },
+      creds: { username: "", password: "", oath: "", token: null, ready: false },
     }
   },
   props: [],
