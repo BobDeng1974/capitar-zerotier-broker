@@ -301,21 +301,48 @@ delete_network_on_result(worker *w, object *result) {
 	char     *username;
 	uint64_t nwid;
 	object   *obj1;
-	char     str[32];
+	object   *obj2;
+	char     nwid_str[32];
 	int      errcode;
+	object  *usernames;
 
+	if (!get_obj_uint64(w->session, "nwid", &nwid)) {
+		send_err(w, E_INTERNAL, "No nwid in session");
+		return;
+	}
+	(void) snprintf(nwid_str, sizeof(nwid_str), "%016llx", (long long) nwid);
+
+	// First try to delete network from session user
 	if ((get_obj_string(w->session, "username", &username)) &&
-	    (get_obj_uint64(w->session, "nwid", &nwid)) &&
 	    ((u = find_user(username)) != NULL) &&
-	    (get_obj_obj(u->json, "networks", &obj1))) {
-		(void) snprintf(str, sizeof(str), "%016llx", (long long) nwid);
-		del_obj_item(obj1, str);
-		if (!save_user(u, &errcode)) {
-			send_err(w, errcode, NULL);
-			return;
+	    (get_obj_obj(u->json, "networks", &obj1)) &&
+	    (del_obj_item(obj1, nwid_str))) {
+		save_user(u, &errcode);
+	}
+
+	if (username != NULL) {
+		free_user(u);
+		username = NULL;
+	}
+
+	send_result(w, result);
+
+	// Delete network references from all users
+	usernames = user_names();
+	for (int i = 0; i < get_arr_len(usernames); i++) {
+		if ((get_arr_string(usernames, i, &username)) &&
+		    ((u = find_user(username)) != NULL) &&
+		    (get_obj_obj(u->json, "networks", &obj1)) &&
+		    (get_obj_obj(obj1, nwid_str, &obj2)) &&
+		    (del_obj_item(obj1, nwid_str))) {
+			save_user(u, &errcode);
+		}
+		if (username != NULL) {
+			free_user(u);
+			username = NULL;
 		}
 	}
-	send_result(w, result);
+	free_obj(usernames);
 }
 
 void

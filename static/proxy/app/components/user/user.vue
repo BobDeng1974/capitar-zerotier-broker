@@ -14,7 +14,14 @@
     >
       <div v-if="user && !deleted">
           <b-btn variant="warning" :disabled="busy" v-on:click="delete_user">Delete</b-btn>
-          <b-btn variant="success" :disabled="busy" v-on:click="createDeviceEnrollNetwork()">Create device enroll network</b-btn>
+          <b-btn variant="success" :disabled="busy" v-on:click="createDeviceEnrollNetwork()"
+            v-if="!enroll_nwid"
+            >Create device enroll network
+          </b-btn>
+          <b-btn variant="danger" :disabled="busy" v-on:click="deleteDeviceEnrollNetwork()"
+            v-if="enroll_nwid"
+            >Delete device enroll network
+          </b-btn>
       </div>
       <div v-if="user && deleted">
           <i>Deleted</i>
@@ -61,7 +68,8 @@ module.exports = {
       request_confirmation: false,
       deleted: false,
       busy: false,
-      user: null
+      user: null,
+      enroll_nwid: ""
     }
   },
   props: ["name", "controller", "creds", "user_regex"],
@@ -101,6 +109,21 @@ module.exports = {
         }
       }
     },
+    deleteDeviceEnrollNetwork() {
+      this.busy = true
+      axios
+        .delete(this.$restApi + this.controller + "/network/" + this.enroll_nwid, {
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+          this.get_user()
+        })
+        .catch(error => {
+          console.log(error)
+          this.errored = true
+        })
+        .finally(() => {this.busy = false})
+    },
     createDeviceEnrollNetwork() {
       this.busy = true
       new_nwconf = this.zt1_enroll_nw_template()
@@ -113,7 +136,7 @@ module.exports = {
           headers: {'X-ZTC-Token': this.creds.token.id }
         })
         .then(response => {
-          this.$emit('load_user')
+          this.get_user()
         })
         .catch(error => {
           console.log(error)
@@ -171,6 +194,12 @@ module.exports = {
         })
         .then(response => {
           this.user = response.data
+          this.enroll_nwid = ""
+          Object.keys(this.user.networks).forEach(function (nwid) {
+            if (this.user.networks[nwid].type == "device_enroll") {
+              this.enroll_nwid = nwid
+            }
+          }.bind(this))
         })
         .catch(error => {
           console.log(error)

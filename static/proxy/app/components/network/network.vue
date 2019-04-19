@@ -194,6 +194,7 @@ module.exports = {
         .then(response => {
           this.nw = null
           this.deleting_network = false
+	  this.$parent.$emit('load_user')
         })
         .catch(error => {
           console.log(error)

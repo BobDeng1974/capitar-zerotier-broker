@@ -119,7 +119,6 @@ module.exports = {
       check_state_nwconf_name: false,
       creating_network: false,
       device_enroll_nws: {},
-      tried_creating_device_enroll_nw: false
     }
   },
   props: ["controller", "creds", "nw_filter"],
