@@ -12,8 +12,11 @@
     <b-jumbotron :header="userName" :lead="userName"
       v-observe-visibility="visibilityChanged"
     >
+
+      <h5 v-if="enroll_nwid">Device enroll network ID: {{ enroll_nwid }} </h5>
+
       <div v-if="user && !deleted">
-          <b-btn variant="warning" :disabled="busy" v-on:click="delete_user">Delete</b-btn>
+          <b-btn variant="warning" :disabled="busy" v-on:click="delete_user">Delete user</b-btn>
           <b-btn variant="success" :disabled="busy" v-on:click="createDeviceEnrollNetwork()"
             v-if="!enroll_nwid"
             >Create device enroll network
@@ -22,6 +25,35 @@
             v-if="enroll_nwid"
             >Delete device enroll network
           </b-btn>
+
+          <b-card
+             title="Roles"
+             tag="article"
+             style="max-width: 20rem;"
+             class="mb-2"
+           >
+            <b-btn variant="info" :disabled="busy" v-on:click="assign_role('friends')"
+              v-if="!user.roles.includes('friends')"
+              >Assign role "friends"
+            </b-btn>
+            <b-btn variant="info" :disabled="busy" v-on:click="assign_role('staff')"
+              v-if="!user.roles.includes('staff')"
+              >Assign role "staff"
+            </b-btn>
+
+            <h5>Assigned roles</h5>
+            <b-list-group v-if="user.roles.length > 0">
+              <b-list-group-item
+                v-for="(role, index) in user.roles"
+                v-bind:key="index"
+              >
+                <h5> {{ role }} </h5>
+                  <b-btn variant="danger" :disabled="busy" v-on:click="revoke_role(role)"
+                    >Revoke role " {{ role }} "
+                  </b-btn>
+              </b-list-group-item>
+            </b-list-group>
+          </b-card>
       </div>
       <div v-if="user && deleted">
           <i>Deleted</i>
@@ -69,7 +101,7 @@ module.exports = {
       deleted: false,
       busy: false,
       user: null,
-      enroll_nwid: ""
+      enroll_nwid: "",
     }
   },
   props: ["name", "controller", "creds", "user_regex"],
@@ -165,9 +197,11 @@ module.exports = {
           data, {
           headers: {'X-ZTC-Token': this.creds.token.id }
         }).then(response => {
-          console.log(response)
           if (['delete-user'].includes(method)) {
             this.deleted = true
+          }
+          if (['assign-user-role', 'revoke-user-role'].includes(method)) {
+            this.user = response.data
           }
         }).catch(error => {
           if ((error.response) && error.response.status ) {
@@ -180,6 +214,18 @@ module.exports = {
         .finally(() => {
           this.busy = false
         })
+    },
+    assign_role(role) {
+      this.confirm_action = "assign-user-role"
+      this.action_data = {name: this.user.name, role: role}
+      this.busy = true
+      return this.rpc(event, this.confirm_action, this.action_data)
+    },
+    revoke_role(role) {
+      this.confirm_action = "revoke-user-role"
+      this.action_data = {name: this.user.name, role: role}
+      this.busy = true
+      return this.rpc(event, this.confirm_action, this.action_data)
     },
     delete_user(event) {
       this.confirm_action = "delete-user"

@@ -454,6 +454,8 @@ static struct {
 	{ METHOD_DELETE_OWN_DEVICE, delete_own_device },
 	{ METHOD_ENROLL_OWN_DEVICE, enroll_own_device },
 	{ METHOD_CREATE_USER, rpc_create_user },
+	{ METHOD_ASSIGN_USER_ROLE, rpc_assign_user_role },
+	{ METHOD_REVOKE_USER_ROLE, rpc_revoke_user_role },
 	{ METHOD_DELETE_USER, rpc_delete_user },
 	{ METHOD_GET_USER, rpc_get_user },
 	{ METHOD_GET_USERNAMES, rpc_get_user_names },
@@ -1087,6 +1089,157 @@ rpc_create_user(worker *w, object *params)
 	result = clone_obj(u->json);
 	free_user(u);
 	send_result(w, result);
+}
+
+void
+rpc_assign_user_role(worker *w, object *params)
+{
+
+	user   *u;
+	char   *name;
+	char   *role;
+	char   *str;
+	object *roles;
+	object *roles2;
+	object *result;
+	int     errcode;
+
+	if (!get_auth_param(w, params, &u)) {
+		return;
+	}
+	if (!get_obj_string(params, "name", &name)) {
+		free_user(u);
+		send_err(w, E_BADPARAMS, "missing name of user");
+		return;
+	}
+	if (!get_obj_string(params, "role", &role)) {
+		free_user(u);
+		send_err(w, E_BADPARAMS, "missing role");
+		return;
+	}
+
+	if (!asprintf(&str, "_assign-user-role__%s", role)) {
+		free_user(u);
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+
+	if ((!check_api_role(str, w->eff_roles)) &&
+	    (!check_api_role("_assign-user-role__*", w->eff_roles))) {
+		free(str);
+		free_user(u);
+		send_err(w, E_FORBIDDEN, "Permission denied");
+		return;
+	}
+	free(str);
+
+	if ((u = find_user(name)) == NULL) {
+		free_user(u);
+		send_err(w, E_NOTFOUND, NULL);
+		return;
+	}
+
+	if ((!get_obj_obj(u->json, "roles", &roles)) ||
+	    ((roles2 = clone_obj(roles)) == NULL) ||
+	    (!add_obj_obj(u->json, "roles", roles2))) {
+		free_user(u);
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+
+	for (int i = 0; i < get_arr_len(roles2); i++) {
+		if ((get_arr_string(roles2, i, &str)) &&
+		    samestr(role, str)) {
+			goto finish;
+		}
+	}
+
+	if ((!add_arr_string(roles2, role)) ||
+	    (!save_user(u, &errcode))) {
+		free_user(u);
+		send_err(w, errcode, NULL);
+		return;
+	}
+
+finish:
+	result = clone_obj(u->json);
+        add_obj_string(result, "passwd", "");
+	send_result(w, result);
+	free_user(u);
+}
+
+void
+rpc_revoke_user_role(worker *w, object *params)
+{
+
+	user   *u;
+	char   *name;
+	char   *role;
+	char   *str;
+	object *roles;
+	object *roles2;
+	object *result;
+	int     errcode;
+
+	if (!get_auth_param(w, params, &u)) {
+		return;
+	}
+	if (!get_obj_string(params, "name", &name)) {
+		free_user(u);
+		send_err(w, E_BADPARAMS, "missing name of user");
+		return;
+	}
+	if (!get_obj_string(params, "role", &role)) {
+		free_user(u);
+		send_err(w, E_BADPARAMS, "missing role");
+		return;
+	}
+
+	if (!asprintf(&str, "_revoke-user-role__%s", role)) {
+		free_user(u);
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+
+	if ((!check_api_role(str, w->eff_roles)) &&
+	    (!check_api_role("_revoke-user-role__*", w->eff_roles))) {
+		free(str);
+		free_user(u);
+		send_err(w, E_FORBIDDEN, "Permission denied");
+		return;
+	}
+	free(str);
+
+	if ((u = find_user(name)) == NULL) {
+		free_user(u);
+		send_err(w, E_NOTFOUND, NULL);
+		return;
+	}
+
+	if ((!get_obj_obj(u->json, "roles", &roles)) ||
+	    ((roles2 = clone_obj(roles)) == NULL) ||
+	    (!add_obj_obj(u->json, "roles", roles2))) {
+		free_user(u);
+		send_err(w, E_NOMEM, NULL);
+		return;
+	}
+	for (int i = 0; i < get_arr_len(roles2); i++) {
+		if ((get_arr_string(roles2, i, &str)) &&
+		    samestr(role, str)) {
+			del_arr_item(roles2, i);
+			if (!save_user(u, &errcode)) {
+				free_user(u);
+				send_err(w, errcode, NULL);
+				return;
+			}
+			break;
+		}
+	}
+
+	result = clone_obj(u->json);
+        add_obj_string(result, "passwd", "");
+	send_result(w, result);
+	free_user(u);
 }
 
 void

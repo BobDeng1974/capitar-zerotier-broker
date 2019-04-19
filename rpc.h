@@ -82,6 +82,8 @@ enum rpc_errors {
 #define METHOD_DELETE_OWN_DEVICE		"delete-own-device"
 #define METHOD_ENROLL_OWN_DEVICE		"enroll-own-device"
 #define	METHOD_CREATE_USER			"create-user"
+#define	METHOD_ASSIGN_USER_ROLE			"assign-user-role"
+#define	METHOD_REVOKE_USER_ROLE			"revoke-user-role"
 #define	METHOD_DELETE_USER			"delete-user"
 #define METHOD_GET_USER				"get-user"
 #define METHOD_GET_USERNAMES			"get-usernames"

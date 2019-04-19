@@ -1101,6 +1101,11 @@ check_api_role(const char *method, uint64_t roles)
 			deny  = wc->apis[i].deny;
 			break;
 		}
+		if (method[0] == "_"[0]) {
+			// No wild card for methods starting with _
+			deny = ROLE_ALL;
+			continue;
+		}
 		if (strcmp(wc->apis[i].method, "*") == 0) {
 			// wild card match, but keep searching
 			allow = wc->apis[i].allow;

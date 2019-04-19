@@ -225,6 +225,8 @@ extern void delete_own_totp(worker *, object *);
 extern void validate_config(worker *, object *);
 extern void restart_server(worker *, object *);
 extern void rpc_create_user(worker *, object *);
+extern void rpc_assign_user_role(worker *, object *);
+extern void rpc_revoke_user_role(worker *, object *);
 extern void rpc_delete_user(worker *, object *);
 extern void rpc_get_user(worker *, object *);
 extern void rpc_get_user_names(worker *, object *);
