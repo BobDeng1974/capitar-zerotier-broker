@@ -37,7 +37,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 add_executable(${PROJECT_NAME}-worker worker.c
         cJSON.c auth.c base32.c
         controller.c controller_zt1.c controller_ztcentral.c
-        object.c otp.c util.c)
+        object.c otp.c util.c entity_roles.c)
 
 target_link_libraries(${PROJECT_NAME}-worker nng::nng)
 

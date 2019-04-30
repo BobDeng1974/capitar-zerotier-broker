@@ -1045,6 +1045,21 @@ find_role_ext(worker_config *c, const char *role)
 		if (strcmp(role, "%all") == 0) {
 			return (ROLE_ALL);
 		}
+		if (strcmp(role, "%create") == 0) {
+			return (ROLE_CREATE);
+		}
+		if (strcmp(role, "%read") == 0) {
+			return (ROLE_READ);
+		}
+		if (strcmp(role, "%update") == 0) {
+			return (ROLE_UPDATE);
+		}
+		if (strcmp(role, "%delete") == 0) {
+			return (ROLE_DELETE);
+		}
+		if (strcmp(role, "%execute") == 0) {
+			return (ROLE_EXECUTE);
+		}
 		return (0);
 	}
 	for (int i = 0; i < c->nroles; i++) {

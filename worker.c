@@ -83,27 +83,8 @@ struct response {
 	nng_msg * msg;
 };
 
-struct proxy {
-	nng_socket    survsock;
-	nng_socket    repsock;
-	uint32_t      repport;
-	worker *      workers;
-	int           nworkers;
-	nng_aio *     survaio;
-	int           state; // 0 - receiving, 1 sending
-	proxy_config *config;
-};
-
-struct netperm {
-	uint64_t nwid;
-	bool     allow;
-	netperm *next;
-};
-
 controller *controllers;
 proxy *     proxies;
-
-netperm *netperms;
 
 worker_ops *find_worker_ops(const char *);
 
@@ -556,6 +537,11 @@ worker_session_free(worker *w)
 
 	w->eff_roles = 0;
 	w->user_roles = 0;
+	if (w->username != NULL) {
+		free(w->username);
+		w->username = NULL;
+	}
+	w->usertag = 0;
 	w->on_result = NULL;
 	w->on_error = NULL;
 
@@ -577,17 +563,12 @@ set_worker_session_user(worker *w, user *u) {
 }
 
 user *
-get_worker_session_user(worker *w) {
-	char     *username;
-	uint64_t  tag;
+find_worker_user(worker *w) {
 	user      *u;
 
-	if ((w->session != NULL) &&
-	    (get_obj_string(w->session, "username", &username)) &&
-	    (!empty(username)) &&
-	    (get_obj_uint64(w->session, "usertag", &tag)) &&
-	    ((u = find_user(username)) != NULL) &&
-	    (u->tag == tag)) {
+	if ((!empty(w->username)) &&
+	    ((u = find_user(w->username)) != NULL) &&
+	    (u->tag == w->usertag)) {
 		return (u);
 	}
 	if (u != NULL) {
@@ -727,6 +708,8 @@ get_auth_param(worker *w, object *params, user **userp)
 			return (false);
 		}
 
+		w->username = strdup(token_user(tok)->name);
+		w->usertag = token_user(tok)->tag;
 		w->eff_roles = token_roles(tok) | ROLE_ALL | ROLE_TOKEN;
 		w->eff_roles |= w->proxy->config->role_add;
 		w->eff_roles &= ~w->proxy->config->role_del;

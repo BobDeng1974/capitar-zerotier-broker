@@ -110,8 +110,15 @@ extern bool        check_api_role(const char *, uint64_t);
 extern bool        check_nwid_role(uint64_t, uint64_t);
 extern bool        check_controller_role(controller *, uint64_t);
 
-#define ROLE_ADMIN (1ULL << 63) // %admin - implicitly can do everything
-#define ROLE_TOKEN (1ULL << 62) // %token - applies to users using API token
-#define ROLE_ALL (1ULL << 61)   // %all - applies to everyone (including anonymous)
+#define ROLE_ADMIN  (1ULL << 63) // %admin - implicitly can do everything
+#define ROLE_TOKEN  (1ULL << 62) // %token - applies to users using API token
+#define ROLE_ALL    (1ULL << 61) // %all - applies to everyone (including anonymous)
+
+// Typically set for specific (collection of) entities
+#define ROLE_CREATE  (1ULL << 60) // %create  - create right
+#define ROLE_READ    (1ULL << 59) // %read    - read right
+#define ROLE_UPDATE  (1ULL << 58) // %update  - update right
+#define ROLE_DELETE  (1ULL << 57) // %delete  - delete right
+#define ROLE_EXECUTE (1ULL << 56) // %execute - execute right
 
 #endif

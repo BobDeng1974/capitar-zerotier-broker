@@ -664,8 +664,8 @@ enroll_own_device_next2(worker *w, object *result)
 		free_obj(result);
 		return;
 	}
-	if ((u = get_worker_session_user(w)) == NULL) {
-                send_err(w, E_NOTFOUND, "Cannot match session user");
+	if ((u = find_worker_user(w)) == NULL) {
+                send_err(w, E_NOTFOUND, "Cannot match worker user");
 		free_obj(result);
 		return;
         }

@@ -21,6 +21,7 @@
 
 #include "object.h"
 #include "rpc.h"
+#include "entity_roles.h"
 
 typedef struct worker_config worker_config;
 typedef struct worker_ops    worker_ops;
@@ -29,7 +30,6 @@ typedef struct controller    controller;
 typedef struct user          user;
 typedef struct proxy         proxy;
 typedef struct response      response;
-typedef struct netperm netperm;
 
 typedef void (*result_callback)(worker *, object *);
 typedef void (*error_callback)(worker *, int, const char *);
@@ -64,7 +64,7 @@ extern nng_http_res *worker_http_res(worker *);
 extern bool valid_worker_session(worker *);
 extern void worker_session_free(worker *);
 extern bool set_worker_session_user(worker *, user *);
-extern user * get_worker_session_user(worker *);
+extern user * find_worker_user(worker *);
 
 // The callback function is called when the HTTP transaction has completed
 // successfully.
@@ -110,8 +110,6 @@ typedef struct controller_config controller_config;
 typedef struct tls_config        tls_config;
 typedef struct net_config        net_config;
 typedef struct api_config        api_config;
-typedef struct role_config       role_config;
-typedef struct rolegrp_config    rolegrp_config;
 
 struct moon_config {
 	uint64_t ids[2];
@@ -122,16 +120,6 @@ struct tls_config {
 	char *keyfile;
 	char *cacert;
 	bool  insecure;
-};
-
-struct role_config {
-	char *   name;
-	uint64_t mask;
-};
-
-struct rolegrp_config {
-	char *   name;
-	uint64_t mask;
 };
 
 struct proxy_config {
@@ -163,6 +151,17 @@ struct net_config {
 	uint64_t nwid;
 	uint64_t allow; // mask of allowed roles
 	uint64_t deny;  // mask of denied roles
+};
+
+struct proxy {
+	nng_socket    survsock;
+	nng_socket    repsock;
+	uint32_t      repport;
+	worker *      workers;
+	int	   nworkers;
+	nng_aio *     survaio;
+	int	   state; // 0 - receiving, 1 sending
+	proxy_config *config;
 };
 
 // A worker_config has the JSON tree associated with it and references
@@ -204,6 +203,8 @@ struct worker {
 	const char *     method; // RPC method called
 	uint64_t         user_roles;
 	uint64_t         eff_roles; // roles as modified by proxy changes
+	char            *username;
+	uint64_t         usertag;
 	object          *session; // session object store
 	result_callback   on_result;
 	error_callback    on_error;
