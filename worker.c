@@ -154,9 +154,11 @@ survey_cb(void *arg)
 	arr  = alloc_arr();
 	nng_msg_clear(msg);
 
+	set_local_addr(p->listener);
+
 	if (((arr == NULL) || (obj == NULL)) ||
 	    (!add_obj_uint64(obj, "repclock", (int) nng_clock())) ||
-	    (!add_obj_int(obj, "port", (int) p->repport))) {
+	    (!add_obj_int(obj, "repport", (int) p->repport))) {
 		goto fail;
 	}
 
@@ -1859,6 +1861,9 @@ setup_proxy(worker_config *wc, proxy *p, char **errmsg)
 			printf("Success orbiting\n");
 		}
 	}
+
+	set_local_addr(l);
+	p->listener = l;
 
 	p->repport = sa.s_zt.sa_port;
 	p->repsock = s;

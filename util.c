@@ -30,8 +30,18 @@
 #include <dirent.h>
 #endif
 
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <ifaddrs.h>
+#include <unistd.h>
+
 #include <nng/nng.h>
+#include <nng/supplemental/util/options.h>
 #include <nng/supplemental/util/platform.h>
+#include <nng/transport/zerotier/zerotier.h>
+
+#include "object.h"
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -261,5 +271,123 @@ void
 to_lower(char *str) {
 	for(int i = 0; str[i]; i++){
 		str[i] = tolower(str[i]);
+	}
+}
+
+object *
+get_ifaddrs()
+{
+
+	struct ifaddrs *ifa, *ifa_tmp;
+	char addr[50];
+	char ztif[] = "zt";
+
+	object * ifaddrs = alloc_obj();
+	object * ip4 = alloc_arr();
+	add_obj_obj(ifaddrs, "ip4", ip4);
+	object * ip6 = alloc_arr();
+	add_obj_obj(ifaddrs, "ip6", ip6);
+
+	if (getifaddrs(&ifa) == -1) {
+		perror("getifaddrs failed");
+		return (ifaddrs);
+	}
+
+	ifa_tmp = ifa;
+	while (ifa_tmp) {
+		if ((samestr(ifa_tmp->ifa_name, "lo")) ||
+		    (!strncmp(ifa_tmp->ifa_name, ztif, 2))) {
+		} else if ((ifa_tmp->ifa_addr) && ((ifa_tmp->ifa_addr->sa_family == AF_INET) ||
+                              (ifa_tmp->ifa_addr->sa_family == AF_INET6))) {
+			if (ifa_tmp->ifa_addr->sa_family == AF_INET) {
+				// create IPv4 string
+				struct sockaddr_in *in = (struct sockaddr_in*) ifa_tmp->ifa_addr;
+				inet_ntop(AF_INET, &in->sin_addr, addr, sizeof(addr));
+				add_arr_string(ip4, addr);
+			} else { // AF_INET6
+				// create IPv6 string
+				struct sockaddr_in6 *in6 = (struct sockaddr_in6*) ifa_tmp->ifa_addr;
+				inet_ntop(AF_INET6, &in6->sin6_addr, addr, sizeof(addr));
+				add_arr_string(ip6, addr);
+			}
+			//printf("%s: %s\n", ifa_tmp->ifa_name, addr);
+		}
+		ifa_tmp = ifa_tmp->ifa_next;
+	}
+	return (ifaddrs);
+}
+
+void
+set_local_addr(nng_listener l)
+{
+
+	struct ifaddrs *ifa, *ifa_tmp;
+	int rv;
+
+	// We do not want to use ZeroTier twice
+	char ztif[] = "zt"; // ZeroTier tap interfaces start with zt
+
+	nng_sockaddr locaddr;
+	nng_sockaddr udp4_addr;
+	nng_sockaddr udp6_addr;
+
+	rv = nng_listener_setopt(
+	   l, NNG_OPT_ZT_CLEAR_LOCAL_ADDRS, 0, 0);
+	if (rv != 0) {
+		printf("Error clearing local addresses: %d\n", rv);
+	}
+
+	rv = nng_listener_getopt_sockaddr(
+		l, NNG_OPT_ZT_UDP4_ADDR, &udp4_addr);
+	if (rv != 0) {
+		printf("Error geting zt udp4 adress: %d\n", rv);
+	}
+
+	//printf("udp4 port: %d\n", ntohs(udp4_addr.s_in.sa_port));
+
+	rv = nng_listener_getopt_sockaddr(
+		l, NNG_OPT_ZT_UDP6_ADDR, &udp6_addr);
+	if (rv != 0) {
+		printf("Error geting zt udp6 adress: %d\n", rv);
+	}
+
+	//printf("udp6 port: %d\n", ntohs(udp6_addr.s_in6.sa_port));
+
+	if (getifaddrs(&ifa) == -1) {
+		perror("getifaddrs failed");
+		return;
+	}
+
+	ifa_tmp = ifa;
+	while (ifa_tmp) {
+		if ((samestr(ifa_tmp->ifa_name, "lo")) ||
+		    (!strncmp(ifa_tmp->ifa_name, ztif, 2))) {
+		} else if ((ifa_tmp->ifa_addr) && ((ifa_tmp->ifa_addr->sa_family == AF_INET) ||
+                              (ifa_tmp->ifa_addr->sa_family == AF_INET6))) {
+			if (ifa_tmp->ifa_addr->sa_family == AF_INET) {
+				locaddr.s_family = AF_INET;
+				locaddr.s_in.sa_family = NNG_AF_INET;
+				struct sockaddr_in *in = (struct sockaddr_in*) ifa_tmp->ifa_addr;
+				locaddr.s_in.sa_addr = in->sin_addr.s_addr;
+				locaddr.s_in.sa_port = udp4_addr.s_in.sa_port;
+				rv = nng_listener_setopt(
+				    l, NNG_OPT_ZT_ADD_LOCAL_ADDR, &locaddr, sizeof(locaddr));
+				if (rv != 0) {
+					printf("Error adding local ipv4 address: %d\n", rv);
+				}
+			} else { // AF_INET6
+				locaddr.s_family = AF_INET6;
+				locaddr.s_in.sa_family = NNG_AF_INET6;
+				struct sockaddr_in6 *in = (struct sockaddr_in6*) ifa_tmp->ifa_addr;
+				memcpy(&locaddr.s_in6.sa_addr, in->sin6_addr.s6_addr, 16);
+				locaddr.s_in6.sa_port = udp4_addr.s_in6.sa_port;
+				rv = nng_listener_setopt(
+				    l, NNG_OPT_ZT_ADD_LOCAL_ADDR, &locaddr, sizeof(locaddr));
+				if (rv != 0) {
+					printf("Error adding local ipv6 address: %d\n", rv);
+				}
+			}
+		}
+		ifa_tmp = ifa_tmp->ifa_next;
 	}
 }

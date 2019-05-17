@@ -21,6 +21,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <nng/nng.h>
+#include <nng/supplemental/util/options.h>
+#include <nng/supplemental/util/platform.h>
+#include <nng/transport/zerotier/zerotier.h>
+
 #include "config.h"
 
 #ifndef HAVE_ASPRINTF
@@ -38,4 +43,6 @@ extern const char *path_readdir(void *);
 extern bool        empty(const char *);
 extern bool        samestr(const char *, const char *);
 extern void        to_lower(char *);
+extern object     *get_ifaddrs();
+extern void        set_local_addr(nng_listener);
 #endif // UTIL_H

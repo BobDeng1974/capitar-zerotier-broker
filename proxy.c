@@ -300,6 +300,8 @@ survey_loop(void)
 		}
 	}
 
+	set_local_addr(l);
+
 	if (((rv = nng_listener_start(l, 0)) != 0) ||
 	    ((rv = nng_listener_getopt_string(l, NNG_OPT_URL, &urls)) != 0)) {
 		fprintf(stderr, "%s\n", nng_strerror(rv));
@@ -318,6 +320,8 @@ survey_loop(void)
 
 		char * body = NULL;
 		object * obj  = alloc_obj();
+
+		set_local_addr(l);
 
 		if (((obj == NULL)) ||
 		    (!add_obj_uint64(obj, "clock", (int) nng_clock())) ||
@@ -387,7 +391,7 @@ survey_loop(void)
 			nng_msg_free(msg);
 
 			if ((obj == NULL) ||
-			    (!get_obj_int(obj, "port", &port)) || (port < 1) ||
+			    (!get_obj_int(obj, "repport", &port)) || (port < 1) ||
 			    (port > 0xffffff) ||
 			    (!get_obj_obj(obj, "controllers", &arr)) ||
 			    (get_arr_len(arr) < 1)) {

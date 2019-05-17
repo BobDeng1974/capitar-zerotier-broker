@@ -156,6 +156,7 @@ struct net_config {
 struct proxy {
 	nng_socket    survsock;
 	nng_socket    repsock;
+	nng_listener  listener;
 	uint32_t      repport;
 	worker *      workers;
 	int	   nworkers;
