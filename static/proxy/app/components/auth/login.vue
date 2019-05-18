@@ -2,6 +2,7 @@
 <div>
 
 <navbar
+  :key="load_user_inc"
   v-bind:controller="controller"
   v-bind:creds="creds"
   v-on:logout="logout"
@@ -127,6 +128,7 @@
 module.exports = {
   data () {
     return {
+      load_user_inc: 0,
       info: null,
       loading: false,
       err_resp: null,
@@ -215,6 +217,7 @@ module.exports = {
         .then(response => {
           this.creds.user = response.data
           this.creds.ready = true
+          this.load_user_inc += 1
           switch (this.selected) {
             case "useradmin":
               this.useradmin()
