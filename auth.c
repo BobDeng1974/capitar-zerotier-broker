@@ -54,9 +54,9 @@ hash_password(const char *pass)
 	snprintf(result, 12, "1:%08x:", nng_random());
 
 	mbedtls_sha1_init(&ctx);
-	mbedtls_sha1_update_ret(&ctx, (void *) result, 11);
-	mbedtls_sha1_update_ret(&ctx, (void *) pass, strlen(pass));
-	mbedtls_sha1_finish_ret(&ctx, hash);
+	mbedtls_sha1_update(&ctx, (void *) result, 11);
+	mbedtls_sha1_update(&ctx, (void *) pass, strlen(pass));
+	mbedtls_sha1_finish(&ctx, hash);
 	mbedtls_sha1_free(&ctx);
 
 	ptr = result + strlen(result);
@@ -90,9 +90,9 @@ check_password(const char *pass, const char *hash)
 		return (false);
 	}
 	mbedtls_sha1_init(&ctx);
-	mbedtls_sha1_update_ret(&ctx, (void *) hash, 11);
-	mbedtls_sha1_update_ret(&ctx, (void *) pass, strlen(pass));
-	mbedtls_sha1_finish_ret(&ctx, out);
+	mbedtls_sha1_update(&ctx, (void *) hash, 11);
+	mbedtls_sha1_update(&ctx, (void *) pass, strlen(pass));
+	mbedtls_sha1_finish(&ctx, out);
 	mbedtls_sha1_free(&ctx);
 	hash += 11;
 
