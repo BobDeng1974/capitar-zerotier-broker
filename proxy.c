@@ -1133,6 +1133,7 @@ do_tokens(nng_aio *aio, object *auth, const char *method, controller *cp,
 	object *a;
 	char *  s;
 	double  exp;
+	char *  otp;
 
 	if ((params = create_controller_params(cp, auth)) == NULL) {
 		return;
@@ -1170,6 +1171,13 @@ do_tokens(nng_aio *aio, object *auth, const char *method, controller *cp,
 	}
 	if ((get_obj_number(body, "expires", &exp)) &&
 	    (!add_obj_number(params, "expires", exp))) {
+		free_obj(params);
+		nng_aio_finish(aio, NNG_ENOMEM);
+		return;
+	}
+
+	if ((get_obj_string(body, "otp", &otp)) &&
+	    (!add_obj_string(params, "otp", otp))) {
 		free_obj(params);
 		nng_aio_finish(aio, NNG_ENOMEM);
 		return;
@@ -1247,6 +1255,7 @@ do_totp(nng_aio *aio, object *auth, const char *method, controller *cp,
 	char *      pass;
 	object *    params;
 	char *      iss;
+	char *      confirm_code;
 	if ((params = create_controller_params(cp, auth)) == NULL) {
 		return;
 	}
@@ -1264,11 +1273,24 @@ do_totp(nng_aio *aio, object *auth, const char *method, controller *cp,
 		return;
 	}
 
-	// We don't care about the body contents, only that it is well-formed
-	// JSON.  Someday we might add other parameters.
+	if (get_obj_string(body, "confirm_code", &confirm_code)) {
+		add_obj_string(params, "confirm_code", confirm_code);
+	}
+
+	// Allow override
+	if ((get_obj_string(body, "issuer", &iss)) &&
+	    (!empty(iss))) {
+		if (!add_obj_string(params, "issuer", iss)) {
+			rpcerr(aio, NNG_HTTP_STATUS_INTERNAL_SERVER_ERROR, NULL);
+			return;
+		} else {
+			do_rpc(aio, cp, METHOD_CREATE_TOTP, params);
+			return;
+		}
+	}
 
 	iss = NULL;
-	if ((asprintf(&iss, "ZeroTier Controller Proxy %s", cp->name) < 0) ||
+	if ((asprintf(&iss, "Capitar Broker Controller %s", cp->name) < 0) ||
 	    (!add_obj_string(params, "issuer", iss))) {
 		rpcerr(aio, NNG_HTTP_STATUS_INTERNAL_SERVER_ERROR, NULL);
 		free(iss);
@@ -1392,7 +1414,8 @@ parse_auth(nng_http_req *req, object **op)
 	}
 
 	// If an X-ZTC-OTP header is present, copy it.
-	if ((h = nng_http_req_get_header(req, "X-ZTC-OTP")) != NULL) {
+	if (((h = nng_http_req_get_header(req, "X-ZTC-OTP")) != NULL) &&
+	    (!empty(h))) {
 		if (!add_obj_string(o, "otp", h)) {
 			free_obj(o);
 			return (false);

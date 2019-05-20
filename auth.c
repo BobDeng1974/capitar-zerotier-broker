@@ -136,6 +136,15 @@ parse_user(user *u)
 	object *o = u->json;
 	object *a;
 
+	// Cleanup in case of repeated parse
+	if (u->notpwds > 0) {
+		free(u->otpwds);
+	}
+	u->otpwds  = NULL;
+	u->notpwds = 0;
+	u->nactive_otpwds = 0;
+	u->roles = 0;
+
 	if ((!get_obj_string(o, "name", &u->name)) ||
 	    (!get_obj_uint64(o, "tag", &u->tag)) ||
 	    (!get_obj_string(o, "passwd", &u->encpass))) {
@@ -155,7 +164,6 @@ parse_user(user *u)
 		}
 	}
 
-	u->notpwds = 0;
 	if (get_obj_obj(o, "otpwds", &a)) {
 		u->notpwds = get_arr_len(a);
 		if ((u->otpwds = calloc(u->notpwds, sizeof(otpwd))) == NULL) {
@@ -168,10 +176,15 @@ parse_user(user *u)
 			if ((!get_arr_obj(a, i, &t)) ||
 			    (!get_obj_string(t, "name", &otp->name)) ||
 			    (!get_obj_string(t, "secret", &otp->secret)) ||
+			    (!get_obj_bool(t, "active", &otp->active)) ||
 			    (!get_obj_string(t, "type", &otp->type))) {
-				free_user(u);
 				return (NULL);
 			}
+
+			if (otp->active) {
+				u->nactive_otpwds++;
+			}
+
 			otp->period  = 30;
 			otp->digits  = 6;
 			otp->counter = 0;
@@ -243,10 +256,12 @@ user_num_otpwds(const user *u)
 }
 
 const otpwd *
-user_otpwd(const user *u, int idx)
+user_otpwd(const user *u, const char * issuer)
 {
-	if ((idx >= 0) && (idx < u->notpwds)) {
-		return (&u->otpwds[idx]);
+	for (int i = 0; i < u->notpwds; i++) {
+		if (samestr(u->otpwds[i].name, issuer)) {
+			return (&u->otpwds[i]);
+		}
 	}
 	return (NULL);
 }
@@ -326,12 +341,19 @@ bool
 create_totp(user *u, const char *name)
 {
 	object *obj;
-	object *old;
 	object *arr;
 	char *  path;
 	char    encbuf[33];
 	uint8_t secret[20];
 	size_t  len;
+	const otpwd *o;
+	int     code;
+
+	// Name (issuer) must be unique
+	o = user_otpwd(u, name);
+	if (o != NULL) {
+		return (false);
+	}
 
 	for (int i = 0; i < sizeof(secret); i += sizeof(uint32_t)) {
 		uint32_t r = nng_random();
@@ -347,81 +369,88 @@ create_totp(user *u, const char *name)
 	    (!add_obj_string(obj, "name", name)) ||
 	    (!add_obj_string(obj, "type", "totp")) ||
 	    (!add_obj_string(obj, "secret", encbuf)) ||
+	    (!add_obj_bool(obj, "active", false)) ||
 	    (!add_obj_number(obj, "period", 30)) ||
 	    (!add_obj_number(obj, "digits", 6))) {
 		free_obj(obj);
 		return (false);
 	}
-	if (((arr = alloc_arr()) == NULL) || (!add_arr_obj(arr, obj)) ||
-	    ((obj = clone_obj(u->json)) == NULL) ||
-	    (!add_obj_obj(obj, "otpwds", arr))) {
-		free_obj(arr);
-		free_obj(obj);
-		return (false);
-	}
 
 	// Save the generated token...
-	if ((path = path_join(wc->userdir, u->name, ".usr")) == NULL) {
-		free_obj(obj);
-		return (false);
-	}
-	if (!obj_save(path, obj, NULL)) {
-		free(path);
-		free_obj(obj);
+	if ((!get_obj_obj(u->json, "otpwds", &arr)) ||
+	    (!add_arr_obj(arr, obj)) ||
+	    (!save_user(u, &code))) {
 		return (false);
 	}
 
-	// The file change is in effect.  Let's reparse.
-	// Note that if something bad happens here, the user might
-	// well be unusable. Best bet is for the caller to free the
-	// user and start over.  Note also that the change to the OTP
-	// will have taken effect.  This could leave the user locked
-	// locked out.
-	free(u->otpwds);
-	u->otpwds  = NULL;
-	u->notpwds = 0;
-	old        = u->json;
-	u->json    = obj;
 	if (!parse_user(u)) {
-		u->json = old;
-		free(obj);
 		return (false);
 	}
-	free(old);
 	return (true);
 }
 
 bool
-delete_totp(user *u)
+delete_totp(user *u, const char *name)
 {
 	object *obj = NULL;
 	object *arr;
-	char *  path;
+	object *arr1;
+	object *old;
+	char   *issuer;
+	int     err;
 
-	if (((arr = alloc_arr()) == NULL) ||
-	    (!add_obj_obj(u->json, "otpwds", arr))) {
-		free_obj(arr);
-		return (false);
+	if ((!get_obj_obj(u->json, "otpwds", &arr)) ||
+	    ((arr1 = clone_obj(arr)) == NULL)) {
+		return(false);
 	}
 
-	free(u->otpwds);
-	u->otpwds  = NULL;
-	u->notpwds = 0;
-
-	// Save the generated token...
-	if ((path = path_join(wc->userdir, u->name, ".usr")) == NULL) {
-		return (false);
+	for (int i = 0; i < get_arr_len(arr1); i++) {
+		if (((get_arr_obj(arr1, i, &obj))) &&
+		    (get_obj_string(obj, "name", &issuer)) &&
+		    (samestr(name, issuer))) {
+			old = u->json;
+			if ((del_arr_item(arr1, i)) &&
+			    (add_obj_obj(u->json, "otpwds", arr1)) &&
+			    (save_user(u, &err))) {
+				parse_user(u);
+				return (true);
+			} else {
+				return(false);
+			}
+		}
 	}
-	if (!obj_save(path, u->json, NULL)) {
-		free(path);
-		return (false);
-	}
 
-	return (true);
+	return (false);
 }
 
-static bool
-check_otp(const user *u, const char *pin)
+bool
+activate_totp(user *u, const char *name)
+{
+	object *obj = NULL;
+	object *arr;
+	int     err;
+	char   *issuer;
+
+	if (!get_obj_obj(u->json, "otpwds", &arr)) {
+		return(false);
+	}
+
+	for (int i = 0; i < get_arr_len(arr); i++) {
+		if (((get_arr_obj(arr, i, &obj))) &&
+		    (get_obj_string(obj, "name", &issuer)) &&
+		    (samestr(name, issuer)) &&
+		    (add_obj_bool(obj, "active", true)) &&
+		    (save_user(u, &err))) {
+			parse_user(u);
+			return(true);
+		}
+	}
+
+	return (false);
+}
+
+bool
+check_otp(const user *u, const char *pin, const char * issuer)
 {
 	// This code rather naively checks each 2FA.  We don't have
 	// support for HOTP as we don't want to store and update
@@ -436,6 +465,16 @@ check_otp(const user *u, const char *pin)
 		uint64_t period;
 
 		op = &u->otpwds[i];
+
+		// Only active if issuer is not specified
+		if ((issuer == NULL) &&
+		    (!op->active)) {
+			continue;
+		}
+		if ((issuer != NULL) &&
+		    (strcmp(issuer, op->name) !=0)) {
+			continue;
+		}
 		// No support for HOTP for now.
 		if (strcmp(op->type, "totp") != 0) {
 			continue;
@@ -484,12 +523,12 @@ auth_user(const char *name, const char *pass, const char *otp, int *code)
 		return (NULL);
 	}
 	// If the user has 2FA configured, then we refuse to let them in.
-	if (u->notpwds > 0) {
+	if (u->nactive_otpwds > 0) {
 		if (otp == NULL) {
 			*code = E_AUTHOTP;
 			free_user(u);
 			return (NULL);
-		} else if (!check_otp(u, otp)) {
+		} else if (!check_otp(u, otp, NULL)) {
 			*code = E_AUTHFAIL;
 			free_user(u);
 			return (NULL);

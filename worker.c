@@ -1234,6 +1234,8 @@ rpc_get_user(worker *w, object *params)
 	user *u;
 	char *name;
 	object * result;
+	object * arr;
+	object * obj;
 
 	if (!get_auth_param(w, params, &u)) {
 		return;
@@ -1248,7 +1250,17 @@ rpc_get_user(worker *w, object *params)
 	}
 
 	result = clone_obj(u->json);
+
+	// Strip sensitive attributes
         add_obj_string(result, "passwd", "");
+	if (get_obj_obj(result, "otpwds", &arr)) {
+		for (int i = 0; i < get_arr_len(arr); i++) {
+			if (get_arr_obj(arr, i, &obj)) {
+				add_obj_string(obj, "secret", "");
+			}
+		}
+	}
+
 	send_result(w, result);
 	free_user(u);
 }
@@ -1507,6 +1519,7 @@ create_own_totp(worker *w, object *params)
 	const otpwd *o;
 	char *       ibuf = NULL;
 	char *       ubuf = NULL;
+	char *       confirm_code;
 
 	if (!get_auth_param(w, params, &u)) {
 		return;
@@ -1516,6 +1529,32 @@ create_own_totp(worker *w, object *params)
 		send_err(w, E_BADPARAMS, NULL);
 		return;
 	}
+
+	o = user_otpwd(u, issuer);
+	if (o != NULL) {
+		if (o->active == true) {
+			send_err(w, E_EXISTS, "Duplicate issuer");
+			return;
+		} else {
+			// Confirming new totp
+			if ((!get_obj_string(params, "confirm_code", &confirm_code)) ||
+			    (empty(confirm_code))) {
+				send_err(w, E_BADPARAMS, "Missing confirm_code");
+				return;
+			}
+			if (!check_otp(u, confirm_code, issuer)) {
+				send_err(w, E_BADPARAMS, "Bad confirm_code");
+				return;
+			}
+			if (!activate_totp(u, issuer)) {
+				send_err(w, E_INTERNAL, "Unable to activate");
+				return;
+			}
+			send_result(w, alloc_obj());
+			return;
+		}
+	}
+
 	if (((result = alloc_obj()) == NULL) ||
 	    ((ibuf = urlencode(issuer)) == NULL) ||
 	    ((ubuf = urlencode(user_name(u))) == NULL)) {
@@ -1525,7 +1564,7 @@ create_own_totp(worker *w, object *params)
 		free_user(u);
 		return;
 	}
-	if ((!create_totp(u, issuer)) || ((o = user_otpwd(u, 0)) == NULL)) {
+	if ((!create_totp(u, issuer)) || ((o = user_otpwd(u, issuer)) == NULL)) {
 		send_err(w, E_NOMEM, NULL);
 		free_obj(result);
 		free_user(u);
@@ -1581,12 +1620,22 @@ delete_own_totp(worker *w, object *params)
 		return;
 	}
 
+	if (!get_obj_string(params, "issuer", &issuer)) {
+		send_err(w, E_BADPARAMS, NULL);
+		return;
+	}
+
+	if ((o = user_otpwd(u, issuer)) == NULL) {
+		send_err(w, E_NOTFOUND, NULL);
+		return;
+	}
+
 	if ((result = alloc_obj()) == NULL) {
 		send_err(w, E_NOMEM, NULL);
 		free_user(u);
 		return;
 	}
-	if (!delete_totp(u)) {
+	if (!delete_totp(u, issuer)) {
 		send_err(w, E_NOMEM, NULL);
 		free_obj(result);
 		free_user(u);

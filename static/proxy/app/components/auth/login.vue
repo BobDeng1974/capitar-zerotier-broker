@@ -9,6 +9,7 @@
   v-on:useradmin="useradmin"
   v-on:deviceadmin="deviceadmin"
   v-on:networkadmin="networkadmin"
+  v-on:settings_gui_user="settings_gui_user"
 ></navbar>
 
 <b-jumbotron v-if="!creds.token || !creds.token.id"
@@ -67,7 +68,7 @@
       </div>
       <b-form-input 
                     type="text"
-                    v-model="creds.oath"
+                    v-model="creds.otp"
                     placeholder="Enter One Time Access Token if required"
                     v-on:keyup.enter.native="login"
       ></b-form-input>
@@ -120,6 +121,12 @@
   v-on:load_user="load_user"
 ></my-devices>
 
+<settings-gui-user v-if="!loading && selected_settings_gui_user && creds && creds.token"
+  v-bind:controller="controller"
+  v-bind:creds="creds"
+  v-on:load_user="load_user"
+></settings-gui-user>
+
 </div>
 </template>
 
@@ -138,7 +145,7 @@ module.exports = {
       selected: "",
       networks: null,
       nw_filter: "",
-      creds: { username: "", password: "", oath: "", token: null, ready: false },
+      creds: { username: "", password: "", otp: "", token: null, ready: false },
     }
   },
   props: [],
@@ -155,6 +162,11 @@ module.exports = {
         return null
       }
       return this.creds.token.expires - Math.floor(Date.now() / 1000)
+    },
+    selected_settings_gui_user() {
+      if (this.selected == "settings_gui_user") {
+        return true
+      }
     },
     selected_useradmin() {
       if (this.selected == "useradmin") {
@@ -180,7 +192,7 @@ module.exports = {
         headers: {'X-ZTC-Token': this.creds.token.id }
         })
         .then(response => {
-          //this.creds = { username: "", password: "", oath: "", token: ""}
+          //this.creds = { username: "", password: "", otp: "", token: ""}
         })
         .catch(error => {
           if ((error.response) && error.response.status ) {
@@ -192,12 +204,15 @@ module.exports = {
         })
         .finally(() => this.loading = false)
       // Immediately delete token, regardless of result of delete token request
-      this.creds = { username: "", password: "", oath: "", token: ""}
+      this.creds = { username: "", password: "", otp: "", token: ""}
     },
     clear() {
       this.controller_status = null
       this.err_resp = null
       this.alert_msg = ""
+    },
+    settings_gui_user() {
+      this.selected = "settings_gui_user"
     },
     useradmin() {
       this.selected = "useradmin"
@@ -219,6 +234,9 @@ module.exports = {
           this.creds.ready = true
           this.load_user_inc += 1
           switch (this.selected) {
+            case "settings_gui_user":
+              this.settings_gui_user()
+              break
             case "useradmin":
               this.useradmin()
               break
@@ -264,6 +282,7 @@ module.exports = {
             username: this.creds.username,
             password: this.creds.password
           },
+          headers: {'X-ZTC-OTP': this.creds.otp }
         }).then(response => {
           this.creds.token = response.data
           this.creds.password = ''
@@ -280,6 +299,7 @@ module.exports = {
           }
         })
         .finally(() => {
+          this.creds.otp = ''
           this.loading = false
           this.load_user()
         })

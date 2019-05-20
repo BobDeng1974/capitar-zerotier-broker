@@ -47,6 +47,7 @@ struct otpwd {
 	int      digits;  // 6, 7, 8 (only 6 supported for now)
 	int      period;  // for totp
 	uint64_t counter; // for hotp
+	bool     active;  // once confirmed it is active
 };
 
 struct user {
@@ -57,6 +58,7 @@ struct user {
 	bool     locked; // true if account is locked
 	uint64_t roles;
 	int      notpwds;
+	int      nactive_otpwds;
 	otpwd *  otpwds;
 };
 
@@ -76,11 +78,13 @@ extern void        delete_user(user *);
 extern object *    user_names();
 extern bool        set_password(user *, const char *);
 extern bool        create_totp(user *, const char *);
-extern bool        delete_totp(user *);
+extern bool        delete_totp(user *, const char *);
 extern char *      hash_password(const char *pass);
+extern bool        check_otp(const user *, const char *, const char *);
+extern bool        activate_totp(user *, const char *);
 
 extern int          user_num_otpwds(const user *);
-extern const otpwd *user_otpwd(const user *, int);
+extern const otpwd *user_otpwd(const user *, const char *);
 extern const char * otpwd_name(const otpwd *);
 extern const char * otpwd_secret(const otpwd *);
 extern const char * otpwd_type(const otpwd *);

@@ -42,7 +42,7 @@
         <template slot="button-content">
           <em>{{ creds.username }}</em>
         </template>
-        <b-dropdown-item href="#">Profile</b-dropdown-item>
+        <b-dropdown-item @click="$emit('settings_gui_user')">Settings</b-dropdown-item>
         <b-dropdown-item @click="$emit('logout')">Signout</b-dropdown-item>
       </b-nav-item-dropdown>
     </b-navbar-nav>

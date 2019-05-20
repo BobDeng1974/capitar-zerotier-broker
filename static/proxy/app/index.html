@@ -18,6 +18,7 @@
     <script src="https://unpkg.com/intersection-observer@0.5.1/intersection-observer.min.js"></script>
     <script src="https://unpkg.com/vue-observe-visibility@0.4.3/dist/vue-observe-visibility.min.js"></script>
     <script src="https://unpkg.com/vue-router@3.0.1/dist/vue-router.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-js-package@1.0.4/qrcode.min.js"></script>
 -->
 
 <!-- develop -->
@@ -30,7 +31,7 @@
     <script src="https://unpkg.com/intersection-observer@0.5.1/intersection-observer.js"></script>
     <script src="https://unpkg.com/vue-observe-visibility@0.4.3/dist/vue-observe-visibility.min.js"></script>
     <script src="https://unpkg.com/vue-router@3.0.1/dist/vue-router.js"></script>
-
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-js-package@1.0.4/qrcode.min.js"></script>
     <base href="/static/app/">
   </head>
 
@@ -58,11 +59,13 @@
       Vue.component('error-axios', httpVueLoader('components/error/axios.vue'))
       Vue.component('controller', httpVueLoader('components/controller/controller.vue'))
       Vue.component('network', httpVueLoader('components/network/network.vue'))
+      Vue.component('settings-gui-user', httpVueLoader('components/settings/gui-user.vue'))
       Vue.component('user-mgmt', httpVueLoader('components/user/mgmt.vue'))
       Vue.component('user', httpVueLoader('components/user/user.vue'))
       Vue.component('store', httpVueLoader('store/store.vue'))
       Vue.component('my-devices', httpVueLoader('components/device/my-devices.vue'))
       Vue.component('device', httpVueLoader('components/device/device.vue'))
+      Vue.component('qr-code', httpVueLoader('components/qr-code.vue'))
 
       new Vue({
         el: '#my-app',
