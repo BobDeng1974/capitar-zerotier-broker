@@ -157,7 +157,7 @@ survey_cb(void *arg)
 	set_local_addr(p->listener);
 
 	if (((arr == NULL) || (obj == NULL)) ||
-	    (!add_obj_uint64(obj, "repclock", (int) nng_clock())) ||
+	    (!add_obj_number(obj, "reptime", (double) time(NULL))) ||
 	    (!add_obj_int(obj, "repport", (int) p->repport))) {
 		goto fail;
 	}

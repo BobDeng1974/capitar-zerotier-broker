@@ -560,7 +560,7 @@ create_user(object *newuser, int *code)
 	to_lower(name1);
 
 	if ((!add_obj_string(newuser, "name", name1)) ||
-	    (!add_obj_uint64(newuser, "created_ms", nng_clock()))) {
+	    (!add_obj_number(newuser, "created", (double) time(NULL)))) {
 		*code = E_NOMEM;
 		return (NULL);
 	}
@@ -611,7 +611,7 @@ save_user(user *u, int *code)
 		*code = E_BADPARAMS;
 		return (false);
 	}
-	if (!add_obj_uint64(u->json, "updated_ms", nng_clock())) {
+	if (!add_obj_number(u->json, "updated", (double) time(NULL))) {
 		*code = E_NOMEM;
 		return (false);
 	}

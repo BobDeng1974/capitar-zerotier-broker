@@ -324,7 +324,7 @@ survey_loop(void)
 		set_local_addr(l);
 
 		if (((obj == NULL)) ||
-		    (!add_obj_uint64(obj, "clock", (int) nng_clock())) ||
+		    (!add_obj_number(obj, "time", (double) time(NULL))) ||
 		    (!add_obj_string(obj, "survey", "controllers"))) {
 			printf("Cannot create survey msg\n");
 			free_obj(obj);
