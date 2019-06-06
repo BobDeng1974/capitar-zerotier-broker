@@ -10,11 +10,21 @@
   <section v-if="!errored">
 
     <b-jumbotron :header="totp_header" :lead="totp_lead" >
-      <p>{{ totp.description }}</p>
       <div v-if="!deleted && !busy">
 
           <b-btn variant="warning" :disabled="busy" v-on:click="delete_totp"
             >Delete</b-btn>
+
+          <b-btn variant="success" :disabled="busy" v-on:click="activate_totp"
+            v-if="!totp.active"
+            >Activate</b-btn>
+          <b-btn variant="warning" :disabled="busy" v-on:click="deactivate_totp"
+            v-if="totp.active"
+            >De-activate</b-btn>
+          <b-btn v-if="!verified" variant="info" :disabled="busy" v-on:click="verify_totp"
+            >Verify</b-btn>
+          <b-btn v-if="verified" variant="success" :disabled="busy" v-on:click="verify_totp"
+            >Verified!</b-btn>
 
       </div>
 
@@ -23,6 +33,19 @@
       </div>
 
       <div v-if="request_confirmation">
+        <b-input-group>
+          <div class="input-group-prepend w-25">
+            <span class="input-group-text w-100" id="id">Auth code (To skip validation enter: 000000)</span>
+          </div>
+          <b-form-input
+             v-if="show_confirm_code"
+             type="text"
+             v-model="action_data.confirm_code"
+             placeholder="Enter auth code for validation"
+             v-on:keyup.enter.native="confirm()"
+          ></b-form-input>
+        </b-input-group>
+
         <b-btn variant="info" v-on:click="cancel_confirm">No, cancel</b-btn>
         <b-btn variant="warning" v-on:click="confirm">Yes, {{ confirm_action }}</b-btn>
       </div>
@@ -48,7 +71,10 @@ module.exports = {
     totp_header() {
       return this.totp.name
     },
-    device_lead() {
+    totp_lead() {
+      if (!this.totp.active) {
+        return "(inactive)"
+      }
       return ""
     },
     show_totp() {
@@ -76,7 +102,8 @@ module.exports = {
       busy: false,
       enroll_nwid: "",
       enrolling: false,
-      err_resp: null
+      err_resp: null,
+      verified: null,
     }
   },
   props: ["totp", "controller", "creds", "totp_regex"],
@@ -103,9 +130,14 @@ module.exports = {
           data, {
           headers: {'X-ZTC-Token': this.creds.token.id }
         }).then(response => {
-          console.log(response)
+          if (method == "verify-totp") {
+            this.verified = response.data.verified
+          }
           if (['delete-totp'].includes(method)) {
             this.deleted = true
+            this.$parent.$emit('load_user')
+          }
+          if (['activate-totp', 'deactivate-totp'].includes(method)) {
             this.$parent.$emit('load_user')
           }
         }).catch(error => {
@@ -123,10 +155,38 @@ module.exports = {
     delete_totp(event) {
       this.clear()
       this.confirm_action = "delete-totp"
-      this.action_data = {issuer: this.totp.name}
+      this.action_data = {issuer: this.totp.name, confirm_code:""}
       this.request_confirmation = true
       this.busy = true
     },
+    activate_totp(event) {
+      this.clear()
+      this.confirm_action = "activate-totp"
+      this.action_data = {issuer: this.totp.name, confirm_code:""}
+      this.request_confirmation = true
+      this.busy = true
+    },
+    deactivate_totp(event) {
+      this.clear()
+      this.confirm_action = "deactivate-totp"
+      this.action_data = {issuer: this.totp.name, confirm_code:""}
+      this.request_confirmation = true
+      this.busy = true
+    },
+    verify_totp(event) {
+      this.clear()
+      this.confirm_action = "verify-totp"
+      this.action_data = {issuer: this.totp.name, confirm_code:""}
+      this.request_confirmation = true
+      this.busy = true
+    },
+    show_confirm_code() {
+      if (["verify-totp", "activate-totp", "deactivate-totp"].includes(
+       this.confirm_action)) {
+        return true
+      }
+      return false
+    }
   },
   mounted () {
   }

@@ -467,6 +467,32 @@ activate_totp(user *u, const char *name)
 }
 
 bool
+deactivate_totp(user *u, const char *name)
+{
+	object *obj = NULL;
+	object *arr;
+	int     err;
+	char   *issuer;
+
+	if (!get_obj_obj(u->json, "otpwds", &arr)) {
+		return(false);
+	}
+
+	for (int i = 0; i < get_arr_len(arr); i++) {
+		if (((get_arr_obj(arr, i, &obj))) &&
+		    (get_obj_string(obj, "name", &issuer)) &&
+		    (samestr(name, issuer)) &&
+		    (add_obj_bool(obj, "active", false)) &&
+		    (save_user(u, &err))) {
+			parse_user(u);
+			return(true);
+		}
+	}
+
+	return (false);
+}
+
+bool
 check_otp(const user *u, const char *pin, const char * issuer)
 {
 	// This code rather naively checks each 2FA.  We don't have

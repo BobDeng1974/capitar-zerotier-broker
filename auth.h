@@ -83,6 +83,7 @@ extern bool        delete_totp(user *, const char *);
 extern char *      hash_password(const char *pass);
 extern bool        check_otp(const user *, const char *, const char *);
 extern bool        activate_totp(user *, const char *);
+extern bool        deactivate_totp(user *, const char *);
 
 extern int          user_num_otpwds(const user *);
 extern const otpwd *user_otpwd(const user *, const char *);

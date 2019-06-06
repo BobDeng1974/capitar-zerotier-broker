@@ -431,6 +431,9 @@ static struct {
 	{ METHOD_SET_PASSWD, set_own_password },
 	{ METHOD_CREATE_TOTP, create_own_totp },
 	{ METHOD_DELETE_TOTP, delete_own_totp },
+	{ METHOD_VERIFY_TOTP, verify_own_totp },
+	{ METHOD_ACTIVATE_TOTP, activate_own_totp },
+	{ METHOD_DEACTIVATE_TOTP, deactivate_own_totp },
 	{ METHOD_VALIDATE_CONFIG, validate_config },
 	{ METHOD_RESTART_SERVICE, restart_server },
 	{ METHOD_ADD_OWN_DEVICE, add_own_device },
@@ -1604,8 +1607,6 @@ delete_own_totp(worker *w, object *params)
 	object *     result;
 	char *       url;
 	const otpwd *o;
-	char *       ibuf = NULL;
-	char *       ubuf = NULL;
 
 	if (!get_auth_param(w, params, &u)) {
 		return;
@@ -1632,6 +1633,156 @@ delete_own_totp(worker *w, object *params)
 		free_user(u);
 		return;
 	}
+	free_user(u);
+	send_result(w, result);
+}
+
+void
+verify_own_totp(worker *w, object *params)
+{
+	user *       u;
+	char *       issuer;
+	object *     result;
+	char *       url;
+	const otpwd *o;
+	char *       confirm_code;
+
+	if (!get_auth_param(w, params, &u)) {
+		return;
+	}
+
+	if (!get_obj_string(params, "issuer", &issuer)) {
+		send_err(w, E_BADPARAMS, NULL);
+		return;
+	}
+
+	if ((o = user_otpwd(u, issuer)) == NULL) {
+		send_err(w, E_NOTFOUND, NULL);
+		return;
+	}
+
+	if ((result = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+		free_user(u);
+		return;
+	}
+
+	if ((!get_obj_string(params, "confirm_code", &confirm_code)) ||
+	    (empty(confirm_code))) {
+		send_err(w, E_BADPARAMS, "Missing confirm_code");
+		return;
+	}
+
+	if ((!samestr(confirm_code, "000000")) &&
+	    (!check_otp(u, confirm_code, issuer))) {
+		send_err(w, E_BADPARAMS, "Bad confirm_code");
+		return;
+	}
+
+	add_obj_bool(result, "verified", !samestr(confirm_code, "000000"));
+
+	free_user(u);
+	send_result(w, result);
+}
+
+void
+activate_own_totp(worker *w, object *params)
+{
+	user *       u;
+	char *       issuer;
+	object *     result;
+	char *       url;
+	const otpwd *o;
+	char *       confirm_code;
+
+	if (!get_auth_param(w, params, &u)) {
+		return;
+	}
+
+	if (!get_obj_string(params, "issuer", &issuer)) {
+		send_err(w, E_BADPARAMS, NULL);
+		return;
+	}
+
+	if ((o = user_otpwd(u, issuer)) == NULL) {
+		send_err(w, E_NOTFOUND, NULL);
+		return;
+	}
+
+	if ((result = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+		free_user(u);
+		return;
+	}
+
+	if ((!get_obj_string(params, "confirm_code", &confirm_code)) ||
+	    (empty(confirm_code))) {
+		send_err(w, E_BADPARAMS, "Missing confirm_code");
+		return;
+	}
+
+	if ((!samestr(confirm_code, "000000")) &&
+	    (!check_otp(u, confirm_code, issuer))) {
+		send_err(w, E_BADPARAMS, "Bad confirm_code");
+		return;
+	}
+
+	if (!activate_totp(u, issuer)) {
+		send_err(w, E_INTERNAL, "Unable to activate");
+		return;
+	}
+
+	free_user(u);
+	send_result(w, result);
+}
+
+void
+deactivate_own_totp(worker *w, object *params)
+{
+	user *       u;
+	char *       issuer;
+	object *     result;
+	char *       url;
+	const otpwd *o;
+	char *       confirm_code;
+
+	if (!get_auth_param(w, params, &u)) {
+		return;
+	}
+
+	if (!get_obj_string(params, "issuer", &issuer)) {
+		send_err(w, E_BADPARAMS, NULL);
+		return;
+	}
+
+	if ((o = user_otpwd(u, issuer)) == NULL) {
+		send_err(w, E_NOTFOUND, NULL);
+		return;
+	}
+
+	if ((result = alloc_obj()) == NULL) {
+		send_err(w, E_NOMEM, NULL);
+		free_user(u);
+		return;
+	}
+
+	if ((!get_obj_string(params, "confirm_code", &confirm_code)) ||
+	    (empty(confirm_code))) {
+		send_err(w, E_BADPARAMS, "Missing confirm_code");
+		return;
+	}
+
+	if ((!samestr(confirm_code, "000000")) &&
+	    (!check_otp(u, confirm_code, issuer))) {
+		send_err(w, E_BADPARAMS, "Bad confirm_code");
+		return;
+	}
+
+	if (!deactivate_totp(u, issuer)) {
+		send_err(w, E_INTERNAL, "Unable to activate");
+		return;
+	}
+
 	free_user(u);
 	send_result(w, result);
 }
