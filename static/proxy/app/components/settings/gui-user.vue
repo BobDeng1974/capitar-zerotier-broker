@@ -1,6 +1,8 @@
 <template>
 <div>
 
+  <h2>Settings</h2>
+
   <div v-if="confirming_totp">
 
     <b-btn variant="info"

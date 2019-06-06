@@ -1,6 +1,8 @@
 <template>
 <div>
 
+  <h2>User Admin</h2>
+
   <div v-if="adding_user">
 
     <b-btn variant="info"

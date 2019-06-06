@@ -1,6 +1,8 @@
 <template>
 <div>
 
+  <h2>My Devices</h2>
+
   <div v-if="adding_device">
 
     <b-btn variant="info"

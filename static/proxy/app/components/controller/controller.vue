@@ -1,6 +1,7 @@
 <template>
 <div>
 
+  <h2>My Networks</h2>
 
   <div v-if="creating_network">
 
@@ -51,7 +52,7 @@
     <div v-if="!creating_network">
       <b-btn variant="info"
              v-on:click="showCreateNetwork()"
-      >Create</b-btn>
+      >Create network</b-btn>
 
       <b-input-group>
         <div class="input-group-prepend w-25">
