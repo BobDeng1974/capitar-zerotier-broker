@@ -13,7 +13,19 @@
 
       <div class="col-6">
 
-        <qr-code :text="newtotp.url"></qr-code>
+        <b-list-group>
+          <b-list-group-item>Issuer: {{ newtotp.issuer }} </b-list-group-item>
+          <b-list-group-item>Type: {{ newtotp.type }} </b-list-group-item>
+          <b-list-group-item>Algorithm: {{ newtotp.algorithm }} </b-list-group-item>
+          <b-list-group-item>Encoding: base32 </b-list-group-item>
+          <b-list-group-item>Secret: {{ newtotp.secret }} </b-list-group-item>
+          <b-list-group-item>Example: oathtool -b --totp=sha1 {{ newtotp.secret }} </b-list-group-item>
+        </b-list-group>
+
+        <div class="mx-auto" style="width: 256px;">
+          <qr-code :text="newtotp.url" :size=256 ></qr-code>
+        </div>
+
         <br>
 
         <b-input-group>
@@ -96,7 +108,7 @@ module.exports = {
       alert_msg: "",
       adding_totp: false,
       confirming_totp: false,
-      newtotp: {issuer: "", url: ""},
+      newtotp: {issuer: "", type:"", algorithm: "", secret: "", url: ""},
       confirmtotp: {issuer: "", confirm_code: ""}
     }
   },
@@ -110,7 +122,7 @@ module.exports = {
       this.alert_msg = ""
     },
     showAddTotp() {
-      this.newtotp = {issuer: "", url: ""}
+      this.newtotp = {issuer: "", type:"", algorithm: "", secret: "", url: ""}
       this.adding_totp = true
     },
     cancelAddTotp() {
