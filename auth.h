@@ -66,6 +66,7 @@ struct user {
 // start of operations, or nothing else will work.
 extern void auth_init(worker_config *);
 
+extern void        strip_user_json_sensitive(object **);
 extern uint64_t    user_roles(const user *);
 extern const char *user_name(const user *);
 extern void        free_user(user *);

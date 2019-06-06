@@ -1073,6 +1073,7 @@ rpc_create_user(worker *w, object *params)
 
 	result = clone_obj(u->json);
 	free_user(u);
+	strip_user_json_sensitive(&result);
 	send_result(w, result);
 }
 
@@ -1148,9 +1149,9 @@ rpc_assign_user_role(worker *w, object *params)
 
 finish:
 	result = clone_obj(u->json);
-        add_obj_string(result, "passwd", "");
-	send_result(w, result);
 	free_user(u);
+	strip_user_json_sensitive(&result);
+	send_result(w, result);
 }
 
 void
@@ -1222,9 +1223,9 @@ rpc_revoke_user_role(worker *w, object *params)
 	}
 
 	result = clone_obj(u->json);
-        add_obj_string(result, "passwd", "");
-	send_result(w, result);
 	free_user(u);
+	strip_user_json_sensitive(&result);
+	send_result(w, result);
 }
 
 void
@@ -1250,19 +1251,9 @@ rpc_get_user(worker *w, object *params)
 	}
 
 	result = clone_obj(u->json);
-
-	// Strip sensitive attributes
-        add_obj_string(result, "passwd", "");
-	if (get_obj_obj(result, "otpwds", &arr)) {
-		for (int i = 0; i < get_arr_len(arr); i++) {
-			if (get_arr_obj(arr, i, &obj)) {
-				add_obj_string(obj, "secret", "");
-			}
-		}
-	}
-
-	send_result(w, result);
 	free_user(u);
+	strip_user_json_sensitive(&result);
+	send_result(w, result);
 }
 
 void
@@ -1278,9 +1269,9 @@ rpc_get_own_user(worker *w, object *params)
 	}
 
 	result = clone_obj(u->json);
-        add_obj_string(result, "passwd", "");
-	send_result(w, result);
 	free_user(u);
+	strip_user_json_sensitive(&result);
+	send_result(w, result);
 }
 
 void

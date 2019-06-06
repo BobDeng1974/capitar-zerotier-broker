@@ -120,6 +120,23 @@ user_name(const user *u)
 }
 
 void
+strip_user_json_sensitive(object **json)
+{
+	object *obj;
+	object *arr;
+
+	// Strip sensitive attributes
+	add_obj_string(*json, "passwd", "");
+	if (get_obj_obj(*json, "otpwds", &arr)) {
+		for (int i = 0; i < get_arr_len(arr); i++) {
+			if (get_arr_obj(arr, i, &obj)) {
+				add_obj_string(obj, "secret", "");
+			}
+		}
+	}
+}
+
+void
 free_user(user *u)
 {
 	if (u == NULL) {
