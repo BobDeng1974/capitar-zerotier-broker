@@ -47,7 +47,8 @@
         </b-input-group>
 
         <b-btn variant="info" v-on:click="cancel_confirm">No, cancel</b-btn>
-        <b-btn variant="warning" v-on:click="confirm">Yes, {{ confirm_action }}</b-btn>
+        <b-btn v-if="!confirm_danger()" variant="warning" v-on:click="confirm">Yes, {{ confirm_action }}</b-btn>
+        <b-btn v-if="confirm_danger()" variant="danger" v-on:click="confirm">Yes, {{ confirm_action }}</b-btn>
       </div>
 
     </b-jumbotron>
@@ -111,6 +112,12 @@ module.exports = {
     clear() {
       this.err_resp = null
       this.alert_msg = ""
+    },
+    confirm_danger() {
+      if (['delete-totp'].includes(this.confirm_action)) {
+        return true
+      }
+      return false
     },
     confirm(event) {
       this.request_confirmation = false

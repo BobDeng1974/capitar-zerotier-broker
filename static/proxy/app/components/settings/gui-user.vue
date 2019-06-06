@@ -196,6 +196,7 @@ module.exports = {
     },
     cancelConfirmTotp() {
       this.confirming_totp = false
+      this.$emit('load_user')
     },
     confirmTotp() {
       axios
