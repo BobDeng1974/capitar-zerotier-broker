@@ -90,9 +90,39 @@
   </div>
   <div v-if="!adding_totp && !confirming_totp">
 
-    <b-btn variant="info"
+    <b-btn variant="success"
            v-on:click="showAddTotp()"
     >Add TOTP</b-btn>
+  </div>
+
+  <h3> 2Factor authentication (TOTP)</h3>
+
+  <div v-if="creds.user && creds.user.otpwds.length >0">
+    <b-input-group>
+      <div class="input-group-prepend w-25">
+        <span class="input-group-text w-100" id="totp_filter">Filter totp</span>
+      </div>
+      <b-form-input
+                    type="text"
+                    v-model="totp_filter"
+                    placeholder="Enter part of name (issuer)"
+      ></b-form-input>
+    </b-input-group>
+
+    <totp
+      v-for="(totp, index) in creds.user.otpwds"
+      v-bind:key="index"
+      v-bind:totp="totp"
+      v-bind:creds="creds"
+      v-bind:controller="controller"
+      v-bind:totp_regex="totp_regex"
+    >
+    </totp>
+
+  </div>
+
+  <div v-if="creds.user && creds.user.otpwds.length == 0">
+    <b-alert class="col-6" show> No totps found ... </b-alert>
   </div>
 
 </div>
@@ -106,6 +136,7 @@ module.exports = {
       loading: false,
       err_resp: null,
       alert_msg: "",
+      totp_filter: "",
       adding_totp: false,
       confirming_totp: false,
       newtotp: {issuer: "", type:"", algorithm: "", secret: "", url: ""},
@@ -113,6 +144,14 @@ module.exports = {
     }
   },
   props: ["controller", "creds"],
+  computed: {
+    totp_regex () {
+      if (!this.totp_filter) {
+        return null
+      }
+      return new RegExp(this.totp_filter, 'ig')
+    }
+  },
   mounted () {
   },
   methods: {
