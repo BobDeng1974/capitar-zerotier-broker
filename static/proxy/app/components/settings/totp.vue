@@ -24,7 +24,7 @@
           <b-btn v-if="!verified" variant="info" :disabled="busy" v-on:click="verify_totp"
             >Verify</b-btn>
           <b-btn v-if="verified" variant="success" :disabled="busy" v-on:click="verify_totp"
-            >Verified!</b-btn>
+            >Verified OK!</b-btn>
 
       </div>
 
