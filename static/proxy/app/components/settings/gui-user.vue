@@ -92,7 +92,7 @@
   </div>
   <div v-if="!adding_totp && !confirming_totp">
 
-    <b-btn variant="success"
+    <b-btn variant="info"
            v-on:click="showAddTotp()"
     >Add TOTP</b-btn>
   </div>
