@@ -102,6 +102,7 @@ module.exports = {
       busy: false,
       user: null,
       enroll_nwid: "",
+      enroll_controller: this.controller
     }
   },
   props: ["name", "controller", "creds", "user_regex"],
@@ -144,7 +145,7 @@ module.exports = {
     deleteDeviceEnrollNetwork() {
       this.busy = true
       axios
-        .delete(this.$restApi + this.controller + "/network/" + this.enroll_nwid, {
+        .delete(this.$restApi + this.enroll_controller + "/network/" + this.enroll_nwid, {
           headers: {'X-ZTC-Token': this.creds.token.id }
         })
         .then(response => {
@@ -164,7 +165,7 @@ module.exports = {
       new_nwconf = this.zt1_enroll_nw_template()
       new_nwconf.name = "Device Enroll Network " + this.user.name
       axios
-        .post(this.$restApi + this.controller + "/network", {
+        .post(this.$restApi + this.enroll_controller + "/network", {
           nwconf: new_nwconf,
           nwinfo: {"type": "device_enroll", "owner": this.user.name}
         },{
@@ -250,6 +251,7 @@ module.exports = {
           Object.keys(this.user.networks).forEach(function (nwid) {
             if (this.user.networks[nwid].type == "device_enroll") {
               this.enroll_nwid = nwid
+              this.enroll_controller = this.user.networks[nwid].controller
             }
           }.bind(this))
         })

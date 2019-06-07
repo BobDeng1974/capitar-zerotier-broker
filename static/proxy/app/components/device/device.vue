@@ -86,6 +86,7 @@ module.exports = {
       loading: true,
       errored: false,
       confirm_action: "",
+      action_controller: null,
       action_data: null,
       request_confirmation: false,
       deleted: false,
@@ -102,6 +103,7 @@ module.exports = {
       Object.keys(this.creds.user.networks).forEach(function (nwId) {
         if (this.creds.user.networks[nwId].type == "device_enroll") {
           this.enroll_nwid = nwId
+          this.enroll_controller = this.creds.user.networks[nwId].controller
         }
       }.bind(this))
     },
@@ -111,7 +113,8 @@ module.exports = {
     },
     confirm(event) {
       this.request_confirmation = false
-      return this.rpc(event, this.confirm_action, this.action_data)
+      controller = this.action_controller || this.controller
+      return this.rpc(event, controller, this.confirm_action, this.action_data)
     },
     cancel_confirm(event) {
       this.request_confirmation = false
@@ -119,11 +122,11 @@ module.exports = {
       this.busy = false
       this.enrolling = false
     },
-    rpc(event, method, data) {
+    rpc(event, controller, method, data) {
       this.clear()
       this.busy = true
       axios
-        .post(this.$restApi + this.controller + "/rpc/" + method,
+        .post(this.$restApi + controller + "/rpc/" + method,
           data, {
           headers: {'X-ZTC-Token': this.creds.token.id }
         }).then(response => {
@@ -153,6 +156,7 @@ module.exports = {
     },
     delete_device(event) {
       this.clear()
+      this.action_controller = this.controller
       this.confirm_action = "delete-own-device"
       this.action_data = {id: this.device.id}
       this.request_confirmation = true
@@ -166,6 +170,7 @@ module.exports = {
         return
       }
       this.confirm_action = "enroll-own-device"
+      this.action_controller = this.enroll_controller
       this.action_data = {member: this.device.id, network: this.enroll_nwid}
       this.request_confirmation = true
       this.busy = true

@@ -90,7 +90,7 @@
         v-for="(network, id) in networks"
         v-bind:key="id"
         v-bind:network="network"
-        v-bind:controller="controller"
+        v-bind:controller="network.controller"
         v-bind:creds="creds"
         v-bind:nw_regex="nw_regex"
       >
@@ -224,6 +224,7 @@ module.exports = {
           response.data.forEach(function (nw) {
             nw.user_network = null
             nw.system_network = true
+            nw.controller = this.controller
             this.networks[nw.id] = nw
           }.bind(this))
           Object.keys(this.creds.user.networks).forEach(function (nwid) {
@@ -231,7 +232,8 @@ module.exports = {
               this.networks[nwid] = {
                 id: nwid,
                 user_network: this.creds.user.networks[nwid],
-                system_network: false
+                system_network: false,
+                controller: this.creds.user.networks[nwid].controller
               }
             } else {
               this.networks[nwid].user_network = this.creds.user.networks[nwid]

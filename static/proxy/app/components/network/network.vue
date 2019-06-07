@@ -18,9 +18,8 @@
             <h5> {{ nw.description }} </h5>
             <b-btn variant="info" v-on:click="showAddDevice()" v-if="!adding_device && !deleting_network"
             >Add Device</b-btn>
-            <b-btn variant="danger" v-on:click="show_delete_network()" v-if="!adding_device && !deleting_network"
+            <b-btn variant="warning" v-on:click="show_delete_network()" v-if="!adding_device && !deleting_network"
             >Delete network</b-btn>
-
 
            <div v-if="deleting_network">
              <b-btn variant="info" v-on:click="cancel_delete_network()">No, cancel</b-btn>
@@ -241,15 +240,8 @@ module.exports = {
           }.bind(this))
         })
         .catch(error => {
-          //if (error = 'Error: "Network Error"') {
-          if (0) {
-            setTimeout(function () {
-              this.get_nw_members()
-            }.bind(this), 1)
-          } else {
-            console.log('get_nw_members', error)
-            this.errored = true
-          }
+          console.log('get_nw_members', error)
+          this.errored = true
         })
     },
     get_nw_member(device) {
@@ -268,21 +260,11 @@ module.exports = {
         })
         .then(response => {
           this.nw_members[device.id] = response.data
-          if (device.revision != response.data.revision) {
-            this.nw_member_seq_inc()
-          }
+          this.nw_member_seq_inc()
         })
         .catch(error => {
-          //console.log(error)
-          //if (error = 'Error: "Network Error"') {
-          if (0) {
-            setTimeout(function () {
-              this.get_nw_member(device)
-            }.bind(this), 1)
-          } else {
-            console.log('get_nw_member', error)
-            this.errored = true
-          }
+          console.log('get_nw_member', error)
+          this.errored = true
         })
     },
     authorize_nw_member(device) {
