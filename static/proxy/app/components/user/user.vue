@@ -149,6 +149,9 @@ module.exports = {
         })
         .then(response => {
           this.get_user()
+          if (this.user.name == this.creds.user.name) {
+            this.$parent.$emit('load_user')
+          }
         })
         .catch(error => {
           console.log(error)
@@ -169,6 +172,9 @@ module.exports = {
         })
         .then(response => {
           this.get_user()
+          if (this.user.name == this.creds.user.name) {
+            this.$parent.$emit('load_user')
+          }
         })
         .catch(error => {
           console.log(error)

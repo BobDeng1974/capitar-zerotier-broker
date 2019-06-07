@@ -148,6 +148,9 @@ module.exports = {
             this.$parent.$emit('load_user')
           }
         }).catch(error => {
+          if (method == "verify-totp") {
+            this.verified = false
+          }
           if ((error.response) && error.response.status ) {
             this.err_resp = error.response
           }
