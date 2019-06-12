@@ -47,7 +47,7 @@ struct action_config {
 	uint64_t deny;  // mask of denied roles
 };
 
-// A entity_roles_config has the JSON tree associated with it and references
+// An entity_roles_config has the JSON tree associated with it and references
 // that.  The configuration is destroyed at the same time the tree is.
 struct entity_roles_config {
 	object *           json;         // JSON for the entire tree
