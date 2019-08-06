@@ -1,9 +1,9 @@
 [submodule "extern/nng"]
 	path = extern/nng
-	url = git@github.com:capitar/nng.git
+	url =https://github.com/capitar/nng.git
 [submodule "extern/libzerotiercore"]
 	path = extern/libzerotiercore
-	url = git@github.com:capitar/libzerotiercore
+	url = https://github.com/capitar/libzerotiercore
 [submodule "extern/mbedtls"]
 	path = extern/mbedtls
 	url = https://github.com/ARMmbed/mbedtls
