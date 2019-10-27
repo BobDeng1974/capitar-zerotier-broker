@@ -177,11 +177,29 @@ module.exports = {
         "remoteTraceLevel":     0,
         "remoteTraceTarget":    null,
         "routes":       [],
-        "rules":        [{
-                        "not":  false,
-                        "or":   false,
-                        "type": "ACTION_DROP"
-                }],
+        //"rules":        [{
+        //                "not":  false,
+        //                "or":   false,
+        //                "type": "ACTION_DROP"
+        //        }],
+        "rules": [
+         {
+          "etherType": 34525, // IPv6
+          "not": true,
+          "or": false,
+          "type": "MATCH_ETHERTYPE"
+         },
+         {
+          "not": false,
+          "or": false,
+          "type": "ACTION_DROP"
+         },
+         {
+          "not": false,
+          "or": false,
+          "type": "ACTION_ACCEPT"
+         }
+        ],
         "tags": [],
         "v4AssignMode": {
                 "zt":   false

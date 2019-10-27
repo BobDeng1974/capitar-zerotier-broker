@@ -36,6 +36,10 @@
               v-if="!user.roles.includes('friends')"
               >Assign role "friends"
             </b-btn>
+            <b-btn variant="info" :disabled="busy" v-on:click="assign_role('office')"
+              v-if="!user.roles.includes('office')"
+              >Assign role "office"
+            </b-btn>
             <b-btn variant="info" :disabled="busy" v-on:click="assign_role('staff')"
               v-if="!user.roles.includes('staff')"
               >Assign role "staff"
