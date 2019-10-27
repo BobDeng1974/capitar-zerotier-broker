@@ -197,7 +197,6 @@ module.exports = {
         })
         .catch(error => {
           console.log(error)
-          this.errored = true
           this.deleting_network = false
         })
     },
@@ -217,7 +216,6 @@ module.exports = {
         })
         .catch(error => {
           console.log(error)
-          this.errored = true
         })
     },
     get_nw_members() {

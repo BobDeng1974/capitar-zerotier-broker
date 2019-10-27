@@ -282,7 +282,7 @@ module.exports = {
             username: this.creds.username,
             password: this.creds.password
           },
-          headers: {'X-ZTC-OTP': this.creds.otp }
+          headers: {'X-ZTC-OTP': this.creds.otp.toString() }
         }).then(response => {
           this.creds.token = response.data
           this.creds.password = ''

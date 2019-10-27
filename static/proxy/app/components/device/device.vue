@@ -190,7 +190,6 @@ module.exports = {
       })
       .catch(error => {
         console.log(error)
-        this.errored = true
       })
       .finally(() => this.loading = false)
     */

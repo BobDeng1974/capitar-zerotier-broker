@@ -90,7 +90,7 @@ otp(char *buf, size_t bufsz, const unsigned char *key, size_t keylen,
 	for (m = 1; digits; digits--) {
 		m *= 10;
 	}
-	snprintf(buf, bufsz, "%d", s % m);
+	snprintf(buf, bufsz, "%06d", s % m);
 }
 
 void

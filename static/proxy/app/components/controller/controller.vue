@@ -88,8 +88,8 @@
 
     <div v-if="!loading && networks && Object.keys(networks).length > 0">
       <network
-        v-for="(network, id) in networks"
-        v-bind:key="id"
+        v-for="network in networks"
+        v-bind:key="network.id"
         v-bind:network="network"
         v-bind:controller="network.controller"
         v-bind:creds="creds"
@@ -143,6 +143,14 @@ module.exports = {
         return null
       }
       return this.new_nwconf.name.length > 2 ? true : false
+    },
+    networks_sorted_by_name() {
+      // To be fixed, we need the name property set first
+      sorted_networks = Object.values(this.networks)
+      sorted_networks.sort((a,b) => (
+        a.name > b.name) ? 1 : ((b.name > a.name) ? -1 : 0)
+      )
+      return sorted_networks
     }
   },
   mounted () {
@@ -179,7 +187,7 @@ module.exports = {
                 "zt":   false
         },
         "v6AssignMode": {
-                "6plane":       false,
+                "6plane":       true,
                 "rfc4193":      false,
                 "zt":   false
         }
