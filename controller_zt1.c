@@ -146,8 +146,6 @@ zt1_create_network_cb(worker *w, void *body, size_t len)
 		usernw2 = clone_obj(usernw);
 	}
 
-	printf("XXX Controller name: %s\n", w->controller);
-
 	if ((usernw2 == NULL) ||
 	    (nw2 == NULL) ||
 	    (!get_obj_string(obj, "id", &nwid)) ||
