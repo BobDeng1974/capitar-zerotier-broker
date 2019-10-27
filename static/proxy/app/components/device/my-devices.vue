@@ -80,10 +80,10 @@
                     placeholder="Enter part of device id or name"
                     v-on:keyup.enter.native="getDevices()"
       ></b-form-input>
-      <b-input-group-append>
+      <!--b-input-group-append>
         <b-btn variant="info"
                v-on:click="getDevices()"
-        >Search</b-btn>
+        >Search</b-btn-->
       </b-input-group-append>
 
     </b-input-group>

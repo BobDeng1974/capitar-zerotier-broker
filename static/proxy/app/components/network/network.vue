@@ -246,6 +246,7 @@ module.exports = {
         })
     },
     get_nw_own_members() {
+      this.requested_members = true
       path = "/network/" + this.nw.id + "/own_member"
       axios
         .get(this.$restApi + this.controller + path, {
@@ -307,9 +308,25 @@ module.exports = {
         .then(response => {
         })
         .catch(error => {
-          console.log(error)
+          if (error.response.status == 403) {
+            this.authorize_nw_own_member(device)
+          } else {
+            console.log('authorize_nw_member', error)
+          }
         })
         .finally(() => this.get_nw_member(device))
+    },
+    authorize_nw_own_member(device) {
+      axios
+        .post(this.$restApi + this.controller + "/network/" + this.nw.id + "/own_member/" + device.id + "/authorize", {}, {
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+        })
+        .catch(error => {
+          console.log(error)
+        })
+        .finally(() => this.get_nw_own_member(device))
     },
     deauthorize_nw_member(device) {
       axios
@@ -319,9 +336,25 @@ module.exports = {
         .then(response => {
         })
         .catch(error => {
-          console.log(error)
+          if (error.response.status == 403) {
+            this.authorize_nw_own_member(device)
+          } else {
+            console.log('deauthorize_nw_member', error)
+          }
         })
         .finally(() => this.get_nw_member(device))
+    },
+    deauthorize_nw_own_member(device) {
+      axios
+        .post(this.$restApi + this.controller + "/network/" + this.nw.id + "/own_member/" + device.id + "/deauthorize", {}, {
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+        })
+        .catch(error => {
+          console.log(error)
+        })
+        .finally(() => this.get_nw_own_member(device))
     }
   }
 }

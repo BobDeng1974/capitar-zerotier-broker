@@ -140,7 +140,7 @@ module.exports = {
       loading: false,
       err_resp: null,
       alert_msg: "",
-      controller: "ztbroker",
+      controller: "ztdemo",
       controller_status: null,
       selected: "",
       networks: null,
