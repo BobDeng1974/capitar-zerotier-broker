@@ -201,6 +201,7 @@ struct worker {
 	uint64_t         id; // request ID of pending request
 	response *       resp;
 	worker_http_cb   http_cb;
+	const char *     controller; // Name of controller called
 	const char *     method; // RPC method called
 	uint64_t         user_roles;
 	uint64_t         eff_roles; // roles as modified by proxy changes

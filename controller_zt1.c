@@ -152,6 +152,7 @@ zt1_create_network_cb(worker *w, void *body, size_t len)
 	    (!add_obj_obj(usernw2, nwid, nw2)) ||
 	    (!add_obj_bool(nw2, "is_owner", true)) ||
 	    (!add_obj_string(nw2, "type", nwtype)) ||
+	    (!add_obj_string(nw2, "controller", w->controller)) ||
 	    (!add_obj_obj(u->json, "networks", usernw2)) ||
 	    (!save_user(u, &errcode))) {
 		free_user(u);
@@ -417,6 +418,7 @@ zt1_get_own_members_cb(worker *w, void *body, size_t len)
 	object  *obj;
 	object  *arr;
 	char *   name;
+	char *   ep;
 	uint64_t memid;
 
 	if ((obj = parse_obj(body, len)) == NULL) {
@@ -431,7 +433,7 @@ zt1_get_own_members_cb(worker *w, void *body, size_t len)
 	}
 	name = NULL;
 	while (((name = next_obj_key(obj, name)) != NULL) &&
-	    ((memid = strtoull(name, NULL, 0) != 0)) &&
+	    ((memid = strtoull(name, NULL, 16)) != 0) &&
 	    (is_user_member_owner(w, memid))) {
 		if (!add_arr_string(arr, name)) {
 			free_obj(arr);
@@ -727,6 +729,7 @@ worker_ops controller_zt1_ops = {
 	.get_network        = zt1_get_network,
 	.delete_network     = zt1_delete_network,
 	.get_members        = zt1_get_members,
+	.get_own_members    = zt1_get_own_members,
 	.get_member         = zt1_get_member,
 	.delete_member      = zt1_delete_member,
 	.authorize_member   = zt1_authorize_member,

@@ -103,6 +103,7 @@ is_user_member_owner(worker *w, uint64_t memid)
 	    (enrolled)) {
 		return (true);
 	}
+	return (false);
 }
 
 bool
@@ -230,6 +231,7 @@ get_status(worker *w, object *params)
 
 	if (get_controller_param(w, params, &cp)) {
 		if (!cp->ops->get_status) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->get_status(cp, w);
@@ -247,6 +249,7 @@ create_network(worker *w, object *params)
 	    (get_controller_param(w, params, &cp))) {
 		if (!cp->ops->create_network) {
 			free_user(u);
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		if ((!add_obj_string(w->session, "network_creator", u->name)) ||
@@ -274,6 +277,7 @@ get_networks(worker *w, object *params)
 	if (get_auth_param(w, params, NULL) &&
 	    get_controller_param(w, params, &cp)) {
 		if (!cp->ops->get_networks) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->get_networks(cp, w);
@@ -289,6 +293,7 @@ get_network(worker *w, object *params)
 	if (get_auth_param(w, params, NULL) &&
 	    get_network_param(w, params, &cp, &nwid)) {
 		if (!cp->ops->get_network) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->get_network(cp, w, nwid);
@@ -354,6 +359,7 @@ delete_network(worker *w, object *params)
 	if ((get_auth_param_with_session(w, params, NULL)) &&
 	    get_network_param(w, params, &cp, &nwid)) {
 		if (!cp->ops->delete_network) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		if (w->on_result == NULL) {
@@ -373,6 +379,7 @@ delete_own_network(worker *w, object *params)
 	if (get_auth_param_with_session(w, params, NULL) &&
 	    get_own_network_param(w, params, &cp, &nwid)) {
 		if (!cp->ops->delete_network) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		if (w->on_result == NULL) {
@@ -392,6 +399,7 @@ get_network_members(worker *w, object *params)
 	if (get_auth_param(w, params, NULL) &&
 	    get_network_param(w, params, &cp, &nwid)) {
 		if (!cp->ops->get_members) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->get_members(cp, w, nwid);
@@ -408,6 +416,7 @@ get_network_member(worker *w, object *params)
 	if (get_auth_param(w, params, NULL) &&
 	    get_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->get_member) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->get_member(cp, w, nwid, member);
@@ -424,6 +433,7 @@ delete_network_member(worker *w, object *params)
 	if (get_auth_param(w, params, NULL) &&
 	    get_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->delete_member) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->delete_member(cp, w, nwid, member);
@@ -440,6 +450,7 @@ authorize_network_member(worker *w, object *params)
 	if (get_auth_param(w, params, NULL) &&
 	    get_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->authorize_member) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->authorize_member(cp, w, nwid, member);
@@ -456,6 +467,7 @@ deauthorize_network_member(worker *w, object *params)
 	if (get_auth_param(w, params, NULL) &&
 	    get_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->deauthorize_member) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->deauthorize_member(cp, w, nwid, member);
@@ -471,6 +483,7 @@ get_own_network(worker *w, object *params)
 	if (get_auth_param_with_session(w, params, NULL) &&
 	    get_own_network_param(w, params, &cp, &nwid)) {
 		if (!cp->ops->get_network) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->get_network(cp, w, nwid);
@@ -486,6 +499,7 @@ get_own_network_members(worker *w, object *params)
 	if (get_auth_param_with_session(w, params, NULL) &&
 	    get_own_network_param(w, params, &cp, &nwid)) {
 		if (!cp->ops->get_members) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->get_members(cp, w, nwid);
@@ -502,6 +516,7 @@ get_own_network_member(worker *w, object *params)
 	if (get_auth_param_with_session(w, params, NULL) &&
 	    get_own_network_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->get_member) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->get_member(cp, w, nwid, member);
@@ -518,6 +533,7 @@ delete_own_network_member(worker *w, object *params)
 	if (get_auth_param_with_session(w, params, NULL) &&
 	    get_own_network_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->delete_member) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->delete_member(cp, w, nwid, member);
@@ -534,6 +550,7 @@ authorize_own_network_member(worker *w, object *params)
 	if (get_auth_param_with_session(w, params, NULL) &&
 	    get_own_network_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->authorize_member) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->authorize_member(cp, w, nwid, member);
@@ -550,6 +567,7 @@ deauthorize_own_network_member(worker *w, object *params)
 	if (get_auth_param_with_session(w, params, NULL) &&
 	    get_own_network_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->deauthorize_member) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->deauthorize_member(cp, w, nwid, member);
@@ -565,6 +583,7 @@ get_network_own_members(worker *w, object *params)
 	if (get_auth_param_with_session(w, params, NULL) &&
 	    get_network_param(w, params, &cp, &nwid)) {
 		if (!cp->ops->get_own_members) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->get_own_members(cp, w, nwid);
@@ -581,6 +600,7 @@ get_network_own_member(worker *w, object *params)
 	if (get_auth_param_with_session(w, params, NULL) &&
 	    get_own_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->get_member) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->get_member(cp, w, nwid, member);
@@ -597,6 +617,7 @@ delete_network_own_member(worker *w, object *params)
 	if (get_auth_param_with_session(w, params, NULL) &&
 	    get_own_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->delete_member) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->delete_member(cp, w, nwid, member);
@@ -613,6 +634,7 @@ authorize_network_own_member(worker *w, object *params)
 	if (get_auth_param_with_session(w, params, NULL) &&
 	    get_own_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->authorize_member) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->authorize_member(cp, w, nwid, member);
@@ -629,6 +651,7 @@ deauthorize_network_own_member(worker *w, object *params)
 	if (get_auth_param_with_session(w, params, NULL) &&
 	    get_own_member_param(w, params, &cp, &nwid, &member)) {
 		if (!cp->ops->deauthorize_member) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->deauthorize_member(cp, w, nwid, member);
@@ -700,6 +723,7 @@ enroll_own_device_next(worker *w, object *result)
 	free_obj(result);
 
 	if (!valid_worker_session(w)) {
+		send_err(w, E_INTERNAL, "No valid worker session");
 		return;
 	}
 
@@ -713,6 +737,7 @@ enroll_own_device_next(worker *w, object *result)
 
 	if (get_own_network_member_param(w, params, &cp, &nwid, &deviceId)) {
 		if (!cp->ops->get_member) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->get_member(cp, w, nwid, deviceId);
@@ -735,6 +760,7 @@ enroll_own_device(worker *w, object *params)
 	char     *nwtype;
 
 	if (!valid_worker_session(w)) {
+		send_err(w, E_INTERNAL, "No valid worker session");
 		return;
 	}
 
@@ -744,6 +770,7 @@ enroll_own_device(worker *w, object *params)
 	}
 
 	if (!get_auth_param_with_session(w, params, &u)) {
+		send_err(w, E_FORBIDDEN, "Insufficient permission");
 		return;
 	}
 
@@ -790,6 +817,7 @@ enroll_own_device(worker *w, object *params)
 
 	if (get_own_network_member_param(w, params, &cp, &nwid, &deviceId)) {
 		if (!cp->ops->authorize_member) {
+			send_err(w, E_BADMETHOD, "Controller method not found");
 			return;
 		}
 		cp->ops->authorize_member(cp, w, nwid, deviceId);

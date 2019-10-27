@@ -240,19 +240,34 @@ module.exports = {
           }.bind(this))
         })
         .catch(error => {
-          console.log('get_nw_members', error)
-          this.errored = true
+          if (error.response.status == 403) {
+            this.get_nw_own_members()
+          }
+        })
+    },
+    get_nw_own_members() {
+      path = "/network/" + this.nw.id + "/own_member"
+      axios
+        .get(this.$restApi + this.controller + path, {
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+          this.nw_members = {}
+          response.data.forEach(function (deviceId) {
+            device = {id: deviceId, revision: 0}
+            this.nw_members[deviceId] = device
+            this.get_nw_own_member(device)
+          }.bind(this))
+        })
+        .catch(error => {
+          console.log('get_nw_own_members', error)
         })
     },
     get_nw_member(device) {
       if (!this.system_network) {
         path = "/own_network/" + this.nw.id + "/member/"
       } else {
-        if (!Object.keys(this.creds.user.devices).includes(device)) {
-          path = "/network/" + this.nw.id + "/member/"
-        } else {
-          path = "/network/" + this.nw.id + "/own_member/"
-        }
+        path = "/network/" + this.nw.id + "/member/"
       }
       axios
         .get(this.$restApi + this.controller + path + device.id, {
@@ -263,8 +278,25 @@ module.exports = {
           this.nw_member_seq_inc()
         })
         .catch(error => {
-          console.log('get_nw_member', error)
-          this.errored = true
+          if (error.response.status == 403) {
+            this.get_nw_own_member(device)
+          } else {
+            console.log('get_nw_member', error)
+          }
+        })
+    },
+    get_nw_own_member(device) {
+      path = "/network/" + this.nw.id + "/own_member/"
+      axios
+        .get(this.$restApi + this.controller + path + device.id, {
+          headers: {'X-ZTC-Token': this.creds.token.id }
+        })
+        .then(response => {
+          this.nw_members[device.id] = response.data
+          this.nw_member_seq_inc()
+        })
+        .catch(error => {
+          console.log('get_nw_own_member', error)
         })
     },
     authorize_nw_member(device) {
@@ -276,7 +308,6 @@ module.exports = {
         })
         .catch(error => {
           console.log(error)
-          this.errored = true
         })
         .finally(() => this.get_nw_member(device))
     },
@@ -289,7 +320,6 @@ module.exports = {
         })
         .catch(error => {
           console.log(error)
-          this.errored = true
         })
         .finally(() => this.get_nw_member(device))
     }
