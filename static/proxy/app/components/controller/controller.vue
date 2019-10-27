@@ -51,6 +51,7 @@
   <div>
     <div v-if="!creating_network">
       <b-btn variant="info"
+             v-if="creds.user.roles.includes('ops')"
              v-on:click="showCreateNetwork()"
       >Create network</b-btn>
 

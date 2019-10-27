@@ -621,7 +621,7 @@ find_controller(worker *w, const char *name)
 	for (int i = 0; i < cfg->ncontrollers; i++) {
 		if (strcmp(controllers[i].config->name, name) == 0) {
 			w->client = controllers[i].client;
-			w->controller = name;
+			w->controller = strdup(name);
 			return (&controllers[i]);
 		}
 	}

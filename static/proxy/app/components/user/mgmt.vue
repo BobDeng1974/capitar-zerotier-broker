@@ -250,7 +250,7 @@ module.exports = {
           newuser: this.newuser}, {
           headers: {'X-ZTC-Token': this.creds.token.id }
         }).then(response => {
-          this.users.push(response.data.name)
+          this.users.unshift(response.data.name)
         }).catch(error => {
           if ((error.response) && (error.response.status == 404)) {
             this.alert_msg = "No such controller found"
@@ -272,6 +272,7 @@ module.exports = {
           headers: {'X-ZTC-Token': this.creds.token.id }
         }).then(response => {
           this.users = response.data
+          this.users.sort()
         }).catch(error => {
           if ((error.response) && (error.response.status == 404)) {
             this.alert_msg = "No such controller found"

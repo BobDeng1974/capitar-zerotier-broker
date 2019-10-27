@@ -18,7 +18,7 @@
             <h5> {{ nw.description }} </h5>
             <b-btn variant="info" v-on:click="showAddDevice()" v-if="!adding_device && !deleting_network"
             >Add Device</b-btn>
-            <b-btn variant="warning" v-on:click="show_delete_network()" v-if="!adding_device && !deleting_network"
+            <b-btn variant="warning" v-on:click="show_delete_network()" v-if="!adding_device && !deleting_network && creds.user.roles.includes('ops')"
             >Delete network</b-btn>
 
            <div v-if="deleting_network">
