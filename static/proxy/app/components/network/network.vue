@@ -62,7 +62,7 @@
                        <b-col> <h5>{{ device.id }}</h5>
                        </b-col>
 
-                       <b-col v-if="Object.keys(creds.user.devices).includes(id)">
+                       <b-col v-if="Object.keys(creds.user.devices).includes(id) || creds.user.roles.includes('ops')">
                          <b-btn variant="success" v-on:click="authorize_nw_member(device)"
                            v-if="device.revision && !device.authorized"
                          >Authorize</b-btn>
